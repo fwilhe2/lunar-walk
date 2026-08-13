@@ -1584,7 +1584,9 @@ composer.addPass(new OutputPass());
    wheels that follow the terrain, and it parks where you leave it.
    ═════════════════════════════════════════════════════════════ */
 const rover = (() => {
-  const WHEEL_R = 0.41, WHEELBASE = 2.3, TRACK = 1.83, CLEAR = 0.44;
+  const WHEEL_R = 0.41, WHEELBASE = 2.3, TRACK = 1.83;
+  const CHASSIS_H = 0.46;          // frame height above mean wheel contact
+  const WHEEL_CTR = WHEEL_R - 0.035;   // centre height: the tyre sinks a touch into regolith
 
   const alu  = new THREE.MeshStandardMaterial({ color: 0xd4d6da, roughness: 0.45, metalness: 0.7 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xc79a3a, roughness: 0.38, metalness: 0.85 });
@@ -1664,7 +1666,7 @@ const rover = (() => {
     // Rest the chassis on the terrain immediately (no smoothing).
     const a = poseFromWheels();
     state.y = a.y; state.pitch = a.pitch; state.roll = a.roll;
-    apply();
+    apply(true);
   }
 
   function poseFromWheels() {
@@ -1677,17 +1679,27 @@ const rover = (() => {
     const hFL = hx(-TRACK / 2, -WHEELBASE / 2), hFR = hx(TRACK / 2, -WHEELBASE / 2);
     const hRL = hx(-TRACK / 2, WHEELBASE / 2),  hRR = hx(TRACK / 2, WHEELBASE / 2);
     return {
-      y: (hFL + hFR + hRL + hRR) / 4 + WHEEL_R + CLEAR - 0.3,
+      y: (hFL + hFR + hRL + hRR) / 4 + CHASSIS_H,
       pitch: Math.atan2((hFL + hFR - hRL - hRR) / 2, WHEELBASE),
       roll: Math.atan2((hFL + hRL - hFR - hRR) / 2, TRACK),
       gradeFwd: ((hFL + hFR) - (hRL + hRR)) / (2 * WHEELBASE),
     };
   }
 
-  function apply() {
+  const _wv = new THREE.Vector3();
+  function apply(snap) {
     group.position.set(state.pos.x, state.y, state.pos.z);
     euler.set(state.pitch, state.yaw, state.roll, 'YXZ');
     group.quaternion.setFromEuler(euler);
+    // Per-wheel suspension: put each wheel's contact patch on its own
+    // ground, clamped to the travel the arms would allow.
+    for (const w of wheels) {
+      _wv.set(w.g.position.x, 0, w.g.position.z).applyQuaternion(group.quaternion);
+      const hW = terrainHeight(state.pos.x + _wv.x, state.pos.z + _wv.z);
+      let ly = hW + WHEEL_CTR - state.y - _wv.y;
+      ly = Math.max(-0.34, Math.min(0.26, ly));
+      w.g.position.y = snap ? ly : w.g.position.y + (ly - w.g.position.y) * 0.35;
+    }
   }
 
   return {
