@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lunar Walk — Mare Tranquillitatis</title>
+<title>Surface Walk — Moon · Mars · Phobos · Deimos</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -42,7 +42,30 @@
   #panel .go { margin-top: 28px; display: inline-block; border: 1px solid #4a5058; padding: 11px 26px; letter-spacing: .18em; text-transform: uppercase; color: #e6e6ea; }
   #panel .go:hover { background: #e6e6ea; color: #101014; }
   #panel .fine { margin-top: 22px; font-size: 11px; color: #5c636b; line-height: 1.9; }
+  #worlds { margin-top: 26px; display: flex; gap: 8px; justify-content: center; }
+  #worlds button {
+    flex: 1; background: none; border: 1px solid #33383f; color: #7d858f;
+    font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 9px 4px; cursor: pointer;
+  }
+  #worlds button:hover { border-color: #6b737d; color: #d6dae0; }
+  #worlds button.on { border-color: #c9752f; color: #f0c79a; }
+  #worlds button i { display: block; font-style: normal; font-size: 10px; color: #545b64; letter-spacing: .04em; margin-top: 3px; }
   #boot { display: flex; align-items: center; justify-content: center; color: #6e7681; letter-spacing: .2em; }
+  #boot[hidden] { display: none; }
+
+  /* Demo: no crosshair, no key list, nothing to read — it is meant
+     to be looked past, not at. */
+  #hud.demo #crosshair, #hud.demo #keys, #hud.demo #readout { display: none; }
+  #demoTag { position: absolute; left: 22px; top: 20px; letter-spacing: .24em;
+             text-transform: uppercase; color: #9aa3ad; text-shadow: 0 1px 4px #000;
+             transition: opacity .8s ease; }
+  #demoTag b { color: #e8b04b; font-weight: 600; }
+  #demoTag i { display: block; font-style: normal; font-size: 10.5px; color: #5c636b;
+               letter-spacing: .1em; margin-top: 7px; }
+  #panel .alt { margin-top: 14px; font-size: 11px; letter-spacing: .12em;
+                text-transform: uppercase; color: #6e7681; cursor: pointer; }
+  #panel .alt:hover { color: #d6dae0; }
 </style>
 </head>
 <body>
@@ -51,13 +74,16 @@
 
 <div id="hud" hidden>
   <div id="crosshair"></div>
+  <div id="demoTag" hidden></div>
   <div id="readout">
+    <div><span class="k">BODY     </span><span class="warn" id="r-world">MOON</span> <span class="k" id="r-site">Mare Tranquillitatis</span></div>
     <div><span class="k">MODE     </span><span class="warn" id="r-mode">EVA</span></div>
-    <div><span class="k">GRAVITY  </span><span class="v" id="r-g">1.62 m/s²</span> <span class="warn" id="r-body">LUNAR</span></div>
+    <div><span class="k">GRAVITY  </span><span class="v" id="r-g">1.62 m/s²</span> <span class="warn" id="r-body">SURFACE</span></div>
     <div><span class="k">VELOCITY </span><span class="v" id="r-v">0.00 m/s</span></div>
     <div><span class="k">ALTITUDE </span><span class="v" id="r-a">0.00 m</span></div>
     <div><span class="k">POSITION </span><span class="v" id="r-p">0 E &middot; 0 N</span></div>
     <div><span class="k">SUN ELEV </span><span class="v" id="r-s">16.0°</span></div>
+    <div><span class="warn" id="r-note"></span></div>
   </div>
   <div id="keys">
     <div><b>WASD</b> move &nbsp; <b>SHIFT</b> bound &nbsp; <b>SPACE</b> jump</div>
@@ -68,10 +94,12 @@
 
 <div id="overlay" hidden>
   <div id="panel">
-    <h1>Lunar Walk</h1>
-    <div class="sub">Mare Tranquillitatis &middot; 0.166 g &middot; surface unbounded</div>
+    <h1 id="p-title">Lunar Walk</h1>
+    <div class="sub" id="p-sub">Mare Tranquillitatis &middot; 0.166 g &middot; surface unbounded</div>
+    <div id="worlds"></div>
     <div class="go">Click to descend</div>
-    <div class="fine">
+    <div class="alt" id="demoStart">or watch it walk itself</div>
+    <div class="fine" id="p-fine">
       Sunlight is unfiltered — shadows are black, and the sky stays black at noon.<br>
       Walk in any direction for as long as you like: the surface never ends.<br>
       <b>R</b> drives the rover. <b>F</b> flies. Turn around — Earth does not rise or set.
@@ -96,17 +124,23 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 /* ═════════════════════════════════════════════════════════════
    1. TERRAIN KERNEL
-   Everything that defines the surface lives in this one source
+   Everything that defines a surface lives in this one source
    string. It is eval'd into the main thread (for physics, rocks,
    footprints) and prepended to the mesh worker (for geometry),
    so both sides compute byte-identical heights: the surface you
    see is exactly the surface you stand on.
 
-   The world is unbounded. Craters are not stored anywhere —
+   Four bodies share the kernel — Moon, Mars, Phobos, Deimos —
+   selected by setWorld(). Everything that differs between them
+   is a row in the WORLDS table below, so a chunk built in a
+   worker and a footstep tested on the main thread always agree
+   about which world they are on.
+
+   Each world is unbounded. Craters are not stored anywhere —
    they are re-derived on demand from integer cell coordinates
-   through a hash, in five size classes from metre pits to
-   600 m basins. Any (x, z) you ever visit resolves the same
-   craters, so the surface is infinite yet permanent.
+   through a hash, in size classes from metre pits to kilometre
+   basins. Any (x, z) you ever visit resolves the same craters,
+   so every surface is infinite yet permanent.
    ═════════════════════════════════════════════════════════════ */
 const TERRAIN_SOURCE = String.raw`
 var SEED = 19690720;
@@ -157,25 +191,104 @@ function ridged(x, y, octaves) {
   return sum / norm;
 }
 
-/* ── Craters ────────────────────────────────────────────────────
-   Five size classes, each backed by its own uniform grid. A cell
-   either contains a crater or it doesn't, decided by hashing the
-   cell coordinates — so any query anywhere in the infinite plane
-   resolves the same set. Cell sizes are chosen so a crater's full
-   reach (rim + ejecta, 1.9 r) never escapes the 3×3 neighbourhood
-   around the query point.
+/* ── Worlds ─────────────────────────────────────────────────────
+   One kernel, four bodies. Gravity and radius are the real
+   values; the rest describes what the ground actually looks
+   like on each, and is shared verbatim with the mesh workers.
 
-   Densities follow the real power law: a mare surface is
-   saturated at small diameters — four billion years of
-   bombardment with nothing to erase any of it.                  */
-var CRATER_LAYERS = [
-  { cell: 2560, salt:  7, rMin: 230, rMax: 620, count: 1, prob: 0.38 },  // basins
-  { cell:  640, salt: 11, rMin:  60, rMax: 230, count: 2, prob: 0.55 },
-  { cell:  160, salt: 23, rMin:  16, rMax:  60, count: 1, prob: 0.95 },
-  { cell:   40, salt: 37, rMin:   4, rMax:  16, count: 1, prob: 0.42 },
-  { cell:   10, salt: 53, rMin: 0.9, rMax:   4, count: 1, prob: 0.13 },
-];
-var RAY_LAYER_MAX = 2;   // only the two largest classes carry ray systems
+   kind selects the height function: 0 = airless mare/highland
+   (Moon), 1 = wind-worked desert (Mars), 2 = saturated
+   captured-asteroid regolith (Phobos, Deimos).
+
+   Seeds are the dates that matter: Apollo 11's launch, Viking 1's
+   launch, and Asaph Hall's two nights in August 1877.            */
+var WORLDS = {
+
+  moon: {
+    id: 'moon', kind: 0, seed: 19690720,
+    g: 1.62, R: 1737400,
+    // Saturated at small diameters: four billion years of
+    // bombardment with nothing to erase any of it.
+    craters: [
+      { cell: 2560, salt:  7, rMin: 230, rMax: 620, count: 1, prob: 0.38 },  // basins
+      { cell:  640, salt: 11, rMin:  60, rMax: 230, count: 2, prob: 0.55 },
+      { cell:  160, salt: 23, rMin:  16, rMax:  60, count: 1, prob: 0.95 },
+      { cell:   40, salt: 37, rMin:   4, rMax:  16, count: 1, prob: 0.42 },
+      { cell:   10, salt: 53, rMin: 0.9, rMax:   4, count: 1, prob: 0.13 },
+    ],
+    craterAmp: 1, depthK: 1, rampart: 0, rayLayers: 2,
+  },
+
+  /* Mars. Craters below a few metres do not survive: dust settles
+     out of the atmosphere and saltating sand planes them off in
+     geological no-time, so the small classes are thinned and the
+     survivors are shallow. Ejecta is lobate — ground ice fluidises
+     it — so fresh craters end in a distal rampart ridge instead of
+     a fading blanket.                                             */
+  mars: {
+    id: 'mars', kind: 1, seed: 19750820,
+    g: 3.72, R: 3389500,
+    craters: [
+      { cell: 3200, salt:  5, rMin: 300, rMax: 780, count: 1, prob: 0.30 },
+      { cell:  800, salt: 13, rMin:  70, rMax: 300, count: 1, prob: 0.42 },
+      { cell:  200, salt: 29, rMin:  18, rMax:  72, count: 1, prob: 0.50 },
+      { cell:   50, salt: 41, rMin:   5, rMax:  18, count: 1, prob: 0.22 },
+    ],
+    craterAmp: 0.74, depthK: 0.60, rampart: 1, rayLayers: 0,
+  },
+
+  /* Phobos: a 22 km captured asteroid, saturated at every scale,
+     and cut by the grooves — parallel troughs, hundreds of metres
+     apart and breaking into chains of pits along their length.
+     Darkest natural surface in the inner system, albedo 0.071.    */
+  phobos: {
+    id: 'phobos', kind: 2, seed: 18770818,
+    g: 0.0057, R: 11100,
+    craters: [
+      { cell: 5120, salt:  3, rMin: 400, rMax: 1300, count: 1, prob: 0.55 },
+      { cell: 1280, salt: 17, rMin: 110, rMax:  400, count: 2, prob: 0.70 },
+      { cell:  320, salt: 31, rMin:  30, rMax:  110, count: 2, prob: 0.90 },
+      { cell:   80, salt: 43, rMin:   8, rMax:   30, count: 1, prob: 0.80 },
+      { cell:   20, salt: 59, rMin: 1.8, rMax:    8, count: 1, prob: 0.35 },
+      { cell:    6, salt: 61, rMin: 0.6, rMax:  2.4, count: 1, prob: 0.20 },
+    ],
+    craterAmp: 1, depthK: 1.05, rampart: 0, rayLayers: 0,
+    relief: 130, groove: 17, fine: 1, albedoK: 1,
+  },
+
+  /* Deimos is the same rock with a thicker blanket on it: metres of
+     regolith drape and infill every crater, so it reads visibly
+     smoother than Phobos, and it has no grooves at all.           */
+  deimos: {
+    id: 'deimos', kind: 2, seed: 18770812,
+    g: 0.003, R: 6200,
+    craters: [
+      { cell: 5120, salt:  3, rMin: 300, rMax: 900, count: 1, prob: 0.40 },
+      { cell: 1280, salt: 17, rMin:  90, rMax: 300, count: 1, prob: 0.60 },
+      { cell:  320, salt: 31, rMin:  25, rMax:  90, count: 2, prob: 0.85 },
+      { cell:   80, salt: 43, rMin:   7, rMax:  25, count: 1, prob: 0.70 },
+      { cell:   20, salt: 59, rMin: 1.6, rMax:   7, count: 1, prob: 0.28 },
+    ],
+    craterAmp: 0.66, depthK: 0.80, rampart: 0, rayLayers: 0,
+    relief: 78, groove: 0, fine: 0.62, albedoK: 0.96,
+  },
+};
+
+var WORLD = WORLDS.moon;      // active row; setWorld() swaps it
+var WK = 0;                   // WORLD.kind, hoisted for the hot path
+var CRATER_LAYERS = WORLD.craters;
+var RAY_LAYER_MAX = 2;        // only the largest classes carry ray systems
+
+function setWorld(id) {
+  if (WORLD.id === id) return WORLD;
+  WORLD = WORLDS[id];
+  WK = WORLD.kind;
+  SEED = WORLD.seed;          // every noise field in the kernel keys off this
+  CRATER_LAYERS = WORLD.craters;
+  RAY_LAYER_MAX = WORLD.rayLayers;
+  craterCache.clear();
+  return WORLD;
+}
 
 // Decorrelated random streams per cell: k picks the stream.
 function cellRnd(cx, cz, salt, k) {
@@ -204,8 +317,10 @@ function cellCraters(li, cx, cz) {
     out.push({
       x: px, z: pz, r: r,
       // Depth is ~1:5 of *diameter*, so 0.3–0.42 of the radius.
-      // Age erodes it, but never all the way flat.
-      depth: r * (0.30 + cellRnd(cx, cz, L.salt, k * 6 + 5) * 0.12) * (0.55 + 0.45 * age),
+      // Age erodes it, but never all the way flat. depthK carries
+      // the body: Martian floors are half filled with sand.
+      depth: r * (0.30 + cellRnd(cx, cz, L.salt, k * 6 + 5) * 0.12)
+               * (0.55 + 0.45 * age) * WORLD.depthK,
       rim: 0.26 + cellRnd(cx, cz, L.salt, k * 6 + 2) * 0.24,
       age: age,
       terrace: r > 45 && age > 0.7,   // large fresh craters slump into benches
@@ -218,6 +333,7 @@ function cellCraters(li, cx, cz) {
 
 function craterField(x, z) {
   var h = 0;
+  var ramp = WORLD.rampart;
   for (var li = 0; li < CRATER_LAYERS.length; li++) {
     var L = CRATER_LAYERS[li];
     var inv = 1 / L.cell;
@@ -241,11 +357,29 @@ function craterField(x, z) {
           }
           var g = (d - 0.98) / 0.30;
           h += c.depth * c.rim * Math.exp(-g * g);
+
+          // Rampart ejecta: on Mars the blanket flows out as a sheet
+          // and stops at a ridge, so there is a second, low rim well
+          // outside the first. Kept narrow enough to die out before
+          // the 1.9 r cutoff, or it would leave a seam there.
+          if (ramp > 0 && d > 1.0) {
+            var gr = (d - 1.45) / 0.22;
+            h += c.depth * 0.11 * ramp * Math.exp(-gr * gr);
+          }
         }
       }
     }
   }
-  return h;
+  return h * WORLD.craterAmp;
+}
+
+/* Craters, faded out over the last few metres around the origin so
+   whichever world you are on, the landing site itself is walkable. */
+function craterAt(x, z) {
+  var cf = craterField(x, z);
+  var d0 = x * x + z * z;
+  if (d0 < 900) cf *= sstep(12, 30, Math.sqrt(d0));
+  return cf;
 }
 
 /* Bright ejecta rays streaking away from fresh large impacts.
@@ -284,10 +418,8 @@ function rayBrightness(x, z) {
   return b < 0 ? 0 : b > 0.7 ? 0.7 : b;
 }
 
-/* Surface height in metres at any world position. The single
-   source of truth: mesh, physics, rover wheels, rocks, flag and
-   footprints all call this. */
-function terrainHeight(x, z) {
+/* ── The Moon ───────────────────────────────────────────────── */
+function hMoon(x, z) {
   var nx = x * 0.0021, nz = z * 0.0021;
 
   var h = (fbm(nx, nz, 5) - 0.5) * 16;                              // broad mare swell
@@ -300,26 +432,222 @@ function terrainHeight(x, z) {
   // long traverse crosses plains, then mountains, then plains.
   // The ridged terms cost more than everything else combined, so
   // they are skipped entirely where the mask is closed.
-  var m = fbm(x * 0.00016 + 7.7, z * 0.00016 - 3.1, 3);
-  var hl = sstep(0.55, 0.75, m);
+  var hl = highlandMask(x, z);
   if (hl > 0.004) {
     var k = hl * hl;
     h += ridged(nx * 1.55 - 90, nz * 1.55 + 55, 5) * k * 95;
     h += ridged(nx * 6.2 + 12, nz * 6.2 - 40, 4) * k * 16;   // craggy detail on top
   }
-
-  // Keep the landing site itself walkable: craters fade out over
-  // the last few metres around the flag.
-  var cf = craterField(x, z);
-  var d0 = x * x + z * z;
-  if (d0 < 900) cf *= sstep(12, 30, Math.sqrt(d0));
-  return h + cf;
+  return h + craterAt(x, z);
 }
 
 // Highland mask alone — the worker uses it to colour anorthosite
 // brighter than mare basalt.
 function highlandMask(x, z) {
   return sstep(0.55, 0.75, fbm(x * 0.00016 + 7.7, z * 0.00016 - 3.1, 3));
+}
+
+/* ── Mars ───────────────────────────────────────────────────────
+   Wind does the work here that impacts do on an airless body.
+   The prevailing wind is one fixed bearing for the whole world:
+   dune crests lie across it, and every crater trails a streak
+   downwind of itself.                                            */
+var WIND_A = 0.9271, WIND_C = Math.cos(WIND_A), WIND_S = Math.sin(WIND_A);
+
+// Where sand has collected deep enough to build dunes. Shared with
+// the colour pass, because the sand is a different rock from the
+// dust it sits on and has to be shaded differently.
+function duneMask(x, z) {
+  return sstep(0.46, 0.66, fbm(x * 0.00042 + 12.1, z * 0.00042 - 5.4, 3));
+}
+
+function hMars(x, z) {
+  var nx = x * 0.0016, nz = z * 0.0016;
+
+  var h = (fbm(nx, nz, 5) - 0.5) * 46;                         // regional slopes
+  h += (fbm(nx * 5.1 + 21, nz * 5.1 - 8, 4) - 0.5) * 6.0;      // hummocky plains
+  h += (fbm(nx * 19 - 4, nz * 19 + 9, 3) - 0.5) * 1.3;         // metre relief
+
+  // Layered terrain: Mars keeps its stratigraphy, and wind cuts it
+  // into flat-topped mesas and buttes with talus skirts. Beds are
+  // ~9 m thick — flat for most of each, then a scarp. Gated like
+  // the lunar highlands, and for the same reason: it is expensive.
+  var mk = sstep(0.54, 0.70, fbm(x * 0.00021 - 4.2, z * 0.00021 + 6.6, 3));
+  if (mk > 0.004) {
+    var t = ridged(nx * 2.9 + 33, nz * 2.9 - 19, 4) * mk * mk * 150 / 9;
+    var fi = Math.floor(t);
+    h += (fi + sstep(0.62, 1.0, t - fi)) * 9;
+  }
+
+  // Transverse dunes: crests across the wind, a long gentle stoss
+  // slope and a slip face standing at the angle of repose. Crests
+  // meander because the wind is not a ruler.
+  var dk = duneMask(x, z);
+  if (dk > 0.004) {
+    var u = (x * WIND_C + z * WIND_S) / 72 + valueNoise(x * 0.0026, z * 0.0026) * 1.7;
+    var f = u - Math.floor(u);
+    var prof = f < 0.78 ? smoothT(f / 0.78) : 1 - (f - 0.78) / 0.22;
+    h += (prof - 0.45) * dk * 7.5;
+  }
+
+  // Transverse aeolian ridges: the metre-high, tens-of-metres-apart
+  // ripples that cover most of the planet between the dune fields.
+  var v = (x * WIND_C + z * WIND_S) / 26 + valueNoise(x * 0.004 + 50, z * 0.004) * 2.2;
+  h += (Math.abs(v - Math.floor(v) - 0.5) - 0.25) * 1.1 * (1 - dk * 0.6);
+
+  return h + craterAt(x, z);
+}
+
+/* Wind streaks: a crater rim shelters the ground behind it, sand
+   scours the bright dust off the lee side, and the dark rock
+   underneath shows as a tail pointing downwind — the most obvious
+   thing about Mars from orbit. Returns how much dust is missing. */
+function windStreak(x, z) {
+  var b = 0;
+  for (var li = 0; li < 2; li++) {
+    var L = CRATER_LAYERS[li];
+    var inv = 1 / L.cell;
+    var ccx = Math.floor(x * inv), ccz = Math.floor(z * inv);
+    for (var dz = -1; dz <= 1; dz++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        var list = cellCraters(li, ccx + dx, ccz + dz);
+        for (var i = 0; i < list.length; i++) {
+          var c = list[i];
+          var ox = x - c.x, oz = z - c.z;
+          var far = Math.min(c.r * 6, L.cell * 0.88);
+          if (ox * ox + oz * oz > far * far) continue;
+          var s = ox * WIND_C + oz * WIND_S;          // along-wind
+          if (s <= c.r * 0.5) continue;               // upwind of the rim
+          var t = oz * WIND_C - ox * WIND_S;          // cross-wind
+          var w = c.r * (0.5 + s / far * 1.0);        // the tail widens out
+          var fade = 1 - s / far;
+          b += Math.exp(-(t * t) / (w * w)) * fade * fade
+             * (0.55 + 0.45 * valueNoise(s * 0.012, t * 0.02)) * 0.8;
+        }
+      }
+    }
+  }
+  return b > 1 ? 1 : b;
+}
+
+/* ── Phobos and Deimos ──────────────────────────────────────────
+   Captured asteroids with kilometres of relief on a body you
+   could walk around in an afternoon, buried under regolith and
+   saturated with craters. Phobos also carries the grooves.
+
+   Groove spacings are the real ones — a few hundred metres, over
+   most of the body, so from anywhere on Phobos you are standing
+   in or beside one. Any wider and they are further apart than
+   that body's horizon, and you could never find them at all.    */
+var GRV_A = [0.32, 1.19, 2.35];      // three families, three bearings
+var GRV_S = [430, 560, 330];         // and three spacings
+
+function hSmall(x, z) {
+  var rel = WORLD.relief, fine = WORLD.fine;
+  var nx = x * 0.00055, nz = z * 0.00055;
+
+  var h = (fbm(nx, nz, 5) - 0.5) * rel;                          // the body's own shape
+  h += (fbm(nx * 4.3 + 15, nz * 4.3 - 22, 4) - 0.5) * rel * 0.22;
+  h += (fbm(nx * 31 + 3, nz * 31 + 8, 3) - 0.5) * 2.4 * fine;    // regolith relief
+  h += (fbm(nx * 120, nz * 120, 2) - 0.5) * 0.5 * fine;
+
+  // Grooves: parallel troughs 100–200 m wide, only in some lanes,
+  // and deepening into chains of pits along their length.
+  var gv = WORLD.groove;
+  if (gv > 0) {
+    for (var gi = 0; gi < 3; gi++) {
+      var a = GRV_A[gi], sp = GRV_S[gi];
+      var u = (x * Math.cos(a) + z * Math.sin(a)) / sp;
+      var lane = Math.floor(u);
+      if (hash2(lane, 977 + gi * 31) > 0.42) continue;
+      var t = u - lane - 0.5;
+      var along = z * Math.cos(a) - x * Math.sin(a);
+      var amp = 0.35 + valueNoise(along * 0.0045 + gi * 40, gi * 7.3) * 1.15;
+      h -= Math.exp(-t * t * 34) * gv * amp;
+    }
+  }
+  return h + craterAt(x, z);
+}
+
+/* Surface height in metres at any world position. The single
+   source of truth: mesh, physics, rover wheels, rocks, landmark
+   and footprints all call this, on whichever world is loaded. */
+function terrainHeight(x, z) {
+  return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z) : hSmall(x, z);
+}
+
+/* ── Curvature ──────────────────────────────────────────────────
+   Chunks curve away by d²/2R about an anchor, which is what puts
+   the streamed edge below the horizon. The anchor has to be a
+   fixed point — the player's 256 m cell centre — or every chunk
+   would need rebuilding on every step, and that leaves the player
+   up to 181 m from it. On the Moon 181 m of curvature is 9 mm and
+   nobody notices. On Deimos it is 2.6 m, and it buries you.
+
+   So the drop is flat inside D0 of the anchor and only starts
+   beyond it. D0 is comfortably more than 181 m, so the player is
+   always inside the flat cap and stands on exactly the height the
+   physics computes; and it is small enough that the drop past it
+   is unchanged where it does the work — on Phobos the edge of the
+   streamed world at 3.5 km still sits half a kilometre down.
+
+   It costs the airless-giant worlds nothing: on the Moon the cap
+   changes the whole profile by 46 mm.                             */
+var CURVE_D0 = 400, CURVE_D02 = CURVE_D0 * CURVE_D0;
+function curveDrop(dx, dz) {
+  var d2 = dx * dx + dz * dz - CURVE_D02;
+  return d2 > 0 ? d2 / (2 * WORLD.R) : 0;
+}
+
+/* ── Surface colour ─────────────────────────────────────────────
+   Per-vertex albedo, written by the workers. It multiplies the
+   regolith texture, whose base grey is set per world so the
+   product lands on the body's real reflectance: 0.07 for mare
+   basalt and for both Martian moons, 0.10 for Martian dune sand,
+   0.28 for the ferric dust that coats everything else on Mars. */
+function surfaceTint(x, z, h, slope, out) {
+  var v;
+  if (WK === 0) {
+    // Steep walls shed dust and expose brighter bedrock, crater
+    // floors pool dark fines, highlands are anorthosite rather
+    // than basalt, fresh ejecta rays streak bright.
+    var elev = h * 0.010;
+    v = 0.60 + (elev < -0.14 ? -0.14 : elev > 0.34 ? 0.34 : elev);
+    v += slope * 0.30;
+    v += rayBrightness(x, z);
+    v += highlandMask(x, z) * 0.22;
+    v *= 0.88 + valueNoise(x * 0.07, z * 0.07) * 0.26;
+    v = v < 0.30 ? 0.30 : v > 1.35 ? 1.35 : v;
+    out[0] = v * 1.005; out[1] = v; out[2] = v * 0.975;
+
+  } else if (WK === 1) {
+    // Mars is two rocks: bright ferric dust that settles out of the
+    // air onto anything flat, and the dark basaltic sand underneath
+    // it. Everything the wind touches — slip faces, steep ground,
+    // the lee of a crater — loses the dust and goes grey.
+    var d = 0.74;
+    d -= slope * 0.62;
+    d -= duneMask(x, z) * 0.55;
+    d -= windStreak(x, z) * 0.5;
+    d += valueNoise(x * 0.0055, z * 0.0055) * 0.34 - 0.17;
+    d = d < 0 ? 0 : d > 1 ? 1 : d;
+    var n = 0.92 + valueNoise(x * 0.07, z * 0.07) * 0.17;
+    out[0] = (0.44 + d * 0.62) * n;
+    out[1] = (0.36 + d * 0.34) * n;
+    out[2] = (0.32 + d * 0.16) * n;
+
+  } else {
+    // Both moons are D-type: near-black, and spectrally red. Phobos
+    // has two units, a redder one over most of the body and a bluer
+    // one dug out around the big crater; the mask stands in for it.
+    v = 0.40 * WORLD.albedoK + slope * 0.12;
+    v *= 0.86 + valueNoise(x * 0.05, z * 0.05) * 0.30;
+    v = v < 0.16 ? 0.16 : v > 0.85 ? 0.85 : v;
+    var u = sstep(0.42, 0.62, fbm(x * 0.00035 + 3.3, z * 0.00035 - 9.1, 3));
+    out[0] = v * (0.94 + u * 0.18);
+    out[1] = v * (0.95 + u * 0.02);
+    out[2] = v * (1.00 - u * 0.12);
+  }
 }
 `;
 
@@ -334,6 +662,161 @@ function terrainNormal(x, z, eps = 0.6) {
 }
 
 /* ═════════════════════════════════════════════════════════════
+   1b. WORLDS, AS SEEN
+   The kernel's WORLDS table says what the ground *is*. This one
+   says what it looks like from inside a helmet: the light, the
+   sky, how far the streamer has to reach, and what hangs
+   overhead. Everything here needs THREE, so it cannot live in
+   the worker-shared string.
+
+   Sunlight: 1361 W/m² at the Moon, 586 W/m² at Mars — 43% — and
+   the same 43% at both moons, which orbit it. On Mars a further
+   share of that is scattered out of the beam by suspended dust
+   and comes back as skylight, which is why Martian shadows have
+   something in them and lunar shadows do not.
+
+   Sun disc: 0.53° from the Moon, 0.35° from Mars and its moons.
+   ═════════════════════════════════════════════════════════════ */
+const L4 = () => [
+  { size: 256,   ext: 4, sink: 0 },
+  { size: 1024,  ext: 4, sink: 1.5,  step: 32 },
+  { size: 4096,  ext: 3, sink: 6,    step: 128 },
+  { size: 16384, ext: 2, sink: 20,   step: 512 },
+];
+// A 22 km moon hides its own surface 190 m away. Reaching ±40 km
+// there would be forty thousand vertices per frame of ground that
+// is kilometres below the horizon, so the small bodies stream two
+// levels and stop.
+//
+// The coarse level is finer here than the equivalent on the Moon —
+// 16 m rather than 32 — because these two carry far more relief per
+// metre than anything else in the set, and a 32 m step smooths so
+// much of it away that the LOD boundary shows up as a brightness
+// step in the middle distance. The saving from streaming only two
+// levels pays for it several times over.
+const L2 = () => [
+  { size: 256,  ext: 4, sink: 0 },
+  { size: 1024, ext: 3, sink: 1.5, step: 16 },
+];
+
+const VIEW = {
+  moon: {
+    name: 'MOON', site: 'Mare Tranquillitatis', gTxt: '1.62 m/s²',
+    title: 'Lunar Walk', sub: 'Mare Tranquillitatis · 0.166 g · surface unbounded',
+    fine: 'Sunlight is unfiltered — shadows are black, and the sky stays black at noon.<br>' +
+          'Walk in any direction for as long as you like: the surface never ends.<br>' +
+          '<b>R</b> drives the rover. <b>F</b> flies. Turn around — Earth does not rise or set.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 56, sunHDR: [18, 16.8, 14.8],
+    corona: 3400, coronaColor: [1, 0.985, 0.94],
+    hemi: [0x0a0d14, 0x67645f, 0.36], amb: [0x232634, 0.14],
+    fog: null, sky: null,
+    grey: 96, mapTint: [1.005, 1.0, 0.975], pits: 900, grain: 1,
+    surge: [0.85, 0.18], sparkle: 1.0,
+    levels: L4, fly: 400, rover: true,
+    dustColor: 0xada79f, dustDrag: 0, stampColor: 0x4a453f,
+    rockTint: [1.02, 0.99, 0.94], rockLight: 0.55, rockBase: 0.42, rockN: 1,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    exposure: 1.05, bloom: [0.55, 0.65, 1.12],
+    companions: ['earth'],
+  },
+
+  mars: {
+    name: 'MARS', site: 'Amazonis Planitia', gTxt: '3.72 m/s²',
+    title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
+    fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
+          'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
+          'the sun is blue — forward-scattered by the same dust. <b>1 2 3 4</b> change world.',
+    air: true, stars: 0,
+    // Dust reddens the beam on the way down and steals about half of it.
+    sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
+    corona: 5200, coronaColor: [0.72, 0.78, 1.0],
+    hemi: [0xd08a4e, 0x54321f, 1.25], amb: [0x7a4c30, 0.42],
+    // Visibility on a clear sol is a couple of tens of kilometres,
+    // and what fades the distance is the same suspended dust that
+    // colours the sky — so the fog takes the sky's own colour, and
+    // both dim together as the sun goes down.
+    fog: { density: 9e-5 },
+    // Linear radiances, not sRGB swatches — the composer renders HDR
+    // and tone maps at the very end. Calibrated against the sunlit
+    // ground beneath it: near the horizon the Martian sky is roughly
+    // as bright as the ground, which is the thing photographs of it
+    // get across and descriptions of it never do. Still dark enough
+    // that a 7%-albedo moon reads as a bright dot against it.
+    sky: { zenith: [0.095, 0.055, 0.034], horizon: [0.34, 0.20, 0.115],
+           aureole: [0.30, 0.335, 0.44], k: 62 },
+    grey: 150, mapTint: [1.0, 0.93, 0.86], pits: 260, grain: 0.7, ripple: 0.30,
+    surge: [0.22, 0.10], sparkle: 0,
+    levels: L4, fly: 400, rover: true,
+    dustColor: 0xc08a5e, dustDrag: 0.55, stampColor: 0x6d4a33,
+    rockTint: [1.0, 0.86, 0.74], rockLight: 0.42, rockBase: 0.40, rockN: 0.85,
+    landmark: 'flag', flagColor: 0xd8dce2,
+    exposure: 1.0, bloom: [0.42, 0.7, 1.1],
+    companions: ['phobos', 'deimos'],
+  },
+
+  phobos: {
+    name: 'PHOBOS', site: 'near Stickney', gTxt: '0.0057 m/s²',
+    title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
+    fine: 'Gravity is six thousandths of Earth\'s: a hard jump would be a launch,<br>' +
+          'so you push off with a toe and drift for a minute. Mars fills 42° of<br>' +
+          'the sky and never moves. <b>1 2 3 4</b> change world.',
+    air: false, stars: 1,
+    sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [8.4, 7.7, 6.8],
+    corona: 2600, coronaColor: [1, 0.985, 0.94],
+    // Marsshine: a 42°-wide disc of reflected sunlight overhead,
+    // about 2% of the direct beam. Not much, but it is the only
+    // thing in a Phobos shadow, and it is rust-coloured.
+    hemi: [0x3a1c0e, 0x140a06, 0.55], amb: [0x2a1409, 0.16],
+    fog: null, sky: null,
+    grey: 120, mapTint: [1.0, 0.965, 0.93], pits: 1400, grain: 1.25,
+    surge: [0.95, 0.22], sparkle: 0.6,
+    levels: L2, fly: 150, rover: false,
+    dustColor: 0x4e4a45, dustDrag: 0, stampColor: 0x2e2a26,
+    rockTint: [1.03, 0.99, 0.93], rockLight: 0.34, rockBase: 0.26, rockN: 1.35,
+    landmark: 'beacon', flagColor: 0xb9bcc2,
+    exposure: 1.95, bloom: [0.5, 0.65, 1.1],
+    companions: ['mars-big', 'deimos-far'],
+  },
+
+  deimos: {
+    name: 'DEIMOS', site: 'Voltaire rim', gTxt: '0.0030 m/s²',
+    title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
+    fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
+          'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
+          'you want back. <b>1 2 3 4</b> change world.',
+    air: false, stars: 1,
+    sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [8.4, 7.7, 6.8],
+    corona: 2600, coronaColor: [1, 0.985, 0.94],
+    // Seven times further out than Phobos, so seven times less
+    // marsshine — the shadows here are nearly as black as the Moon's.
+    hemi: [0x1c0e07, 0x0a0604, 0.22], amb: [0x140c08, 0.08],
+    fog: null, sky: null,
+    grey: 120, mapTint: [1.0, 0.97, 0.94], pits: 900, grain: 0.85,
+    surge: [0.95, 0.22], sparkle: 0.6,
+    levels: L2, fly: 120, rover: false,
+    dustColor: 0x4e4a45, dustDrag: 0, stampColor: 0x2e2a26,
+    rockTint: [1.03, 0.99, 0.93], rockLight: 0.34, rockBase: 0.26, rockN: 0.6,
+    landmark: 'beacon', flagColor: 0xb9bcc2,
+    exposure: 1.95, bloom: [0.5, 0.65, 1.1],
+    companions: ['mars-mid', 'phobos-far'],
+  },
+};
+
+const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos'];
+let world = VIEW.moon;        // active render-side row
+let worldId = 'moon';
+
+/* The curvature anchor the chunks were last built around. Anything
+   placed on the ground outside the workers — rocks, boot prints,
+   wheel tracks, the landmark — has to subtract the same drop, or
+   it sits at the raw height while the mesh has curved away beneath
+   it. Inside the flat cap, which is where you are standing, this
+   is exactly zero. */
+let curveAX = 128, curveAZ = 128;
+const dropAt = (x, z) => curveDrop(x - curveAX, z - curveAZ);
+
+/* ═════════════════════════════════════════════════════════════
    2. MESH WORKERS
    Chunk geometry is built off the main thread. Each worker gets
    the same terrain kernel, so its heights match the physics
@@ -344,14 +827,16 @@ function terrainNormal(x, z, eps = 0.6) {
    finite-difference normals, whose vertices are then clamped to
    the chunk edge and dropped to form a skirt that hides LOD
    seams. Chunks also curve away by d²/2R around the requesting
-   anchor: the real lunar curvature, which is what buries the far
-   edge of the streamed world below the horizon.
+   anchor, at the real radius of whichever body is loaded, which
+   is what buries the far edge of the streamed world below the
+   horizon — 2.4 km away on the Moon, 190 m on Phobos.
    ═════════════════════════════════════════════════════════════ */
 const WORKER_BODY = String.raw`
-var MOON_R2 = 2 * 1737400;   // lunar radius, for the curvature drop
+var _tint = [0, 0, 0];
 
 onmessage = function (e) {
   var d = e.data;
+  setWorld(d.world);
   var n = d.n, step = d.step, x0 = d.x0, z0 = d.z0, ax = d.ax, az = d.az;
   var W = n + 3;
   var V = W * W;
@@ -392,8 +877,7 @@ onmessage = function (e) {
       var nx = (hL - hR) * inv2s, nz2 = (hD - hU) * inv2s;
       var nl = 1 / Math.sqrt(nx * nx + 1 + nz2 * nz2);
 
-      var dxa = px - ax, dza = pz - az;
-      var dropC = (dxa * dxa + dza * dza) / MOON_R2;
+      var dropC = curveDrop(px - ax, pz - az);
 
       pos[k * 3]     = px;
       pos[k * 3 + 1] = hC - dropC - (isSkirt ? skirt : 0);
@@ -404,20 +888,11 @@ onmessage = function (e) {
       uv[k * 2]      = px / 3;
       uv[k * 2 + 1]  = pz / 3;
 
-      // Albedo: steep walls shed dust and expose brighter bedrock,
-      // crater floors pool dark fines, highlands are anorthosite
-      // rather than basalt, fresh ejecta rays streak bright.
+      // Albedo comes from the kernel, so it changes with the body.
       var slope = Math.hypot(hR - hL, hU - hD) * inv2s * 0.7;
       if (slope > 1) slope = 1;
-      var v = 0.60;
-      var elev = hC * 0.010;
-      v += elev < -0.14 ? -0.14 : elev > 0.34 ? 0.34 : elev;
-      v += slope * 0.30;
-      v += rayBrightness(px, pz);
-      v += highlandMask(px, pz) * 0.22;
-      v *= 0.88 + valueNoise(px * 0.07, pz * 0.07) * 0.26;
-      v = v < 0.30 ? 0.30 : v > 1.35 ? 1.35 : v;
-      col[k * 3] = v * 1.005; col[k * 3 + 1] = v; col[k * 3 + 2] = v * 0.975;
+      surfaceTint(px, pz, hC, slope, _tint);
+      col[k * 3] = _tint[0]; col[k * 3 + 1] = _tint[1]; col[k * 3 + 2] = _tint[2];
     }
   }
 
@@ -466,7 +941,9 @@ function updateSunDir() {
 }
 updateSunDir();
 
-// Unfiltered sunlight is white. Nothing reddens it on the way in.
+// On an airless body sunlight is white — nothing reddens it on the
+// way in. On Mars it arrives through two scale heights of suspended
+// dust, which takes about half of it and warms what is left.
 const sun = new THREE.DirectionalLight(0xfff8f2, 3.4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -478,15 +955,25 @@ sun.shadow.bias = -0.0009;
 sun.shadow.normalBias = 0.06;
 scene.add(sun, sun.target);
 
-// Vacuum: almost no fill. What little there is stands in for
-// regolith bounce and earthshine.
-scene.add(new THREE.HemisphereLight(0x0a0d14, 0x67645f, 0.36));
-scene.add(new THREE.AmbientLight(0x232634, 0.14));
+/* Fill light. In vacuum there is almost none — what little there is
+   stands in for regolith bounce and for planetshine off whatever is
+   overhead. On Mars the sky itself is the fill, and it is bright:
+   dust scatters a large fraction of the beam back down, which is why
+   a Martian shadow is a soft tan and a lunar one is black. */
+const hemiLight = new THREE.HemisphereLight(0x0a0d14, 0x67645f, 0.36);
+const ambLight = new THREE.AmbientLight(0x232634, 0.14);
+scene.add(hemiLight, ambLight);
 
 /* ═════════════════════════════════════════════════════════════
    4. REGOLITH TEXTURES — generated, so nothing is ever fetched.
+   One pair per world, built on first visit and kept: the base
+   grey is the body's real reflectance carrier (the vertex colours
+   from surfaceTint do the rest), and the micro-relief differs
+   because the processes do. Lunar and Phobos regolith is pitted
+   by micrometeorites all the way down to the millimetre; Martian
+   soil has that planed off and wind-ripples written over it.
    ═════════════════════════════════════════════════════════════ */
-function regolithMaps() {
+function regolithMaps(v) {
   const S = 1024;
   const alb = document.createElement('canvas'); alb.width = alb.height = S;
   const nrm = document.createElement('canvas'); nrm.width = nrm.height = S;
@@ -495,18 +982,31 @@ function regolithMaps() {
 
   // A height field of micro-relief: grain, plus scattered pits.
   const h = new Float32Array(S * S);
+  const grain = v.grain;
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
-      const u = x / S * 8, v = y / S * 8;
-      h[y * S + x] = fbm(u * 4, v * 4, 4) * 0.5 + fbm(u * 17, v * 17, 3) * 0.34
-                   + fbm(u * 47, v * 47, 2) * 0.16;
+      const u = x / S * 8, w = y / S * 8;
+      h[y * S + x] = (fbm(u * 4, w * 4, 4) * 0.5 + fbm(u * 17, w * 17, 3) * 0.34
+                   + fbm(u * 47, w * 47, 2) * 0.16) * grain;
     }
   }
-  // Micro-craters, the reason regolith reads as porous up close.
-  // Shallow: at a 3 m tile these are centimetre-scale dimples, and
-  // anything deeper turns the ground into cobblestones.
+  // Wind ripples: on Mars the last centimetres of relief are not
+  // impact-made at all. Crests every ~20 cm, across the same wind
+  // that builds the dunes, wandering with the local sand supply.
+  if (v.ripple) {
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        const u = (x * 0.906 + y * 0.423) / S * 8;
+        const q = u * 15 + fbm(x / S * 12, y / S * 12, 3) * 4;
+        h[y * S + x] += Math.abs(q - Math.floor(q) - 0.5) * v.ripple;
+      }
+    }
+  }
+  // Micro-craters, the reason airless regolith reads as porous up
+  // close. Shallow: at a 3 m tile these are centimetre-scale
+  // dimples, and anything deeper turns the ground into cobblestones.
   let s = 4711; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < v.pits; i++) {
     const cx = rnd() * S, cy = rnd() * S, r = 3 + Math.pow(rnd(), 3.4) * 36;
     for (let y = Math.floor(cy - r * 1.4); y <= cy + r * 1.4; y++) {
       for (let x = Math.floor(cx - r * 1.4); x <= cx + r * 1.4; x++) {
@@ -522,11 +1022,13 @@ function regolithMaps() {
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const i = y * S + x;
-      // Mare basalt is genuinely dark — 7–13% reflectance — and it is
-      // grey, not brown. The faint warmth is all the tint it gets.
-      const g = 96 + h[i] * 44;
-      aimg.data[i * 4] = g * 1.005; aimg.data[i * 4 + 1] = g;
-      aimg.data[i * 4 + 2] = g * 0.975; aimg.data[i * 4 + 3] = 255;
+      // The base grey carries the body's reflectance: 96 for mare
+      // basalt (7–13%, and grey, not brown — the faint warmth is all
+      // the tint it gets), 120 for the two coal-dark Martian moons,
+      // 150 for Mars, whose hue is supplied per vertex instead.
+      const g = v.grey + h[i] * 44;
+      aimg.data[i * 4] = g * v.mapTint[0]; aimg.data[i * 4 + 1] = g * v.mapTint[1];
+      aimg.data[i * 4 + 2] = g * v.mapTint[2]; aimg.data[i * 4 + 3] = 255;
 
       const hL = h[y * S + ((x - 1 + S) % S)], hR = h[y * S + ((x + 1) % S)];
       const hD = h[((y - 1 + S) % S) * S + x], hU = h[((y + 1) % S) * S + x];
@@ -549,7 +1051,15 @@ function regolithMaps() {
   }
   return { map, normalMap };
 }
-const { map: regoMap, normalMap: regoNormal } = regolithMaps();
+
+// One set per world, built lazily and kept — 2 MB of canvas work
+// that should not be repeated every time you hop bodies.
+const regoCache = new Map();
+function regolithFor(id) {
+  let m = regoCache.get(id);
+  if (!m) regoCache.set(id, m = regolithMaps(VIEW[id]));
+  return m;
+}
 
 /* Regolith does not behave like a Lambertian surface. Its BRDF is
    strongly backscattering: looking down-sun, the ground brightens
@@ -560,25 +1070,38 @@ const { map: regoMap, normalMap: regoNormal } = regolithMaps();
    sprinkle of specular glints: agglutinate glass beads catching
    the sun, the sparkle every Apollo crew remarked on.
 
+   Both are world-dependent. The surge is a vacuum effect: strongest
+   on Phobos, whose regolith is the most porous surface we have
+   measured, and nearly absent on Mars, where skylight fills the
+   inter-particle shadows before they can hide. The glass beads are
+   made by micrometeorite melting, so Mars has none.
+
    Chunk UVs are world-position / 3, so the tile repeats every 3 m
    seamlessly across chunk borders. */
 const uSunView = { value: new THREE.Vector3() };
+const uSurge = { value: new THREE.Vector2(0.85, 0.18) };
+const uSparkle = { value: 0.3 };
 
 const groundMat = new THREE.MeshStandardMaterial({
-  map: regoMap,
-  normalMap: regoNormal,
+  map: regolithFor('moon').map,
+  normalMap: regolithFor('moon').normalMap,
   normalScale: new THREE.Vector2(0.5, 0.5),
   vertexColors: true,
   roughness: 1.0,
   metalness: 0.0,
   dithering: true,
+  fog: true,
 });
 
 groundMat.onBeforeCompile = (shader) => {
   // Registering the uniform binds its value; the declaration still has
   // to be written into the shader source by hand.
   shader.uniforms.uSunView = uSunView;
-  shader.fragmentShader = 'uniform vec3 uSunView;\n' + shader.fragmentShader;
+  shader.uniforms.uSurge = uSurge;
+  shader.uniforms.uSparkle = uSparkle;
+  shader.fragmentShader =
+    'uniform vec3 uSunView;\nuniform vec2 uSurge;\nuniform float uSparkle;\n' +
+    shader.fragmentShader;
 
   // Two-octave albedo: breaks up the repeat of a 3 m tile over kilometres.
   shader.fragmentShader = shader.fragmentShader.replace(
@@ -612,12 +1135,12 @@ groundMat.onBeforeCompile = (shader) => {
     {
       vec3 V = normalize( vViewPosition );
       float phase = max( dot( V, normalize( uSunView ) ), 0.0 );
-      gl_FragColor.rgb *= 1.0 + 0.85 * pow( phase, 14.0 ) + 0.18 * pow( phase, 3.0 );
+      gl_FragColor.rgb *= 1.0 + uSurge.x * pow( phase, 14.0 ) + uSurge.y * pow( phase, 3.0 );
 
       // Sparse micro-facets of impact glass: a hashed cell either
       // holds a bead angled to the sun or it doesn't. Rare, close-up
       // only, and gated by the lit colour — nothing glints in shadow.
-      float spFade = 1.0 - smoothstep( 2.5, 13.0, vDist );
+      float spFade = ( 1.0 - smoothstep( 2.5, 13.0, vDist ) ) * uSparkle;
       if ( spFade > 0.0 ) {
         vec2 cellId = floor( vMapUv * 96.0 );
         float sp = fract( sin( dot( cellId, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
@@ -653,12 +1176,7 @@ groundMat.onBeforeCompile = (shader) => {
 const chunkGroup = new THREE.Group();
 scene.add(chunkGroup);
 
-const LEVELS = [
-  { size: 256,   ext: 4, sink: 0 },
-  { size: 1024,  ext: 4, sink: 1.5,  step: 32 },
-  { size: 4096,  ext: 3, sink: 6,    step: 128 },
-  { size: 16384, ext: 2, sink: 20,   step: 512 },
-];
+let LEVELS = VIEW.moon.levels();
 const l0Step = (ring) => (ring <= 1 ? 1 : ring <= 2 ? 2 : 8);
 
 const chunkStreamer = (() => {
@@ -669,14 +1187,18 @@ const chunkStreamer = (() => {
   let jobSeq = 0;
   let desired = new Map();
   let lastCell = null;
+  let activeWorld = 'moon';
 
   const workers = [];
-  for (let i = 0; i < Math.min(4, navigator.hardwareConcurrency || 2); i++) {
-    const w = new Worker(workerURL);
-    w.onmessage = (e) => onChunkBuilt(e.data, w);
-    w._idle = true;
-    workers.push(w);
+  function spawnWorkers() {
+    for (let i = 0; i < Math.min(4, navigator.hardwareConcurrency || 2); i++) {
+      const w = new Worker(workerURL);
+      w.onmessage = (e) => onChunkBuilt(e.data, w);
+      w._idle = true;
+      workers.push(w);
+    }
   }
+  spawnWorkers();
 
   // One shared index buffer per grid width.
   const indexCache = new Map();
@@ -704,6 +1226,7 @@ const chunkStreamer = (() => {
     // the player's own feet stays under a centimetre.
     const a0x = (Math.floor(px / 256) + 0.5) * 256;
     const a0z = (Math.floor(pz / 256) + 0.5) * 256;
+    curveAX = a0x; curveAZ = a0z;   // everything on the ground shares it
 
     for (let li = 0; li < LEVELS.length; li++) {
       const L = LEVELS[li];
@@ -725,9 +1248,16 @@ const chunkStreamer = (() => {
           if (cov && x0 >= cov.x0 && x0 + L.size <= cov.x1 &&
                      z0 >= cov.z0 && z0 + L.size <= cov.z1) continue;
           const ring = Math.max(Math.abs(dx), Math.abs(dz));
-          const step = li === 0 ? l0Step(ring) : L.step;
+          // The vertex count has to come out whole: the worker sizes
+          // its grid as (n+3)² and indexes it as j*W+i, so a
+          // fractional n writes NaNs into the position buffer and the
+          // chunk comes back as a degenerate triangle across the
+          // screen. Derive n first, then the step that fits it, so a
+          // size and step that do not divide evenly can never do that.
+          const n = Math.max(1, Math.round(L.size / (li === 0 ? l0Step(ring) : L.step)));
+          const step = L.size / n;
           out.set(li + ':' + cx + ':' + cz + ':' + step, {
-            level: li, x0, z0, step, n: L.size / step, sink: L.sink,
+            level: li, x0, z0, step, n, sink: L.sink,
             ax: a0x, az: a0z, ring: ring + li * 10,
           });
         }
@@ -749,7 +1279,8 @@ const chunkStreamer = (() => {
       w._idle = false;
       inFlight.set(job.id, job);
       const s = job.spec;
-      w.postMessage({ id: job.id, x0: s.x0, z0: s.z0, n: s.n, step: s.step, ax: s.ax, az: s.az });
+      w.postMessage({ id: job.id, world: activeWorld, x0: s.x0, z0: s.z0,
+                      n: s.n, step: s.step, ax: s.ax, az: s.az });
     }
   }
 
@@ -792,6 +1323,28 @@ const chunkStreamer = (() => {
   }
 
   return {
+    /* Changing world throws everything away. The workers are the
+       awkward part: one may be halfway through a chunk of the old
+       body, and its reply would arrive keyed to a stale job. Rather
+       than track that, terminate them and start clean — it costs a
+       few milliseconds behind a loading screen that is already up. */
+    setWorld(id) {
+      for (const w of workers) w.terminate();
+      workers.length = 0;
+      spawnWorkers();
+      for (const c of chunks.values()) {
+        chunkGroup.remove(c.mesh);
+        c.mesh.geometry.dispose();
+      }
+      chunks.clear();
+      queue.length = 0;
+      inFlight.clear();
+      pendingPerLevel.fill(0);
+      desired = new Map();
+      lastCell = null;
+      activeWorld = id;
+      LEVELS = VIEW[id].levels();
+    },
     update(px, pz) {
       const cell = Math.floor(px / 256) + ':' + Math.floor(pz / 256);
       if (cell === lastCell) { dispatch(); return; }
@@ -855,14 +1408,15 @@ const rockSystem = (() => {
     };
 
     // Ejecta blankets: rings of debris outside nearby crater rims.
-    for (let li = 1; li <= 3; li++) {
+    const nMul = world.rockN;
+    for (let li = 1; li <= Math.min(3, CRATER_LAYERS.length - 1); li++) {
       const L = CRATER_LAYERS[li];
       const c0x = Math.floor((x0 - 64) / L.cell), c1x = Math.floor((x0 + SIZE + 64) / L.cell);
       const c0z = Math.floor((z0 - 64) / L.cell), c1z = Math.floor((z0 + SIZE + 64) / L.cell);
       for (let gz = c0z; gz <= c1z; gz++) {
         for (let gx = c0x; gx <= c1x; gx++) {
           for (const c of cellCraters(li, gx, gz)) {
-            const n = Math.min(48, Math.floor(c.r * (0.5 + c.age * 1.3)));
+            const n = Math.min(48, Math.floor(c.r * (0.5 + c.age * 1.3) * nMul));
             for (let i = 0; i < n; i++) {
               const a = rnd() * 6.2832, d = c.r * (0.8 + Math.pow(rnd(), 2) * 1.5);
               consider(c.x + Math.cos(a) * d, c.z + Math.sin(a) * d,
@@ -873,23 +1427,26 @@ const rockSystem = (() => {
       }
     }
     // Background scatter, and a carpet of pebbles.
-    for (let i = 0; i < 40; i++)
+    for (let i = 0; i < 40 * nMul; i++)
       consider(x0 + rnd() * SIZE, z0 + rnd() * SIZE, 0.14 + Math.pow(rnd(), 3.4) * 2.2);
-    for (let i = 0; i < 300; i++)
+    for (let i = 0; i < 300 * nMul; i++)
       consider(x0 + rnd() * SIZE, z0 + rnd() * SIZE, 0.035 + Math.pow(rnd(), 2) * 0.13);
 
     const mesh = new THREE.InstancedMesh(rockGeo, rockMat, slots.length);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(slots.length * 3), 3);
     for (let i = 0; i < slots.length; i++) {
       const r = slots[i];
-      p.set(r.x, terrainHeight(r.x, r.z) - r.size * 0.3, r.z);
+      p.set(r.x, terrainHeight(r.x, r.z) - dropAt(r.x, r.z) - r.size * 0.3, r.z);
       e.set(rnd() * 3, rnd() * 6.28, rnd() * 3);
       q.setFromEuler(e);
       scl.set(r.size, r.size * (0.55 + rnd() * 0.55), r.size);
       mesh.setMatrixAt(i, m.compose(p, q, scl));
-      // Freshly exposed rock is brighter than the dust that coats it.
-      const g = 0.42 + Math.pow(rnd(), 1.6) * 0.55;
-      mesh.instanceColor.setXYZ(i, g * 1.02, g * 0.99, g * 0.94);
+      // Freshly exposed rock is brighter than the dust that coats it
+      // — except on Mars, where the dust is the bright part and the
+      // rock under it is dark basalt.
+      const g = world.rockBase + Math.pow(rnd(), 1.6) * world.rockLight;
+      mesh.instanceColor.setXYZ(i, g * world.rockTint[0], g * world.rockTint[1],
+                                   g * world.rockTint[2]);
     }
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -897,6 +1454,11 @@ const rockSystem = (() => {
   }
 
   return {
+    reset() {
+      for (const mesh of live.values()) { scene.remove(mesh); mesh.dispose(); }
+      live.clear();
+      lastCell = null;
+    },
     update(px, pz) {
       const ccx = Math.floor(px / SIZE), ccz = Math.floor(pz / SIZE);
       const cell = ccx + ':' + ccz;
@@ -905,8 +1467,14 @@ const rockSystem = (() => {
       const want = new Set();
       for (let dz = -EXT; dz <= EXT; dz++)
         for (let dx = -EXT; dx <= EXT; dx++) want.add((ccx + dx) + ':' + (ccz + dz));
+      // The curvature drop is baked into each instance matrix, so on
+      // a body small enough for that drop to move when the anchor
+      // does — tens of metres per cell on the moonlets, a tenth of
+      // one on the Moon — every chunk has to be rebuilt, not just
+      // the newly entered ones.
+      const restale = WORLD.R < 100000;
       for (const [key, mesh] of live) {
-        if (want.has(key)) continue;
+        if (want.has(key) && !restale) continue;
         scene.remove(mesh); mesh.dispose();
         live.delete(key);
       }
@@ -921,37 +1489,87 @@ const rockSystem = (() => {
   };
 })();
 
-/* Flag — a landmark at the landing site, wire-stiffened as the
-   real ones were, because there is no wind to hold it out. */
-{
-  const fx = 8, fz = -11, base = terrainHeight(fx, fz);
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.032, 0.032, 2.6, 8),
-    new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.52, metalness: 0.3 })
-  );
-  pole.position.set(fx, base + 1.3, fz);
-  pole.castShadow = true;
+/* A landmark at the landing site, so you can find your way back.
 
-  const cloth = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.95, 0.6, 14, 8),
-    new THREE.MeshStandardMaterial({ color: 0xc9ccd2, roughness: 0.85, side: THREE.DoubleSide })
-  );
-  const cp = cloth.geometry.attributes.position;
-  for (let i = 0; i < cp.count; i++) cp.setZ(i, Math.sin(cp.getX(i) * 5.5) * 0.045);
-  cloth.geometry.computeVertexNormals();
-  // Hung to catch the sun rather than face away from it, and offset
-  // along its own span so it still meets the top of the pole.
-  const theta = -1.25;
-  cloth.rotation.y = theta;
-  cloth.position.set(fx + Math.cos(theta) * 0.475, base + 2.25, fz - Math.sin(theta) * 0.475);
-  cloth.castShadow = true;
-  scene.add(pole, cloth);
-}
+   On the Moon and Mars it is a flag, wire-stiffened along the top
+   as the Apollo ones were — six millibars is no more use for
+   holding cloth out than vacuum is.
+
+   On Phobos and Deimos it is a mast bolted to the ground, because
+   at 0.006 g nothing stays put by weight: an unanchored mass on
+   Phobos needs only 11 m/s to leave the moon entirely. */
+const landmark = (() => {
+  const group = new THREE.Group();
+  scene.add(group);
+
+  function clear() {
+    for (const m of group.children) {
+      m.geometry.dispose();
+      m.material.dispose();
+    }
+    group.clear();
+  }
+
+  return (kind, color) => {
+    clear();
+    const fx = 8, fz = -11, base = terrainHeight(fx, fz) - dropAt(fx, fz);
+
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.032, 0.032, 2.6, 8),
+      new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.52, metalness: 0.3 })
+    );
+    pole.position.set(fx, base + 1.3, fz);
+    pole.castShadow = true;
+    group.add(pole);
+
+    if (kind === 'flag') {
+      const cloth = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.95, 0.6, 14, 8),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide })
+      );
+      const cp = cloth.geometry.attributes.position;
+      for (let i = 0; i < cp.count; i++) cp.setZ(i, Math.sin(cp.getX(i) * 5.5) * 0.045);
+      cloth.geometry.computeVertexNormals();
+      // Hung to catch the sun rather than face away from it, and offset
+      // along its own span so it still meets the top of the pole.
+      const theta = -1.25;
+      cloth.rotation.y = theta;
+      cloth.position.set(fx + Math.cos(theta) * 0.475, base + 2.25, fz - Math.sin(theta) * 0.475);
+      cloth.castShadow = true;
+      group.add(cloth);
+    } else {
+      // Three guy anchors driven into the regolith, and a corner-cube
+      // retroreflector on top — the only landmark worth the mass.
+      const anchorMat = new THREE.MeshStandardMaterial({ color: 0x8d9096, roughness: 0.6, metalness: 0.4 });
+      for (let i = 0; i < 3; i++) {
+        const a = i * 2.0944;
+        const guy = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.9, 5), anchorMat);
+        guy.position.set(fx + Math.cos(a) * 0.42, base + 0.72, fz + Math.sin(a) * 0.42);
+        guy.rotation.set(Math.sin(a) * 0.48, 0, -Math.cos(a) * 0.48);
+        guy.castShadow = true;
+        group.add(guy);
+      }
+      const cube = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.22),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.15, metalness: 0.9 })
+      );
+      cube.position.set(fx, base + 2.75, fz);
+      cube.castShadow = true;
+      group.add(cube);
+    }
+  };
+})();
 
 /* ═════════════════════════════════════════════════════════════
-   7. SKY — the Milky Way, nine thousand stars, and the sun.
-   No atmosphere means no twinkling, no skyglow, and star colour
-   shown honestly: blackbody tints from M-red to O-blue.
+   7. SKY — the Milky Way, nine thousand stars, the sun, and
+   whatever else is overhead.
+
+   On the three airless bodies there is no twinkling, no skyglow,
+   and star colour can be shown honestly: blackbody tints from
+   M-red to O-blue. On Mars the whole star field is switched off
+   and a dust-scattering dome switched on, because six millibars
+   of CO₂ carrying a micron of dust optical depth is more than
+   enough to drown every star in the sky at midday.
    ═════════════════════════════════════════════════════════════ */
 const skyGroup = new THREE.Group();
 scene.add(skyGroup);
@@ -1013,9 +1631,10 @@ function milkyWay() {
   mesh.renderOrder = -3;
   return mesh;
 }
-skyGroup.add(milkyWay());
+const milkyWayMesh = milkyWay();
+skyGroup.add(milkyWayMesh);
 
-{
+const starPoints = (() => {
   const N = 9000;
   const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
   const size = new Float32Array(N);
@@ -1061,12 +1680,17 @@ skyGroup.add(milkyWay());
   const stars = new THREE.Points(g, starMat);
   stars.renderOrder = -2;
   skyGroup.add(stars);
-}
+  return stars;
+})();
 
-/* The sun: an HDR disc sized to its true 0.53°, which the bloom
-   pass blows out, plus a soft corona sprite behind it. */
+/* The sun: an HDR disc sized to its true angular diameter, which
+   the bloom pass blows out, plus a soft corona sprite behind it.
+   0.53° from the Moon; 0.35° from Mars and its two moons, at 1.52
+   AU, where the disc delivers 43% of the flux it does at Earth.
+   Base geometry is the lunar size, scaled per world. */
+const SUN_R0 = 56;
 const sunDisc = new THREE.Mesh(
-  new THREE.SphereGeometry(56, 24, 16),
+  new THREE.SphereGeometry(SUN_R0, 24, 16),
   new THREE.MeshBasicMaterial({ color: new THREE.Color(18, 16.8, 14.8), toneMapped: false, fog: false })
 );
 scene.add(sunDisc);
@@ -1089,6 +1713,76 @@ const corona = (() => {
   spr.scale.set(3400, 3400, 1);
   scene.add(spr);
   return spr;
+})();
+
+/* ── The Martian sky ────────────────────────────────────────────
+   Mars has weather but almost no air: 6 mbar of CO₂ scatters
+   next to nothing on its own. What you see is the dust it
+   carries — a micron-sized ferric aerosol with an optical depth
+   around 0.5 even on a clear sol.
+
+   That gives Mars a sky which is the inverse of Earth's in every
+   respect. Dust scatters long wavelengths, so the bulk of the sky
+   is butterscotch instead of blue. But the particles are large
+   compared to the wavelength, so their forward-scattering lobe is
+   narrow and comparatively neutral, and it piles up in a halo a
+   few degrees around the sun — which therefore reads *blue*
+   against an orange sky, and turns the sunsets blue. Nobody
+   predicted it; Viking 1 photographed it in 1976.
+
+   Brightness scales with how much lit dust is in the column, so
+   the whole dome dims and deepens as the sun goes down.          */
+const skyDome = (() => {
+  const uniforms = {
+    uSun: { value: new THREE.Vector3() },
+    uZenith: { value: new THREE.Color() },
+    uHorizon: { value: new THREE.Color() },
+    uAureole: { value: new THREE.Color() },
+    uK: { value: 62 },
+    uGain: { value: 1 },
+  };
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(40000, 32, 20),
+    new THREE.ShaderMaterial({
+      uniforms, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+      vertexShader: `
+        varying vec3 vDir;
+        void main() {
+          vDir = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }`,
+      fragmentShader: `
+        uniform vec3 uSun, uZenith, uHorizon, uAureole;
+        uniform float uK, uGain;
+        varying vec3 vDir;
+        void main() {
+          vec3 D = normalize( vDir );
+          // The dust column is longest along the horizon, so that is
+          // where the scattered light piles up.
+          float t = pow( 1.0 - clamp( D.y, 0.0, 1.0 ), 2.6 );
+          vec3 col = mix( uZenith, uHorizon, t );
+
+          // The forward-scattering halo: narrow, and bluer than the
+          // sky it sits in.
+          float ca = max( dot( D, normalize( uSun ) ), 0.0 );
+          float halo = pow( ca, uK ) + 0.30 * pow( ca, 7.0 );
+          col = mix( col, uAureole, clamp( halo, 0.0, 1.0 ) * 0.9 );
+
+          // Below the horizon it becomes ground haze, so no seam
+          // shows when you look down from altitude.
+          col *= 1.0 - smoothstep( 0.0, -0.12, D.y ) * 0.45;
+
+          gl_FragColor = vec4( col * uGain, 1.0 );
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    })
+  );
+  mesh.renderOrder = -4;
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  scene.add(mesh);
+  return { mesh, uniforms };
 })();
 
 /* ── Earth ──────────────────────────────────────────────────────
@@ -1274,152 +1968,620 @@ function earthMaps() {
   return { day: tex(day), night: tex(night), spec: tex(spec), clouds: tex(cl) };
 }
 
-const EARTH_R = 260;   // ~4.8° across: bigger than the true 1.9°, on purpose
-// Placed well away from the sun's side of the sky, which is what makes
-// it a fat gibbous rather than a thin crescent.
-const EARTH_POS = new THREE.Vector3(0.86, 0.42, -0.29).normalize().multiplyScalar(6200);
-const earthGroup = new THREE.Group();
-earthGroup.position.copy(EARTH_POS);
-earthGroup.rotation.set(0, -1.08, 0.409);   // framing + 23.4° axial tilt
-scene.add(earthGroup);
+/* ── Mars, from orbit ───────────────────────────────────────────
+   Seen from Phobos this fills 42° of sky, which magnifies the map
+   enormously — so it is built in three layers, each covering a
+   scale the one before it cannot.
 
-{
-  const T = earthMaps();
+   The albedo layer is the classic map: dark basaltic regions the
+   nineteenth century mistook for seas, over a global ferric dust
+   cover that gets redistributed every dust season, plus the
+   landmarks worth recognising from six thousand kilometres —
+   Valles Marineris, the Tharsis volcanoes, Hellas, and the two
+   polar caps of CO2 frost over water ice.
 
-  const earthUniforms = {
-    dayMap: { value: T.day }, nightMap: { value: T.night },
-    specMap: { value: T.spec }, cloudMap: { value: T.clouds },
+   The elevation layer carries what the albedo cannot: the
+   crustal dichotomy, the Tharsis bulge with Olympus standing 22 km
+   off it, the great impact basins. It is what lets the terminator
+   shade real topography instead of a painted ball.
+
+   The third layer is procedural and lives in the shader, so it
+   stays sharp however close you get.                             */
+function marsMaps() {
+  const W = 1024, H = 512;          // per-pixel base
+  const W2 = 2048, H2 = 1024;       // crisp overlay: features, craters
+  const lon2x = (lo) => (lo + 180) / 360 * W;
+  const lat2y = (la) => (90 - la) / 180 * H;
+
+  // ── albedo features, as soft blobs on a darkness mask
+  const dc = document.createElement('canvas'); dc.width = W; dc.height = H;
+  const dx = dc.getContext('2d');
+  dx.fillStyle = '#000'; dx.fillRect(0, 0, W, H);
+  const blob = (lo, la, rx, ry, rot, a) => {
+    dx.save();
+    dx.globalAlpha = a; dx.fillStyle = '#fff';
+    dx.translate(lon2x(lo), lat2y(la)); dx.rotate(rot);
+    dx.beginPath(); dx.ellipse(0, 0, rx * W / 1024, ry * H / 512, 0, 0, 6.2832); dx.fill();
+    dx.restore();
+  };
+  //     lon   lat   rx   ry   rot  alpha
+  blob(  70,   5,  44,  64,  0.35, 1.00);  // Syrtis Major, the darkest
+  blob(  85,  20,  30,  26,  0.00, 0.55);  // Nili/Meroe
+  blob( -30,  45, 100,  50, -0.15, 0.72);  // Acidalia Planitia
+  blob( 110,  45,  92,  42,  0.10, 0.55);  // Utopia
+  blob( -35, -22,  90,  40,  0.10, 0.82);  // Mare Erythraeum
+  blob(-135, -30, 105,  36, -0.10, 0.80);  // Mare Sirenum
+  blob( 155, -25,  74,  34,  0.12, 0.72);  // Mare Cimmerium
+  blob(-170, -18,  46,  26,  0.05, 0.60);  // Mare Chronium
+  blob(  10, -28,  58,  28, -0.20, 0.62);  // Noachis
+  blob(  40, -18,  38,  30,  0.10, 0.45);  // Hesperia edge
+  blob( -70,  18,  42,  32,  0.00, 0.30);  // Tharsis, dust-stripped patches
+  blob(-100, -12,  50,  22,  0.10, 0.35);  // Solis Lacus
+  dx.filter = 'blur(6px)'; dx.drawImage(dc, 0, 0); dx.filter = 'none';
+
+  // Valles Marineris: 4,000 km of canyon, and unmistakable.
+  dx.strokeStyle = 'rgba(255,255,255,0.9)';
+  dx.lineCap = 'round'; dx.lineWidth = 8;
+  dx.beginPath();
+  dx.moveTo(lon2x(-96), lat2y(-6));
+  dx.bezierCurveTo(lon2x(-75), lat2y(-11), lon2x(-52), lat2y(-13), lon2x(-32), lat2y(-9));
+  dx.stroke();
+  const dark = dx.getImageData(0, 0, W, H).data;
+
+  // The volcanoes: bright dusty shields with dark summit calderas.
+  const VOLC = [[-134, 18, 30], [-113, 12, 17], [-112, 4, 17], [-110, -3, 17], [-98, 12, 14], [147, 25, 20]];
+  const vc = document.createElement('canvas'); vc.width = W; vc.height = H;
+  const vx = vc.getContext('2d');
+  vx.fillStyle = '#000'; vx.fillRect(0, 0, W, H);
+  for (const [lo, la, r] of VOLC) {
+    const g = vx.createRadialGradient(lon2x(lo), lat2y(la), 0, lon2x(lo), lat2y(la), r);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.55, 'rgba(190,190,190,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    vx.fillStyle = g;
+    vx.beginPath(); vx.arc(lon2x(lo), lat2y(la), r, 0, 6.2832); vx.fill();
+  }
+  const volc = vx.getImageData(0, 0, W, H).data;
+
+  // ── per-pixel base colour
+  const base = document.createElement('canvas'); base.width = W; base.height = H;
+  const bctx = base.getContext('2d');
+  const bimg = bctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    const lat = 90 - y / H * 180, alat = Math.abs(lat);
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const dk = dark[i] / 255, vo = volc[i] / 255;
+      const n1 = fbm(x * 0.013, y * 0.013, 4);
+      const n2 = fbm(x * 0.07 + 40, y * 0.07 - 20, 3);
+
+      // Bright ferric dust over dark basalt, mottled by both. The
+      // southern highlands hold more dark rock than the resurfaced
+      // northern plains, which is the crustal dichotomy showing
+      // through as colour.
+      const south = THREE.MathUtils.smoothstep(lat, 25, -15) * 0.10;
+      let r = 188 - dk * 104 + n1 * 34 - 14 - south * 62;
+      let g = 108 - dk *  60 + n1 * 22 - 10 - south * 40;
+      let b =  68 - dk *  38 + n1 * 15 -  7 - south * 24;
+      r += n2 * 15; g += n2 * 11; b += n2 * 8;
+
+      if (vo > 0.02) {
+        const cal = vo > 0.88 ? 1 : 0;
+        r += vo * 38 - cal * 96; g += vo * 22 - cal * 58; b += vo * 13 - cal * 36;
+      }
+
+      // Polar caps. The northern one is water ice and permanent; the
+      // southern is CO2 frost and swings with the season, so it is
+      // drawn smaller — a late southern-summer Mars. Both edges are
+      // ragged, and the north cap keeps its dark spiral troughs.
+      const edge = lat > 0 ? 73 : 80;
+      let cap = THREE.MathUtils.smoothstep(alat + n1 * 11 - 6, edge, edge + 7);
+      if (lat > 0 && cap > 0) {
+        const spiral = Math.sin((x / W * 6.2832) * 3 + (90 - alat) * 0.55);
+        cap *= 1 - Math.max(0, spiral) * 0.55;
+      }
+      if (cap > 0) { r += (238 - r) * cap; g += (240 - g) * cap; b += (246 - b) * cap; }
+
+      bimg.data[i] = r; bimg.data[i + 1] = g; bimg.data[i + 2] = b; bimg.data[i + 3] = 255;
+    }
+  }
+  bctx.putImageData(bimg, 0, 0);
+
+  // ── crisp layer: upscale the base, then stamp craters over it.
+  // One shared crater list goes onto both the albedo and the
+  // elevation map, so every bowl you can see also shades correctly
+  // when the terminator crosses it.
+  let s = 90210;
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  // Radii are in degrees of arc, and the power law is steep: a
+  // degree is 59 km on Mars, so most of these are ordinary craters
+  // and the handful of big ones top out around Argyre. Hellas is
+  // not in here — it is drawn by hand, once, with the basins.
+  const CRA = [];
+  for (let i = 0; i < 5200; i++) {
+    const la = Math.asin(rnd() * 2 - 1) * 57.2958;
+    // Craters survive on the ancient southern highlands and are
+    // mostly buried under the young northern plains.
+    if (la > 10 && rnd() < 0.72) continue;
+    CRA.push({ lo: rnd() * 360 - 180, la, r: 0.22 + Math.pow(rnd(), 4.5) * 5.5, k: 0.30 + rnd() * 0.7 });
+  }
+
+  const day = document.createElement('canvas'); day.width = W2; day.height = H2;
+  const cx2 = day.getContext('2d');
+  cx2.imageSmoothingEnabled = true;
+  cx2.drawImage(base, 0, 0, W2, H2);
+  const sx = W2 / 360, sy = H2 / 180;
+  for (const c of CRA) {
+    const px = (c.lo + 180) * sx, py = (90 - c.la) * sy, r = c.r * sx * 0.5;
+    const g = cx2.createRadialGradient(px - r * 0.25, py - r * 0.25, 0, px, py, r);
+    g.addColorStop(0, 'rgba(70,44,30,' + (0.20 * c.k) + ')');
+    g.addColorStop(0.78, 'rgba(96,60,40,' + (0.13 * c.k) + ')');
+    g.addColorStop(0.93, 'rgba(226,178,132,' + (0.22 * c.k) + ')');
+    g.addColorStop(1, 'rgba(226,178,132,0)');
+    cx2.fillStyle = g;
+    cx2.beginPath(); cx2.arc(px, py, r, 0, 6.2832); cx2.fill();
+  }
+
+  // ── elevation, for the terminator to shade
+  const EW = 1024, EH = 512;
+  const el = document.createElement('canvas'); el.width = EW; el.height = EH;
+  const ex = el.getContext('2d');
+  const elon = (lo) => (lo + 180) / 360 * EW, elat = (la) => (90 - la) / 180 * EH;
+  // Datum, with the dichotomy: old high south, resurfaced low north.
+  const grad = ex.createLinearGradient(0, 0, 0, EH);
+  grad.addColorStop(0.00, '#5a5a5a');
+  grad.addColorStop(0.36, '#5e5e5e');
+  grad.addColorStop(0.52, '#8a8a8a');
+  grad.addColorStop(1.00, '#9a9a9a');
+  ex.fillStyle = grad; ex.fillRect(0, 0, EW, EH);
+
+  const bump = (lo, la, r, col, stop) => {
+    const g = ex.createRadialGradient(elon(lo), elat(la), 0, elon(lo), elat(la), r);
+    g.addColorStop(0, col);
+    if (stop) g.addColorStop(stop[0], stop[1]);
+    g.addColorStop(1, 'rgba(128,128,128,0)');
+    ex.fillStyle = g;
+    ex.beginPath(); ex.arc(elon(lo), elat(la), r, 0, 6.2832); ex.fill();
+  };
+  bump(-100, 2, 150, 'rgba(196,196,196,0.85)');            // the Tharsis bulge
+  bump( 147, 25,  70, 'rgba(176,176,176,0.7)');            // Elysium rise
+  for (const [lo, la, r] of VOLC) {                        // shields on top of it
+    bump(lo, la, r * EW / W * 1.6, 'rgba(255,255,255,1)', [0.72, 'rgba(210,210,210,0.55)']);
+  }
+  bump(  70, -42, 120, 'rgba(24,24,24,0.92)', [0.7, 'rgba(70,70,70,0.6)']);   // Hellas
+  bump( -43, -50,  62, 'rgba(46,46,46,0.8)');              // Argyre
+  bump(  88,  13,  52, 'rgba(72,72,72,0.7)');              // Isidis
+  bump( -30,  45, 110, 'rgba(96,96,96,0.5)');              // Acidalia lowland
+  // Valles Marineris, cut into the Tharsis flank
+  ex.strokeStyle = 'rgba(28,28,28,0.95)';
+  ex.lineCap = 'round'; ex.lineWidth = 9;
+  ex.beginPath();
+  ex.moveTo(elon(-96), elat(-6));
+  ex.bezierCurveTo(elon(-75), elat(-11), elon(-52), elat(-13), elon(-32), elat(-9));
+  ex.stroke();
+  // The same craters again, as bowls with raised rims.
+  const ex2 = EW / 360, ey2 = EH / 180;
+  for (const c of CRA) {
+    const px = (c.lo + 180) * ex2, py = (90 - c.la) * ey2, r = c.r * ex2 * 0.5;
+    if (r < 0.7) continue;
+    const g = ex.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(64,64,64,' + (0.34 * c.k) + ')');
+    g.addColorStop(0.8, 'rgba(80,80,80,' + (0.26 * c.k) + ')');
+    g.addColorStop(0.94, 'rgba(196,196,196,' + (0.30 * c.k) + ')');
+    g.addColorStop(1, 'rgba(128,128,128,0)');
+    ex.fillStyle = g;
+    ex.beginPath(); ex.arc(px, py, r, 0, 6.2832); ex.fill();
+  }
+  // Roughness everywhere, so nothing reads as a smooth painted ball.
+  const eimg = ex.getImageData(0, 0, EW, EH);
+  for (let y = 0; y < EH; y++) {
+    for (let x = 0; x < EW; x++) {
+      const i = (y * EW + x) * 4;
+      const n = fbm(x * 0.05, y * 0.05, 3) - 0.5;
+      const v = eimg.data[i] + n * 46;
+      eimg.data[i] = eimg.data[i + 1] = eimg.data[i + 2] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+  }
+  ex.putImageData(eimg, 0, 0);
+
+  const mk = (c) => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    return t;
+  };
+  return { day: mk(day), elev: mk(el) };
+}
+
+/* ── The moonlets ───────────────────────────────────────────────
+   Both are all but black — a 7% albedo, the reflectance of fresh
+   asphalt — and covered in craters. Phobos additionally gets
+   Stickney, 9 km across on a 22 km body, and the grooves.        */
+function moonletMaps(kind) {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#4a443e'; x.fillRect(0, 0, W, H);
+
+  let s = kind === 'phobos' ? 8181 : 3733;
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+
+  const crater = (cx, cy, r, k) => {
+    const g = x.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx, cy, r);
+    g.addColorStop(0, 'rgba(20,17,14,' + (0.55 * k) + ')');
+    g.addColorStop(0.72, 'rgba(36,32,28,' + (0.4 * k) + ')');
+    g.addColorStop(0.92, 'rgba(132,122,110,' + (0.45 * k) + ')');
+    g.addColorStop(1, 'rgba(120,110,100,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(cx, cy, r, 0, 6.2832); x.fill();
+  };
+
+  for (let i = 0; i < 420; i++) {
+    crater(rnd() * W, rnd() * H, 2 + Math.pow(rnd(), 3) * 26, 0.5 + rnd() * 0.5);
+  }
+  if (kind === 'phobos') {
+    crater(W * 0.30, H * 0.44, 62, 1);              // Stickney
+    x.strokeStyle = 'rgba(28,24,21,0.5)';
+    x.lineWidth = 2.2;
+    for (let i = 0; i < 22; i++) {                  // grooves
+      const y0 = rnd() * H, sl = (rnd() - 0.5) * 0.5;
+      x.beginPath(); x.moveTo(0, y0); x.lineTo(W, y0 + sl * W); x.stroke();
+    }
+  }
+  // A D-type spectral slope: dark, and distinctly red.
+  x.globalCompositeOperation = 'multiply';
+  x.fillStyle = 'rgb(255,236,214)'; x.fillRect(0, 0, W, H);
+  x.globalCompositeOperation = 'source-over';
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return { day: t };
+}
+
+/* ── What hangs overhead ────────────────────────────────────────
+   Every companion sits on the same 6.2 km shell and is drawn at a
+   stated angular size, so the sizes below are comparable to each
+   other. Two of them are exaggerated and say so; the rest are
+   true, because they are already large enough to be worth it.
+
+   All of these shaders work in world space. The group follows the
+   camera every frame, so nothing up here shows parallax — which
+   is right: the nearest of them is 6,000 km away.                */
+const COMPANION_DIST = 6200;
+
+const TEXGEN = {
+  earth: earthMaps, mars: marsMaps,
+  phobos: () => moonletMaps('phobos'), deimos: () => moonletMaps('deimos'),
+};
+const texCache = new Map();
+function bodyTex(k) {
+  let t = texCache.get(k);
+  if (!t) texCache.set(k, t = TEXGEN[k]());
+  return t;
+}
+
+const COMPANIONS = {
+  /* Earth from the Moon is 1.9° across. Drawn at 4.8°, on purpose:
+     at true size it is a pea, and it is the whole point of the
+     view. Placed well away from the sun's side of the sky, which
+     is what makes it a fat gibbous rather than a thin crescent. */
+  earth: {
+    tex: 'earth', r: 260, dir: [0.86, 0.42, -0.29], tilt: [0, -1.08, 0.409],
+    spin: 0.0145, gain: 1.45, clouds: true, night: true, ocean: true,
+    atmo: [0.28, 0.52, 1.0], atmoK: 0.9, haze: [0.22, 0.42, 0.95], hazeK: 0.85,
+  },
+
+  /* Mars from Phobos, 6,000 km up: 42° of sky, drawn at true size
+     because it does not need any help. Phobos is tidally locked,
+     so Mars hangs in one place and never rises or sets — but it
+     turns underneath, one Martian day in 24h37m against the 7h39m
+     it takes Phobos to go round.
+
+     Placed anti-sunward, for the same reason Earth is: a body
+     sitting on the sun's side of the sky shows you its night, and
+     42° of unlit Mars is 42° of nothing. From here it is gibbous. */
+  'mars-big': {
+    tex: 'mars', r: 2405, dir: [0.62, 0.70, 0.35], tilt: [0, 0.9, 0.44],
+    spin: 0.0062, gain: 1.25,
+    relief: 0.55, detail: 0.22, detailScale: 1.4, detailBump: 4.0,
+    atmo: [0.95, 0.62, 0.44], atmoK: 0.30, atmoR: 1.012,
+    haze: [0.50, 0.30, 0.20], hazeK: 0.30,
+  },
+  // The same from Deimos, four times further out: 16.6°.
+  'mars-mid': {
+    tex: 'mars', r: 904, dir: [0.66, 0.55, 0.51], tilt: [0, 2.4, 0.44],
+    spin: 0.0062, gain: 1.25,
+    relief: 0.55, detail: 0.20, detailScale: 1.4, detailBump: 4.0,
+    atmo: [0.95, 0.62, 0.44], atmoK: 0.30, atmoR: 1.012,
+    haze: [0.50, 0.30, 0.20], hazeK: 0.30,
+  },
+
+  /* Phobos from Mars is 0.20° at the zenith — a third the width of
+     our Moon and never full, since it is eclipsed by Mars's shadow
+     on most passes. Drawn at 2.5×, the same exaggeration as Earth.
+     It crosses the sky westward in about four hours; here it takes
+     a hundred seconds, and Deimos keeps the real ratio to it. */
+  phobos: {
+    tex: 'phobos', r: 27, dir: [0.70, 0.50, 0.51], gain: 1.3,
+    orbit: { rate: 0.0628, axis: [0.24, 0.34, 0.91] },
+  },
+  /* Deimos from Mars is 2 arcminutes: a bright star, not a disc.
+     It is drawn a little over life size only so it survives being
+     rasterised at all, and it barely moves — near-areostationary,
+     it takes two and a half days to cross from rise to set. */
+  deimos: {
+    tex: 'deimos', r: 8, dir: [0.35, 0.72, 0.60], gain: 1.3,
+    orbit: { rate: 0.0052, axis: [0.24, 0.34, 0.91] },
+  },
+  // Each moon from the other: 14,000 km apart at closest approach,
+  // so each is a moving point of light in the other's sky.
+  'phobos-far': {
+    tex: 'phobos', r: 9, dir: [0.66, 0.45, 0.60], gain: 1.3,
+    orbit: { rate: 0.021, axis: [0.10, 0.36, 0.93] },
+  },
+  'deimos-far': {
+    tex: 'deimos', r: 7, dir: [0.30, 0.66, 0.69], gain: 1.3,
+    orbit: { rate: 0.013, axis: [0.10, 0.36, 0.93] },
+  },
+};
+
+function makeCompanion(spec) {
+  const T = bodyTex(spec.tex);
+  const group = new THREE.Group();
+  if (spec.tilt) group.rotation.set(spec.tilt[0], spec.tilt[1], spec.tilt[2]);
+
+  const uni = {
+    dayMap: { value: T.day },
     sunDir: { value: new THREE.Vector3() },
     cloudShift: { value: 0 },
   };
+  let decl = 'uniform sampler2D dayMap;\nuniform vec3 sunDir;\nuniform float cloudShift;\n';
+  if (spec.night) { uni.nightMap = { value: T.night }; decl += 'uniform sampler2D nightMap;\n'; }
+  if (spec.ocean) { uni.specMap = { value: T.spec }; decl += 'uniform sampler2D specMap;\n'; }
+  if (spec.clouds) { uni.cloudMap = { value: T.clouds }; decl += 'uniform sampler2D cloudMap;\n'; }
+  if (spec.relief) { uni.elevMap = { value: T.elev }; decl += 'uniform sampler2D elevMap;\n'; }
+
+  /* Relief and detail. A body drawn at 42° across magnifies its map
+     far past the resolution any canvas could hold, so the close-up
+     detail is generated per fragment instead: cheap 3D value noise
+     on the sphere, which is sharp at every zoom and costs no memory.
+     It modulates albedo, and — with the baked elevation — bends the
+     normal, so the terminator rakes across real topography.        */
+  const noiseLib = `
+    float h31( vec3 p ) {
+      p = fract( p * 0.3183099 + vec3( 0.71, 0.113, 0.419 ) );
+      p *= 17.0;
+      return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) );
+    }
+    float vn3( vec3 p ) {
+      vec3 i = floor( p ), f = fract( p );
+      f = f * f * ( 3.0 - 2.0 * f );
+      return mix( mix( mix( h31( i ), h31( i + vec3( 1, 0, 0 ) ), f.x ),
+                       mix( h31( i + vec3( 0, 1, 0 ) ), h31( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
+                  mix( mix( h31( i + vec3( 0, 0, 1 ) ), h31( i + vec3( 1, 0, 1 ) ), f.x ),
+                       mix( h31( i + vec3( 0, 1, 1 ) ), h31( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+    }
+    // Two octaves, sized in radians of arc rather than pixels: the
+    // coarse one lands around seven degrees of surface, the fine one
+    // near two. Anything finer than that aliases into pepper at the
+    // distances these bodies are actually seen from.
+    float detail( vec3 p ) { return vn3( p * 7.0 ) * 0.62 + vn3( p * 19.0 ) * 0.38; }
+  `;
 
   const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(EARTH_R, 96, 64),
+    new THREE.SphereGeometry(spec.r, spec.r > 100 ? 128 : 24, spec.r > 100 ? 84 : 16),
     new THREE.ShaderMaterial({
-      uniforms: earthUniforms,
+      uniforms: uni,
+      // modelMatrix is a vertex-stage built-in only, so the surface
+      // frame is built here and handed across as world-space varyings.
+      // The fragment stage never needs the model matrix at all.
       vertexShader: `
-        varying vec3 vN; varying vec3 vW; varying vec2 vUv;
+        varying vec3 vN; varying vec3 vW; varying vec2 vUv; varying vec3 vNo;
+        varying vec3 vEast; varying vec3 vNorth;
         void main() {
           vUv = uv;
-          vN = normalize( mat3( modelMatrix ) * normal );
+          vec3 No = normalize( normal );
+          vNo = No;
+          vec3 up = abs( No.y ) > 0.99 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
+          vec3 e = normalize( cross( up, No ) );
+          mat3 M = mat3( modelMatrix );
+          vN = normalize( M * No );
+          vEast = normalize( M * e );
+          vNorth = normalize( M * cross( No, e ) );
           vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
           gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
         }`,
-      fragmentShader: `
-        uniform sampler2D dayMap, nightMap, specMap, cloudMap;
-        uniform vec3 sunDir; uniform float cloudShift;
-        varying vec3 vN; varying vec3 vW; varying vec2 vUv;
-
+      fragmentShader: decl + (spec.relief || spec.detail ? noiseLib : '') + `
+        varying vec3 vN; varying vec3 vW; varying vec2 vUv; varying vec3 vNo;
+        varying vec3 vEast; varying vec3 vNorth;
         vec3 srgb2lin( vec3 c ) { return pow( c, vec3( 2.2 ) ); }
 
         void main() {
           vec3 N = normalize( vN );
+          vec3 Ng = N;                       // geometric, for the limb terms
           vec3 L = normalize( sunDir );
           vec3 V = normalize( cameraPosition - vW );
+          ` +
+          (spec.relief ? `
+          // Tilt the normal by the elevation gradient, along the
+          // surface frame the vertex stage handed over. A step in u
+          // spans less ground near the poles, so the same height
+          // difference is a steeper slope there — hence the
+          // 1/cos(latitude) term, capped so the poles stay sane.
+          vec3 No = normalize( vNo );
+          vec3 E = normalize( vEast ), Nn = normalize( vNorth );
+          float clat = max( sqrt( max( 1.0 - No.y * No.y, 0.0 ) ), 0.22 );
+          vec2 d = vec2( 1.0 / 1024.0, 1.0 / 512.0 );
+          float eL = texture2D( elevMap, vUv - vec2( d.x, 0.0 ) ).r;
+          float eR = texture2D( elevMap, vUv + vec2( d.x, 0.0 ) ).r;
+          float eD = texture2D( elevMap, vUv - vec2( 0.0, d.y ) ).r;
+          float eU = texture2D( elevMap, vUv + vec2( 0.0, d.y ) ).r;
+          float sx = ( eR - eL ) / clat, sy = eU - eD;
+
+          // Fine relief the map cannot hold, from the same noise that
+          // breaks up the albedo. Sampled in object space, applied
+          // along the matching world axes.
+          vec3 upo = abs( No.y ) > 0.99 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
+          vec3 eo = normalize( cross( upo, No ) );
+          vec3 no = cross( No, eo );
+          float e = 0.0035;
+          vec3 pd = No * ${(spec.detailScale || 1).toFixed(2)};
+          float nC = detail( pd );
+          sx += ( detail( pd + eo * e ) - nC ) * ${(spec.detailBump || 0).toFixed(2)};
+          sy += ( detail( pd + no * e ) - nC ) * ${(spec.detailBump || 0).toFixed(2)};
+
+          N = normalize( N - ( E * sx + Nn * sy ) * ${(spec.relief).toFixed(2)} );
+          ` : '') + `
           float ndl = dot( N, L );
 
-          // The terminator is soft because the atmosphere scatters
-          // light past the geometric edge of the illuminated half.
-          float day = smoothstep( -0.14, 0.20, ndl );
+          // A body with air has a soft terminator, because the air
+          // scatters light past the geometric edge of the lit half.
+          // An airless one has a knife edge, and gets 0.0 here.
+          float day = smoothstep( -${(spec.atmo ? 0.14 : 0.01).toFixed(2)}, ${(spec.atmo ? 0.20 : 0.02).toFixed(2)}, ndl );
           float diff = max( ndl, 0.0 );
 
           vec3 albedo = srgb2lin( texture2D( dayMap, vUv ).rgb );
-          float ocean = texture2D( specMap, vUv ).r;
           vec2 cUv = vec2( vUv.x + cloudShift, vUv.y );
-          float cloud = texture2D( cloudMap, cUv ).a;
-
-          vec3 col = albedo * diff * 1.45;
-
+          ` +
+          (spec.detail ? `
+          // Mottle the albedo at a scale finer than the map holds, so
+          // magnifying the disc reveals more surface rather than more
+          // blur. Reuses the same noise the relief pass sampled.
+          albedo *= 1.0 + ( detail( normalize( vNo ) * ${(spec.detailScale || 1).toFixed(2)} ) - 0.5 )
+                        * ${spec.detail.toFixed(2)};
+          ` : '') + `
+          vec3 col = albedo * diff * ${spec.gain.toFixed(2)};
+          ` +
+          (spec.ocean ? `
           // Sun glint off water, and only off water.
+          float ocean = texture2D( specMap, vUv ).r;
           vec3 Hv = normalize( L + V );
           col += vec3( 1.0, 0.95, 0.86 ) * pow( max( dot( N, Hv ), 0.0 ), 220.0 ) * ocean * day * 2.6;
-
+          ` : '') +
+          (spec.clouds ? `
           // Cloud deck, lit by the same sun, with a hint of
           // self-shadowing: thick cloud reads slightly grey.
+          float cloud = texture2D( cloudMap, cUv ).a;
           float cloudHi = texture2D( cloudMap, cUv + vec2( 0.0015, -0.0015 ) ).a;
           vec3 cloudCol = vec3( 1.06, 1.06, 1.1 ) * diff * 1.30
                         * ( 1.0 - ( cloudHi - cloud ) * 0.9 );
           col = mix( col, cloudCol, cloud * 0.94 );
-
+          ` : `float cloud = 0.0;`) +
+          (spec.night ? `
           // Night side: cities, dimmed under cloud.
           vec3 lights = srgb2lin( texture2D( nightMap, vUv ).rgb );
           col += lights * ( 1.0 - day ) * 3.0 * ( 1.0 - cloud * 0.9 );
-
-          // Rayleigh haze thickens toward the limb.
-          float fres = pow( 1.0 - max( dot( N, V ), 0.0 ), 3.0 );
-          col += vec3( 0.22, 0.42, 0.95 ) * fres * smoothstep( -0.35, 0.5, ndl ) * 0.85;
-
+          ` : '') +
+          (spec.haze ? `
+          // Scattering haze thickens toward the limb. Off the geometric
+          // normal, not the bumped one, or the limb crawls with noise.
+          float fres = pow( 1.0 - max( dot( Ng, V ), 0.0 ), 3.0 );
+          col += vec3( ${spec.haze.map((n) => n.toFixed(3)).join(', ')} )
+               * fres * smoothstep( -0.35, 0.5, dot( Ng, L ) ) * ${spec.hazeK.toFixed(2)};
+          ` : '') + `
           gl_FragColor = vec4( col, 1.0 );
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
     })
   );
-  earthGroup.add(globe);
+  group.add(globe);
 
-  // Atmospheric shell: the blue arc that stands off the limb.
-  const atmo = new THREE.Mesh(
-    new THREE.SphereGeometry(EARTH_R * 1.035, 64, 40),
-    new THREE.ShaderMaterial({
-      uniforms: { sunDir: earthUniforms.sunDir },
-      transparent: true, blending: THREE.AdditiveBlending,
-      side: THREE.BackSide, depthWrite: false,
-      vertexShader: `
-        varying vec3 vN; varying vec3 vW;
-        void main() {
-          vN = normalize( mat3( modelMatrix ) * normal );
-          vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
-          gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
-        }`,
-      fragmentShader: `
-        uniform vec3 sunDir; varying vec3 vN; varying vec3 vW;
-        void main() {
-          vec3 N = normalize( vN );
-          vec3 V = normalize( cameraPosition - vW );
-          float rim = pow( 1.0 - abs( dot( N, V ) ), 3.2 );
-          // BackSide, so these are the far-side normals: they point
-          // with the sun on the lit limb, not against it.
-          float lit = smoothstep( -0.5, 0.45, dot( N, normalize( sunDir ) ) );
-          gl_FragColor = vec4( vec3( 0.28, 0.52, 1.0 ) * rim * lit * 0.9, 1.0 );
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }`,
-    })
-  );
-  earthGroup.add(atmo);
+  if (spec.atmo) {
+    // Atmospheric shell: the arc that stands off the limb. Blue on
+    // Earth, and on Mars a thin pink one — the same dust again.
+    const atmo = new THREE.Mesh(
+      new THREE.SphereGeometry(spec.r * (spec.atmoR || 1.035), 64, 40),
+      new THREE.ShaderMaterial({
+        uniforms: { sunDir: uni.sunDir },
+        transparent: true, blending: THREE.AdditiveBlending,
+        side: THREE.BackSide, depthWrite: false,
+        vertexShader: `
+          varying vec3 vN; varying vec3 vW;
+          void main() {
+            vN = normalize( mat3( modelMatrix ) * normal );
+            vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
+            gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
+          }`,
+        fragmentShader: `
+          uniform vec3 sunDir; varying vec3 vN; varying vec3 vW;
+          void main() {
+            vec3 N = normalize( vN );
+            vec3 V = normalize( cameraPosition - vW );
+            float rim = pow( 1.0 - abs( dot( N, V ) ), 3.2 );
+            // BackSide, so these are the far-side normals: they point
+            // with the sun on the lit limb, not against it.
+            float lit = smoothstep( -0.5, 0.45, dot( N, normalize( sunDir ) ) );
+            gl_FragColor = vec4( vec3( ${spec.atmo.map((n) => n.toFixed(3)).join(', ')} )
+                               * rim * lit * ${spec.atmoK.toFixed(2)}, 1.0 );
+            #include <tonemapping_fragment>
+            #include <colorspace_fragment>
+          }`,
+      })
+    );
+    group.add(atmo);
+  }
 
-  // Both Earth shaders work in world space, so this is simply the
-  // direction from Earth to the sun. The sun sits far enough away
-  // that the parallax between it and the observer matters: that
-  // offset is what sets Earth's phase.
-  earthGroup.userData.sync = () => {
-    earthUniforms.sunDir.value.copy(SUN_DIR).multiplyScalar(60000).sub(EARTH_POS).normalize();
+  // Where it sits, and where it is going. Orbiting companions swing
+  // their direction vector around a fixed axis; locked ones do not
+  // move at all, because from a locked moon the primary never does.
+  const base = new THREE.Vector3(...spec.dir).normalize();
+  const pos = base.clone().multiplyScalar(COMPANION_DIST);
+  const axis = spec.orbit ? new THREE.Vector3(...spec.orbit.axis).normalize() : null;
+
+  group.userData.pos = pos;
+  // The sun sits far enough away that the parallax between it and
+  // the observer matters: that offset is what sets the phase.
+  group.userData.sync = () => {
+    uni.sunDir.value.copy(SUN_DIR).multiplyScalar(60000).sub(pos).normalize();
   };
-  // Clouds drift; the globe turns underneath them. Sped up ~200×
-  // over the real day so the rotation is perceptible at all.
-  earthGroup.userData.tick = (t) => {
-    earthUniforms.cloudShift.value = t * 0.0006;
-    globe.rotation.y = t * 0.0145;
+  group.userData.tick = (t) => {
+    if (axis) pos.copy(base).applyAxisAngle(axis, t * spec.orbit.rate).multiplyScalar(COMPANION_DIST);
+    if (spec.clouds) uni.cloudShift.value = t * 0.0006;   // clouds drift over a turning globe
+    if (spec.spin) globe.rotation.y = t * spec.spin;
   };
+  return group;
+}
+
+const companionCache = new Map();
+let liveCompanions = [];
+// The rover's high-gain dish points at whatever the primary is.
+const COMPANION_AIM = new THREE.Vector3(0, 0, -1);
+
+function setCompanions(ids) {
+  for (const g of liveCompanions) scene.remove(g);
+  liveCompanions = ids.map((id) => {
+    let g = companionCache.get(id);
+    if (!g) companionCache.set(id, g = makeCompanion(COMPANIONS[id]));
+    scene.add(g);
+    return g;
+  });
+  COMPANION_AIM.copy(liveCompanions[0].userData.pos);
 }
 
 /* ═════════════════════════════════════════════════════════════
    8. FOOTPRINTS & WHEEL TRACKS
-   Regolith takes a crisp print and holds it: no wind, no rain.
+   Regolith takes a crisp print and holds it. On the airless
+   bodies nothing will ever erase it. On Mars the wind eventually
+   will — Spirit's tracks faded over years, not minutes — which is
+   far longer than you are going to stand here, so they persist
+   the same way and are only tinted differently: disturbing bright
+   dust exposes the darker soil underneath, which is why every
+   rover on Mars drives in a dark stripe of its own making.
    ═════════════════════════════════════════════════════════════ */
+const stampSystems = [];
+
 function makeStampSystem(maxCount, canvasDraw, w, h) {
   const S = 64;
   const c = document.createElement('canvas'); c.width = c.height = S;
   canvasDraw(c.getContext('2d'), S);
   const alphaMap = new THREE.CanvasTexture(c);
-  const mesh = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(w, h),
-    new THREE.MeshStandardMaterial({
-      color: 0x4a453f, alphaMap, transparent: true, opacity: 0.85,
-      roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
-    }),
-    maxCount
-  );
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x4a453f, alphaMap, transparent: true, opacity: 0.85,
+    roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
+  });
+  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(w, h), material, maxCount);
   mesh.frustumCulled = false;
   mesh.receiveShadow = true;
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -1433,9 +2595,9 @@ function makeStampSystem(maxCount, canvasDraw, w, h) {
   const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
 
-  return (px, pz, yaw) => {
+  const stamp = (px, pz, yaw) => {
     const n = terrainNormal(px, pz, 0.4);
-    p.set(px, terrainHeight(px, pz) + 0.012, pz);
+    p.set(px, terrainHeight(px, pz) - dropAt(px, pz) + 0.012, pz);
     // Applied right to left: flatten, spin to the heading, then tip
     // onto whatever slope was landed on.
     q.setFromUnitVectors(up, n);
@@ -1445,6 +2607,14 @@ function makeStampSystem(maxCount, canvasDraw, w, h) {
     mesh.instanceMatrix.needsUpdate = true;
     cursor = (cursor + 1) % maxCount;
   };
+  stamp.material = material;
+  stamp.reset = () => {
+    for (let i = 0; i < maxCount; i++) mesh.setMatrixAt(i, zero);
+    mesh.instanceMatrix.needsUpdate = true;
+    cursor = 0;
+  };
+  stampSystems.push(stamp);
+  return stamp;
 }
 
 const prints = (() => {
@@ -1492,7 +2662,15 @@ const tracks = (() => {
 
 /* ═════════════════════════════════════════════════════════════
    9. DUST — in vacuum it flies in clean parabolas and never
-   billows, which is the tell that you are not on Earth.
+   billows, which is the tell that you are not on Earth. Every
+   grain follows the same trajectory regardless of size, lands,
+   and stops. That is the Moon, Phobos and Deimos.
+
+   Mars is the exception in the set. Six millibars is not much,
+   but it is not nothing: fine grains feel drag, so the plume
+   lags, spreads and hangs instead of dropping — the difference
+   you can see between an Apollo boot kick and a Curiosity
+   wheel scuff.
    ═════════════════════════════════════════════════════════════ */
 const dust = (() => {
   const N = 900;
@@ -1501,14 +2679,21 @@ const dust = (() => {
   const life = new Float32Array(N);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const pts = new THREE.Points(g, new THREE.PointsMaterial({
+  const dustMat = new THREE.PointsMaterial({
     color: 0xada79f, size: 0.05, transparent: true, opacity: 0.9, depthWrite: false,
-  }));
+  });
+  const pts = new THREE.Points(g, dustMat);
   pts.frustumCulled = false;
   scene.add(pts);
   let cursor = 0;
 
   return {
+    material: dustMat,
+    clear() {
+      life.fill(0);
+      for (let k = 0; k < N; k++) pos[k * 3 + 1] = -9999;
+      g.attributes.position.needsUpdate = true;
+    },
     burst(x, y, z, power, dirX = 0, dirZ = 0) {
       const n = Math.min(140, Math.floor(20 + power * 55));
       for (let i = 0; i < n; i++) {
@@ -1524,12 +2709,19 @@ const dust = (() => {
       }
       g.attributes.position.needsUpdate = true;
     },
-    update(dt, gravity) {
+    update(dt, gravity, drag) {
       let dirty = false;
+      // Stokes drag, linear in velocity: enough to make a Martian
+      // plume trail and settle instead of arcing cleanly. Zero
+      // everywhere else, and then this is a plain parabola.
+      const k1 = drag > 0 ? Math.max(0, 1 - drag * dt) : 1;
       for (let k = 0; k < N; k++) {
         if (life[k] <= 0) continue;
         life[k] -= dt;
         vel[k * 3 + 1] -= gravity * dt;
+        if (drag > 0) {
+          vel[k * 3] *= k1; vel[k * 3 + 1] *= k1; vel[k * 3 + 2] *= k1;
+        }
         pos[k * 3] += vel[k * 3] * dt;
         pos[k * 3 + 1] += vel[k * 3 + 1] * dt;
         pos[k * 3 + 2] += vel[k * 3 + 2] * dt;
@@ -1549,9 +2741,11 @@ const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
 });
 const composer = new EffectComposer(renderer, rt);
 composer.addPass(new RenderPass(scene, camera));
-// Threshold above 1.0 so only the sun really blooms — Earth should
-// stay a disc with features on it, not a glowing smudge.
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.65, 1.12));
+// Threshold above 1.0 so only the sun really blooms — Earth, and
+// Mars filling half of Phobos's sky, should stay discs with
+// features on them rather than glowing smudges.
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.65, 1.12);
+composer.addPass(bloomPass);
 
 const gradePass = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2() } },
@@ -1686,7 +2880,7 @@ const rover = (() => {
     };
   }
 
-  const _wv = new THREE.Vector3();
+  const _wv = new THREE.Vector3(), _aim = new THREE.Vector3();
   function apply(snap) {
     group.position.set(state.pos.x, state.y, state.pos.z);
     euler.set(state.pitch, state.yaw, state.roll, 'YXZ');
@@ -1710,6 +2904,11 @@ const rover = (() => {
       state.yaw = yaw; state.vel = 0; state.steer = 0;
       group.visible = true;
       settle();
+    },
+    // Left behind when you change body — it does not follow.
+    despawn() {
+      state.spawned = false;
+      group.visible = false;
     },
     step(dt, keys, gravity) {
       const st = state;
@@ -1746,7 +2945,9 @@ const rover = (() => {
         if (w.front) w.g.rotation.y = st.steer;
         w.spin.rotation.x -= st.vel / WHEEL_R * dt;
       }
-      dish.lookAt(EARTH_POS);
+      // Keep the high-gain dish on the relay — Earth from the Moon,
+      // and from Mars whichever moon is carrying the link.
+      dish.lookAt(_aim.copy(group.position).add(COMPANION_AIM));
 
       // Tracks and rooster-tails of dust off the wheels.
       st.trackAcc += Math.abs(st.vel) * dt;
@@ -1771,14 +2972,31 @@ const rover = (() => {
    All three stand on the same terrainHeight(), and all three
    stream the world through the same chunk manager.
    ═════════════════════════════════════════════════════════════ */
-const G_MOON = 1.62, G_EARTH = 9.81, EYE = 1.62;
-const FLY_CEILING = 400;   // past this the streamed horizon would run out
+const G_EARTH = 9.81, EYE = 1.62;
+let FLY_CEILING = 400;   // past this the streamed horizon would run out
+
+/* What one leg push does, per body. These are takeoff velocities,
+   not apexes: the same suited push produces roughly the same
+   launch speed whatever you are standing on, and the difference
+   in gravity does the rest.
+
+   On the two Martian moons that stops being true, because a full
+   push there is not a jump, it is a launch — 2.6 m/s on Phobos is
+   an apex of six hundred metres and a quarter of an hour in the
+   air, and on Deimos, whose escape velocity is 5.6 m/s, it would
+   simply be the last thing you ever did on Deimos. So there you
+   push with a toe instead, and use the suit jets to come back
+   down: hold SPACE and C. That is not a game concession, it is
+   what EVA on a body this small would actually be. */
+const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003 };
+const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085 };
+const JETS = { phobos: true, deimos: true };
 
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
   vel: new THREE.Vector3(),
   onGround: true,
-  gravity: G_MOON,
+  gravity: G_LIST.moon,
   bob: 0,
   stride: 0,
 };
@@ -1786,6 +3004,7 @@ player.pos.y = terrainHeight(0, 0) + EYE;
 yawObj.rotation.y = -0.95;   // opens facing the flag, with Earth up to the right
 
 let mode = 'EVA';   // EVA | FLY | ROVER
+let noteTimer = 0;
 
 const keys = Object.create(null);
 const el = {
@@ -1793,10 +3012,24 @@ const el = {
   g: document.getElementById('r-g'), body: document.getElementById('r-body'),
   v: document.getElementById('r-v'), a: document.getElementById('r-a'),
   p: document.getElementById('r-p'), s: document.getElementById('r-s'),
+  world: document.getElementById('r-world'), site: document.getElementById('r-site'),
+  note: document.getElementById('r-note'),
 };
+
+function note(text) {
+  el.note.textContent = text;
+  noteTimer = 3.5;
+}
 
 function setMode(next) {
   if (next === mode) return;
+  if (next === 'ROVER' && !world.rover) {
+    // A wheel needs weight on it to make traction, and at six
+    // thousandths of a g there is none to be had: spin a wheel here
+    // and you lift the rover, not the regolith.
+    note('NO WHEELED TRACTION AT ' + world.gTxt + ' — EVA OR FLY');
+    return;
+  }
   if (mode === 'ROVER' && next !== 'ROVER') {
     // Dismount to the left of the rover.
     const s = rover.state;
@@ -1830,36 +3063,50 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
+  const tail = '<div><b>1 2 3 4</b> moon &middot; mars &middot; phobos &middot; deimos &nbsp; <b>0</b> demo</div>' +
+    '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
-      '<div><b>R</b> dismount &nbsp; <b>F</b> fly</div>' +
-      '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>';
+      '<div><b>R</b> dismount &nbsp; <b>F</b> fly</div>' + tail;
   } else if (mode === 'FLY') {
     k.innerHTML = '<div><b>WASD</b> thrust &nbsp; <b>SPACE</b> up &nbsp; <b>C</b> down &nbsp; <b>SHIFT</b> boost</div>' +
-      '<div><b>F</b> land &nbsp; <b>R</b> rover</div>' +
-      '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>';
+      '<div><b>F</b> land' + (world.rover ? ' &nbsp; <b>R</b> rover' : '') + '</div>' + tail;
+  } else if (world.jets) {
+    k.innerHTML = '<div><b>WASD</b> move &nbsp; <b>SPACE</b> toe-push, then suit jet up</div>' +
+      '<div><b>C</b> jet down &nbsp; <b>F</b> fly</div>' + tail;
   } else {
     k.innerHTML = '<div><b>WASD</b> move &nbsp; <b>SHIFT</b> bound &nbsp; <b>SPACE</b> jump</div>' +
-      '<div><b>R</b> rover &nbsp; <b>F</b> fly</div>' +
-      '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>';
+      '<div><b>R</b> rover &nbsp; <b>F</b> fly</div>' + tail;
   }
 }
 
+function setGravity(g) {
+  player.gravity = g;
+  const own = g === G_LIST[worldId];
+  el.g.textContent = own ? world.gTxt : '9.81 m/s²';
+  el.body.textContent = own ? 'SURFACE' : 'TERRESTRIAL';
+  el.body.style.color = own ? '#e8b04b' : '#5aa9e6';
+}
+
 addEventListener('keydown', (e) => {
+  // Any key is the demo's cue to hand back the controls — except the
+  // one that started it.
+  if (e.code === 'Digit0') { demo.toggle(); return; }
+  if (demo.on) demo.stop();
+
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.code === 'KeyG') {
-    player.gravity = player.gravity === G_MOON ? G_EARTH : G_MOON;
-    const moon = player.gravity === G_MOON;
-    el.g.textContent = player.gravity.toFixed(2) + ' m/s²';
-    el.body.textContent = moon ? 'LUNAR' : 'TERRESTRIAL';
-    el.body.style.color = moon ? '#e8b04b' : '#5aa9e6';
+    setGravity(player.gravity === G_LIST[worldId] ? G_EARTH : G_LIST[worldId]);
   }
   if (e.code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (e.code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
+  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+  if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
     sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), 0.045, 1.35);
     updateSunDir();
+    updateSkyColors();
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';
   }
 });
@@ -1870,9 +3117,20 @@ const hud = document.getElementById('hud');
 let locked = false;
 
 overlay.addEventListener('click', () => renderer.domElement.requestPointerLock());
+// Clicking the running demo takes it over.
+renderer.domElement.addEventListener('click', () => {
+  if (!demo.on) return;
+  demo.stop();
+  renderer.domElement.requestPointerLock();
+});
+document.getElementById('demoStart').addEventListener('click', (e) => {
+  e.stopPropagation();
+  demo.start();
+});
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === renderer.domElement;
-  overlay.classList.toggle('hidden', locked);
+  if (locked) { everStarted = true; demo.stop(); }
+  overlay.classList.toggle('hidden', locked || demo.on);
 });
 document.addEventListener('mousemove', (e) => {
   if (!locked) return;
@@ -1888,7 +3146,11 @@ const _camWorld = new THREE.Vector3(), _off = new THREE.Vector3(), _e = new THRE
 let hudTimer = 0, hudSpeed = 0;
 
 function stepEVA(dt) {
-  const moon = player.gravity === G_MOON;
+  // Traction is proportional to weight, so everything about walking
+  // scales with gravity: how fast you can get going, how fast you
+  // can stop, and how much you can steer once your boots are off
+  // the ground. g is the fraction of Earth's you have to work with.
+  const g = player.gravity / G_EARTH;
 
   fwd.set(0, 0, -1).applyQuaternion(yawObj.quaternion); fwd.y = 0; fwd.normalize();
   right.set(1, 0, 0).applyQuaternion(yawObj.quaternion); right.y = 0; right.normalize();
@@ -1902,10 +3164,27 @@ function stepEVA(dt) {
 
   // Low weight means low traction: slow to start, slow to stop, and
   // almost no steering authority once your boots leave the ground.
-  const bounding = keys.ShiftLeft || keys.ShiftRight;
-  const topSpeed = (bounding ? 4.6 : 2.3) * (moon ? 1 : 1.25);
-  const accel = player.onGround ? (moon ? 9 : 26) : (moon ? 1.4 : 3);
-  const damp = player.onGround ? (moon ? 5.5 : 12) : 0;
+  // Interpolated on gravity rather than hard-cased per body, so
+  // Mars sits properly between the Moon and Earth and Phobos sits
+  // out at the end, where there is barely any traction at all.
+  const bounding = (keys.ShiftLeft || keys.ShiftRight) && !world.jets;
+  let topSpeed, accel, damp;
+  if (world.jets) {
+    // On Phobos and Deimos you do not walk, you fly the suit. An MMU
+    // gives a suited astronaut about 0.35 m/s² in any direction, and
+    // that is sixty times the local gravity — so it works equally
+    // well on the ground and off it. Held under 3 m/s, because
+    // Deimos lets go of you at 5.6.
+    topSpeed = 3.0;
+    accel = 0.35;
+    damp = 0.25;
+    if (keys.Space && !player.onGround) player.vel.y += accel * dt;
+    if (keys.KeyC) player.vel.y -= accel * dt;
+  } else {
+    topSpeed = (bounding ? 4.6 : 2.3) * (0.9 + g * 0.35);
+    accel = player.onGround ? 7 + 19 * g : 1.2 + 1.8 * g;
+    damp = player.onGround ? 4.5 + 7.5 * g : 0;
+  }
 
   player.vel.x += wish.x * accel * dt;
   player.vel.z += wish.z * accel * dt;
@@ -1918,14 +3197,19 @@ function stepEVA(dt) {
   if (hs > topSpeed) { const k = topSpeed / hs; player.vel.x *= k; player.vel.z *= k; }
 
   if (keys.Space && player.onGround) {
-    // The same leg push: ~2.2 m of hang here, ~0.6 m on Earth.
-    player.vel.y = moon ? 2.65 : 4.2;
+    // The push scales with the body: a full leg extension on the
+    // Moon and Mars, a deliberate toe-push on the two moonlets.
+    player.vel.y = player.gravity === G_EARTH ? 4.2 : JUMP[worldId];
     player.onGround = false;
     dust.burst(player.pos.x, player.pos.y - EYE, player.pos.z, 0.35);
   }
 
   player.vel.y -= player.gravity * dt;
   player.pos.addScaledVector(player.vel, dt);
+
+  // Do not let anyone leave: Deimos only asks 5.6 m/s of you.
+  const ceil = terrainHeight(player.pos.x, player.pos.z) + EYE + FLY_CEILING;
+  if (player.pos.y > ceil) { player.pos.y = ceil; player.vel.y = Math.min(0, player.vel.y); }
 
   const gh = terrainHeight(player.pos.x, player.pos.z);
   const feet = player.pos.y - EYE;
@@ -1951,8 +3235,9 @@ function stepEVA(dt) {
       prints.place(player.pos.x, player.pos.z, yawObj.rotation.y);
       if (bounding) dust.burst(player.pos.x, gh, player.pos.z, 0.18);
     }
-    player.bob += hs * dt * (moon ? 2.2 : 3.4);
-    const amp = Math.min(hs / topSpeed, 1) * (moon ? 0.055 : 0.035);
+    // Cadence rises and stride shortens as you get heavier.
+    player.bob += hs * dt * (2.2 + 1.2 * g);
+    const amp = Math.min(hs / topSpeed, 1) * (0.055 - 0.020 * g);
     bobY = Math.sin(player.bob * 2) * amp;
     bobX = Math.cos(player.bob) * amp * 0.6;
   }
@@ -1987,9 +3272,12 @@ function stepFLY(dt) {
 
   player.pos.addScaledVector(player.vel, dt);
 
+  // The ceiling is height above the ground under you, not an absolute
+  // altitude: terrain on Phobos ranges over 450 m, and an absolute cap
+  // would sit below the surface in the highlands and fight the floor.
   const gh = terrainHeight(player.pos.x, player.pos.z);
   if (player.pos.y < gh + 0.6) { player.pos.y = gh + 0.6; player.vel.y = Math.max(0, player.vel.y); }
-  if (player.pos.y > FLY_CEILING) { player.pos.y = FLY_CEILING; player.vel.y = Math.min(0, player.vel.y); }
+  if (player.pos.y > gh + FLY_CEILING) { player.pos.y = gh + FLY_CEILING; player.vel.y = Math.min(0, player.vel.y); }
 
   yawObj.position.copy(player.pos);
   hudSpeed = v;
@@ -2019,7 +3307,168 @@ function stepROVER(dt) {
   return terrainHeight(s.pos.x, s.pos.z);
 }
 
+/* ═════════════════════════════════════════════════════════════
+   13. DEMO — the simulator playing itself, as a background.
+
+   It holds no privileges: it presses the same keys and turns the
+   same head a player does, and everything downstream of that —
+   traction, jump arcs, suit jets, the rover's steering, chunk
+   streaming — runs exactly as it would under a pair of hands. So
+   what you are watching is the simulation, not a scripted flythrough.
+
+   It works in acts. Walk somewhere, stop and look at the view,
+   take the rover out, go up for the vista, and every couple of
+   minutes move to the next body. The sun creeps the whole time,
+   because on an airless world the shadows are the scenery.
+   ═════════════════════════════════════════════════════════════ */
+const demo = (() => {
+  let on = false, act = 'walk', left = 0, sinceSwitch = 0, lastWorld = null;
+  let yawTarget = 0, pitchTarget = 0, sunWay = 1, actAge = 0;
+  const tag = document.getElementById('demoTag');
+
+  const clearKeys = () => { for (const k in keys) keys[k] = false; };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function enter(a) {
+    act = a; actAge = 0;
+    clearKeys();
+    if (a === 'drive') setMode('ROVER');
+    else if (a === 'soar') setMode('FLY');
+    else setMode('EVA');
+    yawTarget = yawObj.rotation.y + rnd(-2.2, 2.2);
+    pitchTarget = a === 'soar' ? -0.3 : rnd(-0.12, 0.10);
+  }
+
+  function choose() {
+    const r = Math.random();
+    if (world.rover && r < 0.26) return ['drive', rnd(30, 52)];
+    if (r < 0.50) return ['soar', rnd(24, 40)];
+    if (r < 0.66) return ['gaze', rnd(8, 15)];
+    return ['walk', rnd(28, 50)];
+  }
+
+  function retag() {
+    tag.innerHTML = '<b>' + world.name + '</b> &nbsp;' + world.site +
+      '<i>demo — press any key or click to take over</i>';
+  }
+
+  return {
+    get on() { return on; },
+    start() {
+      if (on) return;
+      on = true;
+      lastWorld = null;
+      hud.classList.add('demo');
+      tag.hidden = false;
+      overlay.classList.add('hidden');
+      retag();
+    },
+    stop() {
+      if (!on) return;
+      on = false;
+      clearKeys();
+      hud.classList.remove('demo');
+      tag.hidden = true;
+      if (!locked) overlay.classList.remove('hidden');
+    },
+    toggle() { on ? this.stop() : this.start(); },
+
+    update(dt) {
+      if (!on) return;
+
+      // A world change resets the player, so restart the act with it.
+      if (worldId !== lastWorld) {
+        lastWorld = worldId;
+        sinceSwitch = 0;
+        retag();
+        enter('walk');
+        left = rnd(26, 40);
+      }
+
+      // Creep the sun, turning around at the ends. Shadow length is
+      // most of what makes an airless surface readable, so this alone
+      // keeps the view changing even when the walker does not.
+      sunElev = THREE.MathUtils.clamp(sunElev + sunWay * dt * 0.010, 0.10, 0.85);
+      if (sunElev <= 0.10 || sunElev >= 0.85) sunWay = -sunWay;
+      updateSunDir();
+      updateSkyColors();
+
+      left -= dt; sinceSwitch += dt; actAge += dt;
+      if (left <= 0) {
+        if (sinceSwitch > 190) {
+          applyWorld(WORLD_IDS[(WORLD_IDS.indexOf(worldId) + 1) % WORLD_IDS.length]);
+          return;
+        }
+        const [a, d] = choose();
+        enter(a); left = d;
+      }
+
+      // Head. Everything steers by turning it, because that is all a
+      // player has: movement follows the look direction.
+      const turn = Math.min(1, dt * (act === 'gaze' ? 0.5 : 0.32));
+      let dy = yawTarget - yawObj.rotation.y;
+      yawObj.rotation.y += dy * turn;
+      if (Math.abs(dy) < 0.05) yawTarget += rnd(-1.6, 1.6);
+      pitchObj.rotation.x += (pitchTarget - pitchObj.rotation.x) * Math.min(1, dt * 0.5);
+
+      const gh = terrainHeight(player.pos.x, player.pos.z);
+
+      if (act === 'walk') {
+        keys.KeyW = true;
+        // Do not climb into a wall: if the ground eight metres ahead
+        // is much higher, turn along the slope instead.
+        const fx = -Math.sin(yawObj.rotation.y), fz = -Math.cos(yawObj.rotation.y);
+        if (terrainHeight(player.pos.x + fx * 8, player.pos.z + fz * 8) - gh > 3.5) {
+          yawTarget = yawObj.rotation.y + (Math.random() < 0.5 ? 1.3 : -1.3);
+        }
+        if (world.jets) {
+          // On a moonlet you do not walk, you hover: hold station a
+          // couple of metres up with the jets rather than drifting
+          // off on a twenty-second fall.
+          const alt = player.pos.y - EYE - gh;
+          keys.KeyC = alt > 2.5;
+          keys.Space = alt < 0.8 && player.vel.y < 0.02;
+        } else {
+          keys.ShiftLeft = actAge % 22 > 13;                 // break into a lope
+          keys.Space = player.onGround && Math.random() < dt * 0.22;
+        }
+      } else if (act === 'gaze') {
+        clearKeys();
+        // Look at whatever is overhead — it is the best thing in view.
+        if (actAge < 0.2 && liveCompanions.length && Math.random() < 0.6) {
+          const c = liveCompanions[0].userData.pos;
+          yawTarget = Math.atan2(-c.x, -c.z);
+          pitchTarget = Math.asin(c.clone().normalize().y) * 0.85;
+        }
+      } else if (act === 'drive') {
+        keys.KeyW = true;
+        keys.KeyA = keys.KeyD = false;
+        // Steer the rover toward where the head is pointing.
+        const want = Math.atan2(-Math.sin(yawTarget), -Math.cos(yawTarget));
+        let e = want - rover.state.yaw;
+        while (e > Math.PI) e -= 6.2832;
+        while (e < -Math.PI) e += 6.2832;
+        if (e > 0.12) keys.KeyA = true; else if (e < -0.12) keys.KeyD = true;
+      } else if (act === 'soar') {
+        const frac = 1 - left / Math.max(left + actAge, 0.001);
+        keys.KeyW = true;
+        keys.ShiftLeft = false;
+        const alt = player.pos.y - gh;
+        // Up for the first stretch, level in the middle, down at the
+        // end so the next act starts on the ground.
+        keys.Space = frac < 0.35 && alt < FLY_CEILING * 0.7;
+        keys.KeyC = frac > 0.75;
+        // Keep the horizon in frame rather than staring at the ground:
+        // from altitude the sky and the limb are the view, and on a
+        // flat plain the ground alone is a brown wash.
+        pitchTarget = frac > 0.75 ? -0.30 : -0.12;
+      }
+    },
+  };
+})();
+
 function step(dt, t) {
+  demo.update(dt);
   const gh = mode === 'EVA' ? stepEVA(dt) : mode === 'FLY' ? stepFLY(dt) : stepROVER(dt);
   const focus = mode === 'ROVER' ? rover.state.pos : player.pos;
 
@@ -2034,16 +3483,25 @@ function step(dt, t) {
   sunDisc.position.copy(_camWorld).addScaledVector(SUN_DIR, 12000);
   corona.position.copy(_camWorld).addScaledVector(SUN_DIR, 12500);
   skyGroup.position.copy(_camWorld);
+  skyDome.mesh.position.copy(_camWorld);
+  skyDome.uniforms.uSun.value.copy(SUN_DIR);
 
   // Sun direction in view space, for the opposition surge.
   uSunView.value.copy(SUN_DIR).transformDirection(camera.matrixWorldInverse);
 
-  earthGroup.position.copy(_camWorld).add(EARTH_POS);   // parallax-free: it is 384,000 km away
-  earthGroup.updateMatrixWorld();
-  earthGroup.userData.sync();
-  earthGroup.userData.tick(t);
+  // Everything overhead rides with the camera: parallax-free,
+  // because the nearest of them is six thousand kilometres away.
+  for (const cg of liveCompanions) {
+    cg.userData.tick(t);
+    cg.position.copy(_camWorld).add(cg.userData.pos);
+    cg.updateMatrixWorld();
+    cg.userData.sync();
+  }
+  COMPANION_AIM.copy(liveCompanions[0].userData.pos);
 
-  dust.update(dt, player.gravity);
+  dust.update(dt, player.gravity, world.dustDrag);
+
+  if (noteTimer > 0 && (noteTimer -= dt) <= 0) el.note.textContent = '';
 
   hudTimer -= dt;
   if (hudTimer <= 0) {
@@ -2051,29 +3509,154 @@ function step(dt, t) {
     el.v.textContent = hudSpeed.toFixed(2) + ' m/s';
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
+    el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';   // the demo moves it
   }
 }
 
-/* ── Boot: stream the opening rings, then hand over. ─────────── */
-gradePass.uniforms.uRes.value.set(innerWidth, innerHeight);
-updateKeysHelp();
-chunkStreamer.update(0, 0);
-rockSystem.update(0, 0);
-
+/* ═════════════════════════════════════════════════════════════
+   CHANGING WORLD
+   Everything that is not the renderer itself gets rebuilt: the
+   terrain kernel is repointed, the workers are restarted on the
+   new body, the streamed ground and its rocks are thrown away,
+   and the sky is re-hung. Textures and sky bodies are cached by
+   world, so the first visit to each pays for its own generation
+   and every visit after it is immediate.
+   ═════════════════════════════════════════════════════════════ */
 const boot = document.getElementById('boot');
-let booted = false, elapsed = 0;
+let initialized = false;
+
+function updateSkyColors() {
+  const s = world.sky;
+  if (!s) return;
+  // Sky brightness follows how much lit dust is in the column, so
+  // the dome deepens and darkens as the sun drops — and the haze
+  // that fades the distance is the same dust, so the fog tracks it.
+  const gain = 0.30 + 0.70 * Math.sin(sunElev);
+  const lin = THREE.LinearSRGBColorSpace;
+  skyDome.uniforms.uGain.value = gain;
+  skyDome.uniforms.uK.value = s.k;
+  skyDome.uniforms.uZenith.value.setRGB(s.zenith[0], s.zenith[1], s.zenith[2], lin);
+  skyDome.uniforms.uHorizon.value.setRGB(s.horizon[0], s.horizon[1], s.horizon[2], lin);
+  skyDome.uniforms.uAureole.value.setRGB(s.aureole[0], s.aureole[1], s.aureole[2], lin);
+  if (scene.fog) {
+    scene.fog.color.setRGB(s.horizon[0] * gain, s.horizon[1] * gain, s.horizon[2] * gain, lin);
+  }
+}
+
+function applyWorld(id) {
+  if (initialized && id === worldId) return;
+  initialized = true;
+  worldId = id;
+  world = VIEW[id];
+  setWorld(id);                    // the kernel: heights, craters, colour
+  // You always arrive at the origin, whose anchor cell centre is
+  // this. Set before anything is placed on the ground.
+  curveAX = 128; curveAZ = 128;
+
+  // ── light
+  sun.color.set(world.sunColor);
+  sun.intensity = world.sunPower;
+  hemiLight.color.set(world.hemi[0]);
+  hemiLight.groundColor.set(world.hemi[1]);
+  hemiLight.intensity = world.hemi[2];
+  ambLight.color.set(world.amb[0]);
+  ambLight.intensity = world.amb[1];
+  renderer.toneMappingExposure = world.exposure;
+  bloomPass.strength = world.bloom[0];
+  bloomPass.radius = world.bloom[1];
+  bloomPass.threshold = world.bloom[2];
+
+  sunDisc.scale.setScalar(world.sunSize / SUN_R0);
+  sunDisc.material.color.setRGB(world.sunHDR[0], world.sunHDR[1], world.sunHDR[2]);
+  corona.scale.set(world.corona, world.corona, 1);
+  corona.material.color.setRGB(world.coronaColor[0], world.coronaColor[1], world.coronaColor[2]);
+
+  // ── sky
+  milkyWayMesh.visible = !world.air;
+  starPoints.visible = !world.air;
+  skyDome.mesh.visible = !!world.sky;
+  scene.fog = world.fog ? new THREE.FogExp2(0x000000, world.fog.density) : null;
+  updateSkyColors();
+  setCompanions(world.companions);
+
+  // ── ground
+  const rego = regolithFor(id);
+  groundMat.map = rego.map;
+  groundMat.normalMap = rego.normalMap;
+  uSurge.value.set(world.surge[0], world.surge[1]);
+  uSparkle.value = world.sparkle;
+  dust.material.color.set(world.dustColor);
+  for (const s of stampSystems) { s.material.color.set(world.stampColor); s.reset(); }
+  // Whether the scene has fog is compiled into every program, so
+  // every material in the scene needs a rebuild after that changes.
+  scene.traverse((o) => {
+    const m = o.material;
+    if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
+    else if (m) m.needsUpdate = true;
+  });
+
+  // ── contents
+  chunkStreamer.setWorld(id);
+  rockSystem.reset();
+  landmark(world.landmark, world.flagColor);
+  dust.clear();
+  rover.despawn();
+
+  // ── you
+  FLY_CEILING = world.fly;
+  mode = 'EVA';
+  player.pos.set(0, terrainHeight(0, 0) + EYE, 0);
+  player.vel.set(0, 0, 0);
+  player.onGround = true;
+  yawObj.rotation.y = -0.95;
+  pitchObj.rotation.x = 0;
+  yawObj.position.copy(player.pos);
+  setGravity(G_LIST[id]);
+
+  // ── chrome
+  el.mode.textContent = 'EVA';
+  el.world.textContent = world.name;
+  el.site.textContent = world.site;
+  el.note.textContent = '';
+  document.getElementById('p-title').textContent = world.title;
+  document.getElementById('p-sub').textContent = world.sub;
+  document.getElementById('p-fine').innerHTML = world.fine;
+  for (const b of worldButtons) b.classList.toggle('on', b.dataset.id === id);
+  updateKeysHelp();
+
+  loading = true;
+  boot.hidden = false;
+  chunkStreamer.update(0, 0);
+  rockSystem.update(0, 0);
+}
+
+/* ── Boot: stream the opening rings, then hand over. ─────────── */
+const worldButtons = WORLD_IDS.map((id) => {
+  const b = document.createElement('button');
+  b.dataset.id = id;
+  b.innerHTML = VIEW[id].name + '<i>' + VIEW[id].gTxt + '</i>';
+  // The overlay behind it is the click target for pointer lock.
+  b.addEventListener('click', (e) => { e.stopPropagation(); applyWorld(id); });
+  document.getElementById('worlds').appendChild(b);
+  return b;
+});
+
+gradePass.uniforms.uRes.value.set(innerWidth, innerHeight);
+let loading, elapsed = 0, everStarted = false;
+applyWorld('moon');
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
-  if (!booted) {
+  if (loading) {
     const left = chunkStreamer.pending();
-    boot.textContent = 'GENERATING SURFACE… ' + (left > 0 ? left + ' SECTORS LEFT' : 'DONE');
-    chunkStreamer.update(0, 0);
+    boot.textContent = 'GENERATING ' + world.name + '… ' + (left > 0 ? left + ' SECTORS LEFT' : 'DONE');
+    chunkStreamer.update(player.pos.x, player.pos.z);
     if (left === 0) {
-      booted = true;
-      boot.remove();
+      loading = false;
+      boot.hidden = true;
       hud.hidden = false;
-      overlay.hidden = false;
+      if (!everStarted) overlay.hidden = false;
+      if (demo.on) overlay.classList.add('hidden');
       clock.getDelta();
     }
     return;
