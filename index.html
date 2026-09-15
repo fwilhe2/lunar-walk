@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surface Walk — Moon · Mars · Phobos · Deimos</title>
+<title>Surface Walk — Moon · Mars · Phobos · Deimos · Venus</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -130,9 +130,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
    so both sides compute byte-identical heights: the surface you
    see is exactly the surface you stand on.
 
-   Four bodies share the kernel — Moon, Mars, Phobos, Deimos —
-   selected by setWorld(). Everything that differs between them
-   is a row in the WORLDS table below, so a chunk built in a
+   Five bodies share the kernel — Moon, Mars, Phobos, Deimos,
+   Venus — selected by setWorld(). Everything that differs between
+   them is a row in the WORLDS table below, so a chunk built in a
    worker and a footstep tested on the main thread always agree
    about which world they are on.
 
@@ -192,16 +192,19 @@ function ridged(x, y, octaves) {
 }
 
 /* ── Worlds ─────────────────────────────────────────────────────
-   One kernel, four bodies. Gravity and radius are the real
+   One kernel, five bodies. Gravity and radius are the real
    values; the rest describes what the ground actually looks
    like on each, and is shared verbatim with the mesh workers.
 
    kind selects the height function: 0 = airless mare/highland
    (Moon), 1 = wind-worked desert (Mars), 2 = saturated
-   captured-asteroid regolith (Phobos, Deimos).
+   captured-asteroid regolith (Phobos, Deimos), 3 = young flood
+   basalt under 92 bar (Venus).
 
    Seeds are the dates that matter: Apollo 11's launch, Viking 1's
-   launch, and Asaph Hall's two nights in August 1877.            */
+   launch, Asaph Hall's two nights in August 1877, and the morning
+   Venera 9 sent back the first picture ever taken on another
+   planet's surface.                                              */
 var WORLDS = {
 
   moon: {
@@ -272,12 +275,42 @@ var WORLDS = {
     craterAmp: 0.66, depthK: 0.80, rampart: 0, rayLayers: 0,
     relief: 78, groove: 0, fine: 0.62, albedoK: 0.96,
   },
+
+  /* Venus. The atmosphere writes the whole surface here — not by
+     eroding it, the way wind does on Mars, but by standing in the
+     way of everything that would otherwise hit it. 92 bar shields
+     the ground so completely that there is no impact crater on
+     Venus smaller than about 1.5 km: anything that would make one
+     is torn apart and decelerated before it arrives. So there is
+     exactly one crater class, it is enormous, and it is almost
+     never there. Venus has ~1000 craters on 460 million km² — one
+     per 680 km square — because the planet resurfaced itself with
+     lava around 500 Myr ago and started the count over.
+
+     What is left to look at is that lava, and the crust it
+     drowned. See hVenus().
+
+     Rc is the curvature radius the *ground* appears to have, and
+     it is negative here; that is not a typo. See curveDrop().    */
+  venus: {
+    id: 'venus', kind: 3, seed: 19751022,
+    g: 8.87, R: 6051800, Rc: -1330000,
+    craters: [
+      { cell: 32768, salt: 7, rMin: 900, rMax: 12000, count: 1, prob: 0.05 },
+    ],
+    // Venusian craters are shallow for their size — a 24 km bowl is
+    // under a kilometre deep — and they end in lobate outflows,
+    // fluidised by the atmosphere they punched through, which is
+    // what the rampart term draws.
+    craterAmp: 1, depthK: 0.18, rampart: 0.8, rayLayers: 0,
+  },
 };
 
 var WORLD = WORLDS.moon;      // active row; setWorld() swaps it
 var WK = 0;                   // WORLD.kind, hoisted for the hot path
 var CRATER_LAYERS = WORLD.craters;
 var RAY_LAYER_MAX = 2;        // only the largest classes carry ray systems
+var CURVE_R = WORLD.R;        // apparent, not physical — see curveDrop()
 
 function setWorld(id) {
   if (WORLD.id === id) return WORLD;
@@ -286,6 +319,7 @@ function setWorld(id) {
   SEED = WORLD.seed;          // every noise field in the kernel keys off this
   CRATER_LAYERS = WORLD.craters;
   RAY_LAYER_MAX = WORLD.rayLayers;
+  CURVE_R = WORLD.Rc || WORLD.R;
   craterCache.clear();
   return WORLD;
 }
@@ -569,11 +603,113 @@ function hSmall(x, z) {
   return h + craterAt(x, z);
 }
 
+/* ── Venus ──────────────────────────────────────────────────────
+   Nothing you can see here was made by an impact, and almost
+   nothing by wind. Venus resurfaced itself around 500 Myr ago and
+   most of what you are standing on is the flood of basalt that
+   did it: sheets a few metres thick that end in steep fronts,
+   buckled into wrinkle ridges where the plain shortened as it
+   cooled, and pulled open into fracture swarms where it did not.
+
+   The old crust survives as tessera — the ridge-and-groove
+   terrain that Ovda Regio is made of, two fabrics crossing at an
+   angle, the roughest ground on the planet, standing a kilometre
+   above the lava that is drowning it. Half the sky on this world
+   is haze, so the tessera is also the only thing far away worth
+   looking at.
+
+   The one thing wind does do is nothing you can see from here:
+   at 65 kg/m³ the air moves sand at half a metre a second, but
+   there is almost no sand to move — two dune fields on the whole
+   planet.                                                        */
+var TESS_A = 1.05, TESS_C = Math.cos(TESS_A), TESS_S = Math.sin(TESS_A);
+var WRNK_C = Math.cos(2.10), WRNK_S = Math.sin(2.10);
+var GRB_C = [Math.cos(0.55), Math.cos(1.83)];
+var GRB_S = [Math.sin(0.55), Math.sin(1.83)];
+var GRB_SP = [1450, 2100];
+
+// Where the old crust still stands above the flows. Shared with the
+// colour pass: tessera is swept barer than the plains it interrupts.
+function tesseraMask(x, z) {
+  return sstep(0.44, 0.62, fbm(x * 0.000085 + 5.5, z * 0.000085 - 2.2, 3));
+}
+
+function hVenus(x, z) {
+  var nx = x * 0.0011, nz = z * 0.0011;
+
+  var h = (fbm(nx, nz, 5) - 0.5) * 54;                          // regional swell
+  h += (fbm(nx * 5.3 + 26, nz * 5.3 - 14, 4) - 0.5) * 7;        // flow-field relief
+  h += (fbm(nx * 21 - 6, nz * 21 + 11, 3) - 0.5) * 1.5;         // metre relief
+  h += (fbm(nx * 63, nz * 63, 2) - 0.5) * 0.30;                 // slab and soil grain
+
+  // Tessera: two fabrics at ~60° to each other, the coarse one on a
+  // three-kilometre wavelength and the fine one on about one. Gated
+  // like the lunar highlands and for the same reason — ridged() is
+  // the most expensive thing in the kernel.
+  var tk = tesseraMask(x, z);
+  if (tk > 0.004) {
+    var k = tk * tk;
+    h += ridged(nx * 0.29 - 62, nz * 0.29 + 38, 4) * k * 620;
+    var rx = x * TESS_C + z * TESS_S, rz = z * TESS_C - x * TESS_S;
+    h += ridged(rx * 0.00095 + 9, rz * 0.00095 - 51, 3) * k * 115;
+  }
+
+  // Everything else belongs to the plains, and fades out where the
+  // tessera takes over — the flows lap against it, not over it.
+  var pk = 1 - tk;
+  if (pk > 0.004) {
+    // Lava sheets. Each flow is a few metres thick and ends in a
+    // front, so the plain is a stack of low steps rather than a
+    // smooth surface: flat for most of each unit, then a scarp.
+    var t = fbm(nx * 8.2 + 17, nz * 8.2 - 33, 4) * pk * 7.5;
+    var fi = Math.floor(t);
+    h += (fi + sstep(0.70, 1.0, t - fi)) * 4.5;
+
+    // Wrinkle ridges: sinuous, and the most common landform on the
+    // plains. The real spacing is 15–30 km, which is several times
+    // past anything you can see through this air; at 3.5 km you
+    // actually meet one, which is the same compression the Phobos
+    // grooves get, for the same reason.
+    var u = (x * WRNK_C + z * WRNK_S) / 3500 + valueNoise(x * 0.00055, z * 0.00055) * 1.8;
+    var lane = Math.floor(u);
+    if (hash2(lane, 613) < 0.5) {
+      var tt = u - lane - 0.5;
+      h += Math.exp(-tt * tt * 42) * pk * (14 + hash2(lane, 811) * 22);
+    }
+
+    // Fracture swarms: flat-floored graben a hundred-odd metres
+    // across, in two families, cutting the flows they post-date.
+    for (var gi = 0; gi < 2; gi++) {
+      var gu = (x * GRB_C[gi] + z * GRB_S[gi]) / GRB_SP[gi];
+      var gl = Math.floor(gu);
+      if (hash2(gl, 419 + gi * 57) > 0.38) continue;
+      var gt = gu - gl - 0.5;
+      h -= Math.exp(-gt * gt * 900) * 13 * pk;
+    }
+  }
+
+  return h + craterAt(x, z);
+}
+
+/* The frost line. Venus has one climate — 464 °C at the datum,
+   everywhere, day and night — but it lapses about 8 K per km, so
+   above roughly 4.75 km the ground is cool enough for heavy metal
+   sulphides (galena and bismuthinite, most likely) to condense out
+   of the air onto it as a bright coating. Every radar map of the
+   highlands shows it, as a hard emissivity line that ignores the
+   geology and follows the contour.
+
+   The site is on Ovda Regio, whose floor sits at 4.3 km, so the
+   line falls at about 420 m in local terms and only the tessera
+   crests reach it.                                               */
+var FROST_H = 420;
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
 function terrainHeight(x, z) {
-  return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z) : hSmall(x, z);
+  return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z)
+       : WK === 3 ? hVenus(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -592,11 +728,24 @@ function terrainHeight(x, z) {
    streamed world at 3.5 km still sits half a kilometre down.
 
    It costs the airless-giant worlds nothing: on the Moon the cap
-   changes the whole profile by 46 mm.                             */
+   changes the whole profile by 46 mm.
+
+   On Venus the sign flips, because the ground is not what you are
+   really looking at — the light is. 92 bar of CO₂ has a
+   refractivity of about 0.015 at the surface and a scale height of
+   15.9 km, so a horizontal ray bends downward on a radius near
+   1,100 km. That is six times *tighter* than the planet it is
+   travelling over: light follows the ground down and then some, so
+   the surface never drops out of sight, it climbs. Combining the
+   two gives an apparent radius of -1,330 km, which is what Rc
+   holds, and what the Venera panoramas show — a horizon that lifts
+   away from you like the inside of a shallow bowl. Here the ground
+   reaches your eye line about two kilometres out and keeps going.
+   Nothing but the haze ever closes it off.                        */
 var CURVE_D0 = 400, CURVE_D02 = CURVE_D0 * CURVE_D0;
 function curveDrop(dx, dz) {
   var d2 = dx * dx + dz * dz - CURVE_D02;
-  return d2 > 0 ? d2 / (2 * WORLD.R) : 0;
+  return d2 > 0 ? d2 / (2 * CURVE_R) : 0;
 }
 
 /* ── Surface colour ─────────────────────────────────────────────
@@ -604,7 +753,9 @@ function curveDrop(dx, dz) {
    regolith texture, whose base grey is set per world so the
    product lands on the body's real reflectance: 0.07 for mare
    basalt and for both Martian moons, 0.10 for Martian dune sand,
-   0.28 for the ferric dust that coats everything else on Mars. */
+   0.28 for the ferric dust that coats everything else on Mars,
+   and 0.10 for Venusian basalt, which is about as dark as the
+   Moon and looks nothing like it.                               */
 function surfaceTint(x, z, h, slope, out) {
   var v;
   if (WK === 0) {
@@ -635,6 +786,31 @@ function surfaceTint(x, z, h, slope, out) {
     out[0] = (0.44 + d * 0.62) * n;
     out[1] = (0.36 + d * 0.34) * n;
     out[2] = (0.32 + d * 0.16) * n;
+
+  } else if (WK === 3) {
+    // Venus is one rock. A planet's worth of basalt went down in a
+    // single resurfacing and nothing since has had the chance to
+    // make a second kind, so what varies is only how much of the
+    // dark fine soil has gathered on it: slabs and steep ground are
+    // swept bare and read brighter, hollows pool it and go dark.
+    // The colour is grey — everything orange about a Venera
+    // panorama is the light, not the ground, so none of it is
+    // painted in here.
+    v = 0.50 + slope * 0.30 + tesseraMask(x, z) * 0.08;
+    v *= 0.90 + valueNoise(x * 0.0042, z * 0.0042) * 0.22;   // flow units
+    v *= 0.90 + valueNoise(x * 0.06, z * 0.06) * 0.22;       // slabs and soil
+    v = v < 0.26 ? 0.26 : v > 0.92 ? 0.92 : v;
+    out[0] = v; out[1] = v * 0.985; out[2] = v * 0.955;
+
+    // Above the frost line the rock is under a coat of condensed
+    // metal, which is bright and faintly cold-toned against basalt.
+    var fr = sstep(FROST_H, FROST_H + 60, h);
+    if (fr > 0) {
+      var fm = 0.86 + valueNoise(x * 0.02, z * 0.02) * 0.30;
+      out[0] += (fm * 0.95 - out[0]) * fr;
+      out[1] += (fm * 0.98 - out[1]) * fr;
+      out[2] += (fm * 1.06 - out[2]) * fr;
+    }
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -698,6 +874,16 @@ const L2 = () => [
   { size: 256,  ext: 4, sink: 0 },
   { size: 1024, ext: 3, sink: 1.5, step: 16 },
 ];
+// Venus stops at ±10 km for the opposite reason to the moonlets:
+// not because the ground has fallen away, but because the air is in
+// front of it. At 2.2e-4 the haze passes eight parts in a thousand
+// at ten kilometres, so the fourth level would be generating a ring
+// of terrain that is, to within a rounding error, the fog colour.
+const L3 = () => [
+  { size: 256,  ext: 4, sink: 0 },
+  { size: 1024, ext: 4, sink: 1.5, step: 32 },
+  { size: 4096, ext: 2, sink: 6,   step: 128 },
+];
 
 const VIEW = {
   moon: {
@@ -726,7 +912,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1 2 3 4</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>5</b> change world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -760,7 +946,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a hard jump would be a launch,<br>' +
           'so you push off with a toe and drift for a minute. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1 2 3 4</b> change world.',
+          'the sky and never moves. <b>1</b>–<b>5</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [8.4, 7.7, 6.8],
     corona: 2600, coronaColor: [1, 0.985, 0.94],
@@ -777,6 +963,7 @@ const VIEW = {
     landmark: 'beacon', flagColor: 0xb9bcc2,
     exposure: 1.95, bloom: [0.5, 0.65, 1.1],
     companions: ['mars-big', 'deimos-far'],
+    jets: true,
   },
 
   deimos: {
@@ -784,7 +971,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1 2 3 4</b> change world.',
+          'you want back. <b>1</b>–<b>5</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [8.4, 7.7, 6.8],
     corona: 2600, coronaColor: [1, 0.985, 0.94],
@@ -800,10 +987,65 @@ const VIEW = {
     landmark: 'beacon', flagColor: 0xb9bcc2,
     exposure: 1.95, bloom: [0.5, 0.65, 1.1],
     companions: ['mars-mid', 'phobos-far'],
+    jets: true,
+  },
+
+  /* Venus is the only body in the set where the sky is the light
+     source. Twenty kilometres of sulphuric acid cloud and 92 bar of
+     CO₂ between you and the sun leave about 17 W/m² on the ground —
+     one part in eighty of what the Moon gets, and every photon of
+     it arrives scattered. So: no sun disc, no shadows worth the
+     name, no opposition surge, no stars, nothing overhead at all.
+     Venera 9 photographed a landscape lit like an overcast
+     afternoon, and was surprised by how much it could see.
+
+     The colour is all in the air. Rayleigh scattering over that
+     column is optically deep in the blue — tens of optical depths —
+     and thin in the red, so what survives to the surface is orange,
+     and the ground under it is ordinary grey basalt.
+
+     Sky brightness is inverted from every other body here: the
+     zenith is the bright part, because that is the short way out,
+     and the horizon is dark, because that way the column never
+     ends. On Mars and Earth it is the other way round.            */
+  venus: {
+    name: 'VENUS', site: 'Ovda Regio', gTxt: '8.87 m/s²',
+    title: 'Venus Walk', sub: 'Ovda Regio · 0.904 g · surface unbounded',
+    fine: 'Ninety-two bar of CO₂ at 464 °C, which is a fluid, not air: you wade.<br>' +
+          'There is no sun in the sky and no shadow on the ground, and the horizon<br>' +
+          'bends <b>upward</b> — the air refracts harder than the planet curves.',
+    air: true, stars: 0, noSun: true, shadows: false, skyLit: true,
+    // The directional term stands for the last trace of solar
+    // direction left after 30 optical depths. It is nearly flat
+    // light: the hemisphere fill is what shapes the ground.
+    sunColor: 0xffb070, sunPower: 0.42, sunSize: 37, sunHDR: [1, 1, 1],
+    corona: 1, coronaColor: [1, 1, 1],
+    hemi: [0xff9a4e, 0x431806, 2.1], amb: [0xc8662a, 0.55],
+    // Horizontal visibility of a few kilometres, which is what the
+    // Venera panoramas show and what a Rayleigh optical depth of
+    // ~15 over a 15.9 km scale height gives you near the ground.
+    fog: { density: 2.2e-4 },
+    sky: { zenith: [0.34, 0.135, 0.040], horizon: [0.115, 0.038, 0.012],
+           aureole: [0.44, 0.185, 0.055], k: 1.2, amt: 0.30 },
+    // No micrometeorites to pit the rock and no sand to ripple it:
+    // the last centimetres of Venus are basalt slabs, cracked into
+    // plates and vesicular from the gas that came out of the lava.
+    grey: 104, mapTint: [1.0, 0.985, 0.96], pits: 190, grain: 0.8, plate: 0.55,
+    surge: [0, 0], sparkle: 0,
+    levels: L3, fly: 400, rover: true, roverTop: 1.7, roverDrag: 0.34,
+    // Wading: you push 65 kg/m³ out of the way to move through it,
+    // and it pushes back on the square of your speed.
+    walk: [0.60, 0.42], drag: 0.095, buoy: 0.07,
+    dustColor: 0x9a6038, dustDrag: 44, dustLife: 3.2, stampColor: 0x33231a,
+    rockTint: [1.0, 0.97, 0.93], rockLight: 0.34, rockBase: 0.34,
+    rockN: 0.8, rockFlat: 0.42,
+    landmark: 'flag', flagColor: 0xcfc6b4,
+    exposure: 1.45, bloom: [0.2, 0.75, 0.9],
+    companions: [],
   },
 };
 
-const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos'];
+const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos', 'venus'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -971,7 +1213,8 @@ scene.add(hemiLight, ambLight);
    from surfaceTint do the rest), and the micro-relief differs
    because the processes do. Lunar and Phobos regolith is pitted
    by micrometeorites all the way down to the millimetre; Martian
-   soil has that planed off and wind-ripples written over it.
+   soil has that planed off and wind-ripples written over it;
+   Venus is a cracked basalt pavement, which is neither.
    ═════════════════════════════════════════════════════════════ */
 function regolithMaps(v) {
   const S = 1024;
@@ -1002,9 +1245,54 @@ function regolithMaps(v) {
       }
     }
   }
+  // Plates. Venusian lava cooled into slabs and then sat at 464 °C
+  // being chemically weathered for half a billion years with no
+  // water, no frost and no wind worth the name to break them up, so
+  // the ground Venera 13 and 14 photographed is a pavement: flat
+  // plates a few tens of centimetres across, parted by cracks, each
+  // lying at its own slightly different level. A jittered-grid
+  // Voronoi, wrapped, cracked along the F2−F1 ridge.
+  if (v.plate) {
+    const G = 7, gs = S / G;                       // ≈43 cm plates on a 3 m tile
+    const site = new Float32Array(G * G * 3);
+    for (let j = 0; j < G; j++) {
+      for (let i = 0; i < G; i++) {
+        const k = (j * G + i) * 3;
+        site[k]     = (i + 0.18 + hash2(i, j) * 0.64) * gs;
+        site[k + 1] = (j + 0.18 + hash2(j + 41, i - 17) * 0.64) * gs;
+        site[k + 2] = hash2(i * 31 + 7, j * 17 - 3) - 0.5;   // that plate's level
+      }
+    }
+    for (let y = 0; y < S; y++) {
+      const gj = Math.floor(y / gs);
+      for (let x = 0; x < S; x++) {
+        const gi = Math.floor(x / gs);
+        let f1 = 1e9, f2 = 1e9, own = 0;
+        for (let dj = -1; dj <= 1; dj++) {
+          for (let di = -1; di <= 1; di++) {
+            const ii = (gi + di + G) % G, jj = (gj + dj + G) % G;
+            const k = (jj * G + ii) * 3;
+            // Offset the wrapped copy rather than the sample, so the
+            // tile is seamless at the edges.
+            let dx = site[k] + (gi + di - ii) * gs - x;
+            let dy = site[k + 1] + (gj + dj - jj) * gs - y;
+            const d = dx * dx + dy * dy;
+            if (d < f1) { f2 = f1; f1 = d; own = site[k + 2]; }
+            else if (d < f2) f2 = d;
+          }
+        }
+        const edge = (Math.sqrt(f2) - Math.sqrt(f1)) / (gs * 0.16);
+        h[y * S + x] += (own * 0.5 - (1 - smoothT(clamp01(edge))) * 1.5) * v.plate;
+      }
+    }
+  }
+
   // Micro-craters, the reason airless regolith reads as porous up
   // close. Shallow: at a 3 m tile these are centimetre-scale
   // dimples, and anything deeper turns the ground into cobblestones.
+  // On Venus the same loop draws vesicles instead — nothing has hit
+  // this ground in 500 Myr, but the lava it came out of was full of
+  // gas bubbles, and they pit it at about the same scale.
   let s = 4711; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   for (let i = 0; i < v.pits; i++) {
     const cx = rnd() * S, cy = rnd() * S, r = 3 + Math.pow(rnd(), 3.4) * 36;
@@ -1434,12 +1722,17 @@ const rockSystem = (() => {
 
     const mesh = new THREE.InstancedMesh(rockGeo, rockMat, slots.length);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(slots.length * 3), 3);
+    // Venusian rock does not come from impacts, it comes from lava
+    // that cooled in sheets and then cracked, so it lies about in
+    // plates rather than lumps — the flagstones in every Venera
+    // panorama. rockFlat squashes them, and their bedding with them.
+    const flat = world.rockFlat || 1;
     for (let i = 0; i < slots.length; i++) {
       const r = slots[i];
-      p.set(r.x, terrainHeight(r.x, r.z) - dropAt(r.x, r.z) - r.size * 0.3, r.z);
-      e.set(rnd() * 3, rnd() * 6.28, rnd() * 3);
+      p.set(r.x, terrainHeight(r.x, r.z) - dropAt(r.x, r.z) - r.size * 0.3 * flat, r.z);
+      e.set(rnd() * 3 * flat, rnd() * 6.28, rnd() * 3 * flat);
       q.setFromEuler(e);
-      scl.set(r.size, r.size * (0.55 + rnd() * 0.55), r.size);
+      scl.set(r.size, r.size * (0.55 + rnd() * 0.55) * flat, r.size);
       mesh.setMatrixAt(i, m.compose(p, q, scl));
       // Freshly exposed rock is brighter than the dust that coats it
       // — except on Mars, where the dust is the bright part and the
@@ -1494,6 +1787,13 @@ const rockSystem = (() => {
    On the Moon and Mars it is a flag, wire-stiffened along the top
    as the Apollo ones were — six millibars is no more use for
    holding cloth out than vacuum is.
+
+   Venus is the one place in the set that would hold a flag out by
+   itself: the surface wind is only half a metre per second, but at
+   65 kg/m³ that pushes as hard as a four-metre breeze at home. It
+   would not be cloth, though. Nothing woven lasts an afternoon at
+   464 °C, so this one is rolled titanium sheet, which is why it
+   reads as metal rather than fabric.
 
    On Phobos and Deimos it is a mast bolted to the ground, because
    at 0.006 g nothing stays put by weight: an unanchored mass on
@@ -1566,10 +1866,12 @@ const landmark = (() => {
 
    On the three airless bodies there is no twinkling, no skyglow,
    and star colour can be shown honestly: blackbody tints from
-   M-red to O-blue. On Mars the whole star field is switched off
-   and a dust-scattering dome switched on, because six millibars
-   of CO₂ carrying a micron of dust optical depth is more than
-   enough to drown every star in the sky at midday.
+   M-red to O-blue. On the two with air the whole star field is
+   switched off and a scattering dome switched on — six millibars
+   of CO₂ carrying a micron of dust is already more than enough to
+   drown every star in the Martian sky at midday, and Venus puts
+   twenty kilometres of cloud on top of ninety-two bar, which
+   drowns the sun as well.
    ═════════════════════════════════════════════════════════════ */
 const skyGroup = new THREE.Group();
 scene.add(skyGroup);
@@ -1739,6 +2041,7 @@ const skyDome = (() => {
     uHorizon: { value: new THREE.Color() },
     uAureole: { value: new THREE.Color() },
     uK: { value: 62 },
+    uAmt: { value: 0.9 },
     uGain: { value: 1 },
   };
   const mesh = new THREE.Mesh(
@@ -1753,7 +2056,7 @@ const skyDome = (() => {
         }`,
       fragmentShader: `
         uniform vec3 uSun, uZenith, uHorizon, uAureole;
-        uniform float uK, uGain;
+        uniform float uK, uAmt, uGain;
         varying vec3 vDir;
         void main() {
           vec3 D = normalize( vDir );
@@ -1762,11 +2065,15 @@ const skyDome = (() => {
           float t = pow( 1.0 - clamp( D.y, 0.0, 1.0 ), 2.6 );
           vec3 col = mix( uZenith, uHorizon, t );
 
-          // The forward-scattering halo: narrow, and bluer than the
-          // sky it sits in.
+          // The forward-scattering halo: on Mars narrow, strong and
+          // bluer than the sky it sits in. On Venus uK drops to ~1
+          // and uAmt to a third, which is the other extreme of the
+          // same term — thirty optical depths of multiple scattering
+          // leave the sun as a vague brightening over half the sky,
+          // and no disc at all.
           float ca = max( dot( D, normalize( uSun ) ), 0.0 );
           float halo = pow( ca, uK ) + 0.30 * pow( ca, 7.0 );
-          col = mix( col, uAureole, clamp( halo, 0.0, 1.0 ) * 0.9 );
+          col = mix( col, uAureole, clamp( halo, 0.0, 1.0 ) * uAmt );
 
           // Below the horizon it becomes ground haze, so no seam
           // shows when you look down from altitude.
@@ -2548,6 +2855,11 @@ const companionCache = new Map();
 let liveCompanions = [];
 // The rover's high-gain dish points at whatever the primary is.
 const COMPANION_AIM = new THREE.Vector3(0, 0, -1);
+// Venus is the one world with nothing overhead: the cloud deck is
+// opaque in both directions, so there is no Earth to find, no sun,
+// and no stars. A rover there talks to an orbiter it cannot see, so
+// the dish sits at the zenith and waits for the pass.
+const ZENITH_AIM = new THREE.Vector3(0, COMPANION_DIST, 0);
 
 function setCompanions(ids) {
   for (const g of liveCompanions) scene.remove(g);
@@ -2557,7 +2869,7 @@ function setCompanions(ids) {
     scene.add(g);
     return g;
   });
-  COMPANION_AIM.copy(liveCompanions[0].userData.pos);
+  COMPANION_AIM.copy(liveCompanions.length ? liveCompanions[0].userData.pos : ZENITH_AIM);
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -2666,11 +2978,17 @@ const tracks = (() => {
    grain follows the same trajectory regardless of size, lands,
    and stops. That is the Moon, Phobos and Deimos.
 
-   Mars is the exception in the set. Six millibars is not much,
-   but it is not nothing: fine grains feel drag, so the plume
-   lags, spreads and hangs instead of dropping — the difference
-   you can see between an Apollo boot kick and a Curiosity
-   wheel scuff.
+   Mars is one exception. Six millibars is not much, but it is not
+   nothing: fine grains feel drag, so the plume lags, spreads and
+   hangs instead of dropping — the difference you can see between
+   an Apollo boot kick and a Curiosity wheel scuff.
+
+   Venus is the other, four orders of magnitude further along. At
+   65 kg/m³ the air is a twentieth the density of water, and a
+   50 µm grain of basalt settles through it at about 20 cm/s. Kick
+   the soil there and it does not fly anywhere: it stands up in a
+   slow cloud around your boots and takes most of a minute to come
+   back down.
    ═════════════════════════════════════════════════════════════ */
 const dust = (() => {
   const N = 900;
@@ -2705,22 +3023,31 @@ const dust = (() => {
         vel[k * 3] = Math.cos(a) * sp * 0.6 + dirX * (0.5 + Math.random());
         vel[k * 3 + 1] = (0.4 + Math.random() * 1.5) * (0.4 + power);
         vel[k * 3 + 2] = Math.sin(a) * sp * 0.6 + dirZ * (0.5 + Math.random());
-        life[k] = 1.5 + Math.random() * 1.4;
+        life[k] = (1.5 + Math.random() * 1.4) * (world.dustLife || 1);
       }
       g.attributes.position.needsUpdate = true;
     },
     update(dt, gravity, drag) {
       let dirty = false;
-      // Stokes drag, linear in velocity: enough to make a Martian
-      // plume trail and settle instead of arcing cleanly. Zero
-      // everywhere else, and then this is a plain parabola.
-      const k1 = drag > 0 ? Math.max(0, 1 - drag * dt) : 1;
+      // Stokes drag, linear in velocity, integrated in closed form
+      // rather than stepped: on Mars the two agree to four decimals,
+      // but Venus needs a drag coefficient of 44 to settle a grain at
+      // 20 cm/s, and (1 - k·dt) goes negative at anything under 23
+      // frames a second. The exponential cannot.
+      //
+      // vT is where that balance lands — the terminal velocity, which
+      // in vacuum is infinite and here is a crawl.
+      const k1 = drag > 0 ? Math.exp(-drag * dt) : 1;
+      const vT = drag > 0 ? gravity / drag : 0;
       for (let k = 0; k < N; k++) {
         if (life[k] <= 0) continue;
         life[k] -= dt;
-        vel[k * 3 + 1] -= gravity * dt;
         if (drag > 0) {
-          vel[k * 3] *= k1; vel[k * 3 + 1] *= k1; vel[k * 3 + 2] *= k1;
+          vel[k * 3] *= k1;
+          vel[k * 3 + 1] = (vel[k * 3 + 1] + vT) * k1 - vT;
+          vel[k * 3 + 2] *= k1;
+        } else {
+          vel[k * 3 + 1] -= gravity * dt;
         }
         pos[k * 3] += vel[k * 3] * dt;
         pos[k * 3 + 1] += vel[k * 3 + 1] * dt;
@@ -2923,7 +3250,15 @@ const rover = (() => {
       if (rev) st.vel -= (st.vel > 0.1 ? 5.0 : 1.6) * dt;   // brake first, then reverse
       st.vel += -gravity * pose.gradeFwd * 0.9 * dt;         // rolls downhill
       if (!fwd && !rev) st.vel *= Math.max(0, 1 - 0.5 * dt);
-      st.vel = Math.max(-2, Math.min(4.8, st.vel));
+      // Aerodynamic drag: nothing at all on four of these bodies, and
+      // the whole design problem on the fifth. Dragging a rover-sized
+      // frontal area through 65 kg/m³ at walking pace takes about a
+      // kilowatt, so a Venus rover is slow because of what it is
+      // driving through, not what it is driving over — and it does
+      // not coast, it stops.
+      if (world.roverDrag) st.vel -= world.roverDrag * st.vel * Math.abs(st.vel) * dt;
+      const topF = world.roverTop || 4.8, topR = Math.min(2, topF * 0.5);
+      st.vel = Math.max(-topR, Math.min(topF, st.vel));
       if (!fwd && !rev && Math.abs(st.vel) < 0.03) st.vel = 0;
 
       // Bicycle-model yaw; almost no steering authority at rest.
@@ -2954,7 +3289,7 @@ const rover = (() => {
       if (st.trackAcc > 0.72 && Math.abs(st.vel) > 0.3) {
         st.trackAcc = 0;
         tracks.place(st.pos.x, st.pos.z, st.yaw, TRACK / 2);
-        if (Math.abs(st.vel) > 2.2) {
+        if (Math.abs(st.vel) > topF * 0.46) {
           const bx = st.pos.x + Math.sin(st.yaw) * WHEELBASE / 2;
           const bz = st.pos.z + Math.cos(st.yaw) * WHEELBASE / 2;
           dust.burst(bx, terrainHeight(bx, bz), bz, Math.abs(st.vel) * 0.16,
@@ -2988,9 +3323,8 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
    push with a toe instead, and use the suit jets to come back
    down: hold SPACE and C. That is not a game concession, it is
    what EVA on a body this small would actually be. */
-const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003 };
-const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085 };
-const JETS = { phobos: true, deimos: true };
+const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87 };
+const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085, venus: 4.00 };
 
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
@@ -3063,7 +3397,7 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
-  const tail = '<div><b>1 2 3 4</b> moon &middot; mars &middot; phobos &middot; deimos &nbsp; <b>0</b> demo</div>' +
+  const tail = '<div><b>1</b>–<b>5</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
@@ -3101,7 +3435,7 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (e.code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
     sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), 0.045, 1.35);
@@ -3184,6 +3518,12 @@ function stepEVA(dt) {
     topSpeed = (bounding ? 4.6 : 2.3) * (0.9 + g * 0.35);
     accel = player.onGround ? 7 + 19 * g : 1.2 + 1.8 * g;
     damp = player.onGround ? 4.5 + 7.5 * g : 0;
+    // On Venus gravity is not what slows you down — the air is.
+    // Pushing a suited walker through 65 kg/m³ at 2 m/s costs about
+    // 200 watts, which is a hard sustained effort for a person, so
+    // the ceiling here is power, not traction: a trudge at 1.7 m/s
+    // and a shove at 2.3. Walking on Venus would be wading.
+    if (world.walk) topSpeed *= world.walk[bounding ? 1 : 0];
   }
 
   player.vel.x += wish.x * accel * dt;
@@ -3196,6 +3536,15 @@ function stepEVA(dt) {
   const hs = Math.hypot(player.vel.x, player.vel.z);
   if (hs > topSpeed) { const k = topSpeed / hs; player.vel.x *= k; player.vel.z *= k; }
 
+  // Fluid drag, quadratic and in three dimensions, so it shortens a
+  // jump as well as a stride. ½ρC_dA/m ≈ 0.095 per metre for a
+  // suited walker in supercritical CO₂; zero everywhere else in the
+  // set, where the densest air on offer is Mars's 0.02 kg/m³.
+  if (world.drag) {
+    const sp = player.vel.length();
+    if (sp > 0.001) player.vel.multiplyScalar(Math.max(0, 1 - world.drag * sp * dt));
+  }
+
   if (keys.Space && player.onGround) {
     // The push scales with the body: a full leg extension on the
     // Moon and Mars, a deliberate toe-push on the two moonlets.
@@ -3204,7 +3553,11 @@ function stepEVA(dt) {
     dust.burst(player.pos.x, player.pos.y - EYE, player.pos.z, 0.35);
   }
 
-  player.vel.y -= player.gravity * dt;
+  // Buoyancy. Air this dense carries some of you: a suited walker
+  // averages maybe 900 kg/m³ against the atmosphere's 65, so Venus
+  // holds up about 7% of your weight. It is the one place in the
+  // set where Archimedes gets a say in how high you jump.
+  player.vel.y -= player.gravity * (1 - (world.buoy || 0)) * dt;
   player.pos.addScaledVector(player.vel, dt);
 
   // Do not let anyone leave: Deimos only asks 5.6 m/s of you.
@@ -3439,6 +3792,11 @@ const demo = (() => {
           const c = liveCompanions[0].userData.pos;
           yawTarget = Math.atan2(-c.x, -c.z);
           pitchTarget = Math.asin(c.clone().normalize().y) * 0.85;
+        } else if (!liveCompanions.length) {
+          // On Venus there is nothing up there to look at — no sun,
+          // no stars, no Earth, just the underside of the cloud. So
+          // look at the ground, which is what Venera did.
+          pitchTarget = rnd(-0.34, -0.10);
         }
       } else if (act === 'drive') {
         keys.KeyW = true;
@@ -3497,7 +3855,7 @@ function step(dt, t) {
     cg.updateMatrixWorld();
     cg.userData.sync();
   }
-  COMPANION_AIM.copy(liveCompanions[0].userData.pos);
+  if (liveCompanions.length) COMPANION_AIM.copy(liveCompanions[0].userData.pos);
 
   dust.update(dt, player.gravity, world.dustDrag);
 
@@ -3535,6 +3893,16 @@ function updateSkyColors() {
   const lin = THREE.LinearSRGBColorSpace;
   skyDome.uniforms.uGain.value = gain;
   skyDome.uniforms.uK.value = s.k;
+  skyDome.uniforms.uAmt.value = s.amt !== undefined ? s.amt : 0.9;
+  // On Venus the sky is not a backdrop, it is the lamp: every photon
+  // on the ground has been scattered on its way down, so when the
+  // dome dims the ground has to dim with it. Mars keeps its lights
+  // fixed, because there the direct beam still does most of the work.
+  if (world.skyLit) {
+    sun.intensity = world.sunPower * gain;
+    hemiLight.intensity = world.hemi[2] * gain;
+    ambLight.intensity = world.amb[1] * gain;
+  }
   skyDome.uniforms.uZenith.value.setRGB(s.zenith[0], s.zenith[1], s.zenith[2], lin);
   skyDome.uniforms.uHorizon.value.setRGB(s.horizon[0], s.horizon[1], s.horizon[2], lin);
   skyDome.uniforms.uAureole.value.setRGB(s.aureole[0], s.aureole[1], s.aureole[2], lin);
@@ -3566,6 +3934,14 @@ function applyWorld(id) {
   bloomPass.radius = world.bloom[1];
   bloomPass.threshold = world.bloom[2];
 
+  // Venus has no sun in its sky and casts no shadow on its ground:
+  // 20 km of cloud and 92 bar of gas scatter the disc out of
+  // existence long before it reaches you, and what is left arrives
+  // from the whole sky at once. Nobody standing on Venus has ever
+  // seen where the sun is, and neither do you.
+  sun.castShadow = world.shadows !== false;
+  sunDisc.visible = !world.noSun;
+  corona.visible = !world.noSun;
   sunDisc.scale.setScalar(world.sunSize / SUN_R0);
   sunDisc.material.color.setRGB(world.sunHDR[0], world.sunHDR[1], world.sunHDR[2]);
   corona.scale.set(world.corona, world.corona, 1);
