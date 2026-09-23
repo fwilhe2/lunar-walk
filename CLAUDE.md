@@ -82,6 +82,19 @@ Four clipmap levels (512 m … 32 km at 1024² each). A rebuild renders `chunkGr
 - Bloom runs **after** exposure, on a frame clamped at 6, with a threshold in perceived units. UnrealBloom's blur is truncated at one sigma and draws a visible box around anything much brighter than its threshold; the wide sun glare is the corona sprite instead, which divides the exposure back out (`EYE_TEX`) so it looks the same however open the eye is. Sprites and anything else additive near the sun need `fog: false` or the fog colour paints the whole quad.
 - Stars and the Milky Way have a physical gain (`world.starGain`): invisible under daylight adaptation, visible only when the eye opens up with no lit ground in view.
 
+## Quality tiers (§10b)
+
+`quality.set('high' | 'medium' | 'low')` reconfigures everything live; nothing needs a reload. Things that depend on it:
+
+- Shader variants by define, each changing the program: `RG_CHEAP` (ground: one texture fetch per octave instead of the hex-tiled three), `RK_CHEAP` (rocks: no procedural bump), `HPK_LUT` (ground, rocks, prints: Hapke from the 32³ table `setHapke()` builds, instead of `hapkeR()`). Keep the table and the function in step — it is filled from `hapkeJS()`.
+- `LOD_COARSE` doubles the terrain step beyond the nearest ring and trims the 1 km ring by one chunk where a coarser level follows. Steps are part of the chunk key, so `chunkStreamer.refresh()` just re-plans; the purge discipline keeps the ground solid while the new set builds.
+- `terrainShadows.configure(n, gap)` reallocates the clipmaps and forces a one-frame rebuild; `rockSystem.setDetail()` rebuilds rock chunks; shadow-map sizes are changed by disposing `light.shadow.map`; MSAA by changing `samples` on the composer's targets and disposing them.
+- With bloom off, the eye pass skips its write and the grade pass applies the exposure (`uExpose`) — one full-resolution half-float pass fewer.
+- The governor (`quality.tick()`, once per rendered frame) changes the pixel ratio; `quality.auto = false` stops it, which the probe needs, since at a frame a minute it would otherwise drop straight to the floor.
+- The rover is built as ~150 meshes for readability and then merged by material per rigid part (`mergeInto`). New rover parts that must move on their own need their own parent group, or they will be folded into the chassis.
+
+Draw calls matter as much as pixels on an integrated GPU with Firefox: terrain is ~230 chunk draws, rocks one draw per prototype per chunk, and everything that casts is drawn again per cascade.
+
 ## Load-time and per-frame budget
 
 Boot builds the opening rings in workers (a few seconds on real hardware); after that chunk builds ride on player movement. `terrainHeight()` runs ~67k times for one near chunk — about 2.5 µs a call on the Moon once warm — so a cheap-looking addition costs real stutter on every 256 m boundary crossing. Existing optimisations that are easy to undo by accident:

@@ -27,6 +27,7 @@ Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" 
 | Mouse | look (EVA, flight) · orbit camera (rover) |
 | `[` `]` | sun elevation |
 | `G` | toggle surface / Earth gravity |
+| `Q` | rendering quality: high · medium · low |
 | `Esc` | release pointer |
 
 Sun elevation is the interesting one. At 5° the craters are all rim and shadow, and every shadow is a black pool that reaches across the ground; at 60° an airless surface flattens into a grey wash and you can barely read the ground — which is exactly the problem Apollo crews had judging distance near lunar noon. Turn your back to the sun at any elevation and it happens again: the shadows all hide behind whatever casts them, and the ground washes out into a featureless glare around your own shadow. On Mars it does something else entirely: the whole sky dims and deepens with it, because the sky *is* the sunlit dust.
@@ -146,6 +147,14 @@ Traction is proportional to weight, so acceleration, braking and mid-flight stee
 Landing throws dust. In vacuum it flies in clean parabolas and drops, with no billowing, because there is no air to suspend it. Mars is one exception: six millibars is not much, but it is not nothing, so fine grains feel drag and the plume lags, spreads and hangs. Venus is the other, four orders of magnitude further along — a 50 µm grain of basalt settles through that fluid at about 20 cm/s, so kicking the soil there throws nothing anywhere. It stands up in a slow cloud around your boots and takes the best part of a minute to come back down. Boot prints and wheel tracks stay where you put them.
 
 Flight mode is the one deliberate fiction on four of these bodies — there is no lunar aircraft to model — and the one place it is not is Venus, where a wing needs a seventh of the speed it does on Earth and the Soviet VEGA balloons flew for two days without trying. It is still capped per body, as height above the ground beneath you rather than an absolute altitude, so the streamed horizon always reaches past what you can see wherever you are.
+
+## Performance
+
+Three quality tiers, guessed from the GPU's name the first time — Intel and other integrated graphics start on **low** — remembered after that, and cycled with `Q`. The `RENDER` line in the readout shows the frame rate, the internal resolution and the tier.
+
+The tiers trade what costs the most on a weak GPU and leave what makes it look like the Moon: Hapke photometry, terrain shadows at every range, the eye's adaptation and the shadow a rock casts are the same on all three. What low gives up is the pixel ratio above 1, MSAA (FXAA instead), bloom, soft shadow filtering, anisotropic filtering beyond 2×, the three-way blending that hides the regolith tile's repeat, a third of the terrain's vertices beyond the nearest 400 m, two thirds of the pebbles and their shadows, and half the resolution of the terrain-shadow maps. Medium and low read Hapke from a precomputed table rather than evaluating it per pixel.
+
+On top of the tier, the internal resolution floats: it is measured once a second and lowered until the frame rate reaches the tier's target — 26 fps on low — then raised again when there is room.
 
 ## Demo mode
 

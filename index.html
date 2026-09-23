@@ -83,6 +83,7 @@
     <div><span class="k">ALTITUDE </span><span class="v" id="r-a">0.00 m</span></div>
     <div><span class="k">POSITION </span><span class="v" id="r-p">0 E &middot; 0 N</span></div>
     <div><span class="k">SUN ELEV </span><span class="v" id="r-s">16.0°</span></div>
+    <div><span class="k">RENDER   </span><span class="v" id="r-fps">—</span></div>
     <div><span class="warn" id="r-note"></span></div>
   </div>
   <div id="keys">
@@ -1260,6 +1261,9 @@ renderer.toneMapping = THREE.AgXToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Texture anisotropy for the ground; §10b lowers it on weak GPUs,
+// where 16× at grazing angles is one of the dearest things per pixel.
+let ANISO = renderer.capabilities.getMaxAnisotropy();
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -1564,7 +1568,7 @@ function regolithMaps(v) {
     t.magFilter = THREE.LinearFilter;
     t.minFilter = THREE.LinearMipmapLinearFilter;
     t.generateMipmaps = true;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.anisotropy = ANISO;
     t.needsUpdate = true;
     return t;
   };
@@ -1657,14 +1661,51 @@ function hapkeJS(mu0, mu, cosg, p) {
   return p.w / (4 * Math.PI) * m0 / (m0 + m1) * ((1 + Bs) * P + H0 * H1 - 1) * (1 + Bc) * S;
 }
 
+/* Hapke is some twenty transcendental operations per pixel — as much
+   arithmetic as the rest of the ground shader together — but it only
+   ever depends on three numbers: the cosines of incidence and emission
+   and the phase angle. So the tiers that cannot afford it per pixel
+   (§10b) read it from a 32³ table instead, one fetch. The phase axis
+   runs in √(g/π), which spends most of the samples near zero phase,
+   where the opposition surge is. */
+const HPK_N = 32;
+const hpkLuts = new Map();
+function hapkeLut(p, norm) {
+  const key = JSON.stringify(p);
+  let t = hpkLuts.get(key);
+  if (t) return t;
+  const N = HPK_N, data = new Uint16Array(N * N * N);
+  for (let k = 0; k < N; k++) {
+    const u = k / (N - 1), cg = Math.cos(Math.PI * u * u);
+    for (let j = 0; j < N; j++) {
+      const mu = Math.max(j / (N - 1), 0.02);
+      for (let i = 0; i < N; i++) {
+        const r = hapkeJS(Math.max(i / (N - 1), 1e-3), mu, cg, p) * norm;
+        data[(k * N + j) * N + i] = THREE.DataUtils.toHalfFloat(Number.isFinite(r) ? Math.min(r, 6e4) : 0);
+      }
+    }
+  }
+  t = new THREE.Data3DTexture(data, N, N, N);
+  t.format = THREE.RedFormat;
+  t.type = THREE.HalfFloatType;
+  t.minFilter = t.magFilter = THREE.LinearFilter;
+  t.wrapS = t.wrapT = t.wrapR = THREE.ClampToEdgeWrapping;
+  t.unpackAlignment = 1;
+  t.needsUpdate = true;
+  hpkLuts.set(key, t);
+  return t;
+}
+
 function hapkeUniforms() {
-  return { hpkA: { value: new THREE.Vector4() }, hpkB: { value: new THREE.Vector4() }, hpkN: { value: 1 } };
+  return { hpkA: { value: new THREE.Vector4() }, hpkB: { value: new THREE.Vector4() },
+           hpkN: { value: 1 }, hpkLut: { value: null } };
 }
 function setHapke(u, p) {
   u.hpkA.value.set(p.w, p.b, p.c, p.B0);
   u.hpkB.value.set(p.h, Math.tan(p.theta * DEG), p.Bc0, p.hc);
   const c30 = Math.cos(30 * DEG);
   u.hpkN.value = c30 / Math.PI / hapkeJS(c30, 1, c30, p);
+  u.hpkLut.value = hapkeLut(p, u.hpkN.value);
 }
 
 // Terrain horizon maps: four nested levels, written by §5b and read
@@ -1727,6 +1768,7 @@ const GLSL_HAPKE = `
 uniform vec4 hpkA;   // w, b, c, B0
 uniform vec4 hpkB;   // h, tan(theta), Bc0, hc
 uniform float hpkN;  // normalisation to Lambert at the standard geometry
+uniform highp sampler3D hpkLut;   // the same, tabulated (HPK_LUT)
 
 // Hapke's bidirectional reflectance, with shadow-hiding and coherent-
 // backscatter opposition effects, a two-lobe Henyey–Greenstein phase
@@ -1776,8 +1818,14 @@ float hapkeR( float mu0, float mu, float cosg ) {
 void RE_Direct_Regolith( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   float mu0 = dot( geometryNormal, directLight.direction );
   if ( mu0 <= 0.0 ) return;
-  float r = hapkeR( mu0, dot( geometryNormal, geometryViewDir ), dot( directLight.direction, geometryViewDir ) );
-  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * ( r * hpkN );
+  float mu = dot( geometryNormal, geometryViewDir ), cosg = dot( directLight.direction, geometryViewDir );
+#ifdef HPK_LUT
+  float gu = sqrt( acos( clamp( cosg, -1.0, 1.0 ) ) / PI );
+  float r = texture( hpkLut, vec3( mu0, clamp( mu, 0.02, 1.0 ), gu ) * ( 31.0 / 32.0 ) + 0.5 / 32.0 ).r;
+#else
+  float r = hapkeR( mu0, mu, cosg ) * hpkN;
+#endif
+  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * r;
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Regolith
@@ -1815,9 +1863,15 @@ void hxGrid( vec2 st, out vec3 w, out vec2 o1, out vec2 o2, out vec2 o3 ) {
   o3 = hxHash( b + vec2( 1.0 - s, s ) );
 }
 vec4 hxTex( sampler2D tx, vec2 uv, vec3 w, vec2 o1, vec2 o2, vec2 o3, vec2 gx, vec2 gy ) {
+#ifdef RG_CHEAP
+  // Low quality: one fetch, not three. The tile repeats again, and the
+  // medium octave on top of it is what hides that.
+  return textureGrad( tx, uv, gx, gy );
+#else
   return textureGrad( tx, uv + o1, gx, gy ) * w.x
        + textureGrad( tx, uv + o2, gx, gy ) * w.y
        + textureGrad( tx, uv + o3, gx, gy ) * w.z;
+#endif
 }
 vec2 hxSlope( vec4 n ) { vec3 a = n.xyz * 2.0 - 1.0; return a.xy / max( a.z, 0.25 ); }
 
@@ -2085,7 +2139,11 @@ const chunkGroup = new THREE.Group();
 scene.add(chunkGroup);
 
 let LEVELS = VIEW.moon.levels();
-const l0Step = (ring) => (ring <= 1 ? 1 : ring <= 2 ? 2 : 4);
+// LOD_COARSE (set by §10b on low quality) doubles every step past the
+// nearest ring: a third of the vertices, for ground far enough away
+// that the difference is a pixel or two.
+let LOD_COARSE = false;
+const l0Step = (ring) => (ring <= 1 ? 1 : ring <= 2 ? (LOD_COARSE ? 4 : 2) : (LOD_COARSE ? 8 : 4));
 
 const chunkStreamer = (() => {
   const chunks = new Map();          // key → { mesh, level }
@@ -2137,21 +2195,24 @@ const chunkStreamer = (() => {
     const a0z = (Math.floor(pz / 256) + 0.5) * 256;
     curveAX = a0x; curveAZ = a0z;   // everything on the ground shares it
 
+    // On low quality the 1 km ring stops a chunk short where a coarser
+    // level follows it: 32 fewer draws, and the 4 km chunks take over.
+    const extOf = (li) => LEVELS[li].ext - (LOD_COARSE && li === 1 && LEVELS.length > 2 ? 1 : 0);
     for (let li = 0; li < LEVELS.length; li++) {
-      const L = LEVELS[li];
+      const L = LEVELS[li], ext = extOf(li);
       const ccx = Math.floor(px / L.size), ccz = Math.floor(pz / L.size);
       // Box covered by the previous (finer) level, for skipping.
       let cov = null;
       if (li > 0) {
-        const P = LEVELS[li - 1];
+        const P = LEVELS[li - 1], pe = extOf(li - 1);
         const pcx = Math.floor(px / P.size), pcz = Math.floor(pz / P.size);
         cov = {
-          x0: (pcx - P.ext) * P.size, x1: (pcx + P.ext + 1) * P.size,
-          z0: (pcz - P.ext) * P.size, z1: (pcz + P.ext + 1) * P.size,
+          x0: (pcx - pe) * P.size, x1: (pcx + pe + 1) * P.size,
+          z0: (pcz - pe) * P.size, z1: (pcz + pe + 1) * P.size,
         };
       }
-      for (let dz = -L.ext; dz <= L.ext; dz++) {
-        for (let dx = -L.ext; dx <= L.ext; dx++) {
+      for (let dz = -ext; dz <= ext; dz++) {
+        for (let dx = -ext; dx <= ext; dx++) {
           const cx = ccx + dx, cz = ccz + dz;
           const x0 = cx * L.size, z0 = cz * L.size;
           if (cov && x0 >= cov.x0 && x0 + L.size <= cov.x1 &&
@@ -2163,7 +2224,7 @@ const chunkStreamer = (() => {
           // chunk comes back as a degenerate triangle across the
           // screen. Derive n first, then the step that fits it, so a
           // size and step that do not divide evenly can never do that.
-          const n = Math.max(1, Math.round(L.size / (li === 0 ? l0Step(ring) : L.step)));
+          const n = Math.max(1, Math.round(L.size / (li === 0 ? l0Step(ring) : L.step * (LOD_COARSE ? 2 : 1))));
           const step = L.size / n;
           out.set(li + ':' + cx + ':' + cz + ':' + step, {
             level: li, x0, z0, step, n, sink: L.sink,
@@ -2276,6 +2337,9 @@ const chunkStreamer = (() => {
     pending() {
       return pendingPerLevel[0] + pendingPerLevel[1] + pendingPerLevel[2] + pendingPerLevel[3];
     },
+    // Re-plan around the current position, e.g. after LOD_COARSE
+    // changes. New chunks build while the old ones stand, as always.
+    refresh() { lastCell = null; },
     get version() { return version; },
   };
 })();
@@ -2315,15 +2379,13 @@ const chunkStreamer = (() => {
    four. Moving the sun costs nothing at all.
    ═════════════════════════════════════════════════════════════ */
 const terrainShadows = (() => {
-  const N = 1024;
+  let N = 1024, minGap = 350;
   const SPANS = [512, 2048, 8192, 32768];
   const rt = (format, depth) => new THREE.WebGLRenderTarget(N, N, {
     type: THREE.HalfFloatType, format, depthBuffer: depth, stencilBuffer: false,
     minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
   });
-  const hRT = SPANS.map(() => rt(THREE.RedFormat, true));     // heights, relative to refY
-  const zRT = SPANS.map(() => rt(THREE.RGBAFormat, false));   // skyline tan, distance, height
-  zRT.forEach((r, k) => { TS['tsHz' + k].value = r.texture; });
+  let hRT = [], zRT = [];     // heights relative to refY; skyline tan, distance, height
 
   // ── 1. heights
   const heightMat = new THREE.ShaderMaterial({
@@ -2351,8 +2413,7 @@ const terrainShadows = (() => {
 
   // ── 2. horizons
   const hzU = {
-    tH0: { value: hRT[0].texture }, tH1: { value: hRT[1].texture },
-    tH2: { value: hRT[2].texture }, tH3: { value: hRT[3].texture },
+    tH0: { value: null }, tH1: { value: null }, tH2: { value: null }, tH3: { value: null },
     uHp: { value: SPANS.map(() => new THREE.Vector4()) },   // height levels (cx, cz, span, texel)
     uOut: { value: new THREE.Vector4() },                   // this level
     uDir: { value: SUN_XZ },
@@ -2410,8 +2471,18 @@ const terrainShadows = (() => {
 
   const cen = SPANS.map(() => ({ x: 0, z: 0 }));
   let refY = 0, seq = -1, dirty = true, lastVersion = -1, lastStart = -1e9;
-  let on = false, reach = 8000;
+  let on = false, reach = 8000, forceNow = false;
   const _c = new THREE.Color();
+
+  function alloc() {
+    for (const r of hRT) r.dispose();
+    for (const r of zRT) r.dispose();
+    hRT = SPANS.map(() => rt(THREE.RedFormat, true));
+    zRT = SPANS.map(() => rt(THREE.RGBAFormat, false));
+    zRT.forEach((r, k) => { TS['tsHz' + k].value = r.texture; });
+    hRT.forEach((r, k) => { hzU['tH' + k].value = r.texture; });
+  }
+  alloc();
 
   function renderHeights() {
     const prevTarget = renderer.getRenderTarget();
@@ -2454,6 +2525,15 @@ const terrainShadows = (() => {
       seq = -1; dirty = true; lastVersion = -1;
       TS.tsSun.value.z = 0;
     },
+    // Clipmap resolution and the shortest gap between rebuilds, set by
+    // quality. A new resolution rebuilds everything in one frame.
+    configure(n, gap) {
+      minGap = gap;
+      if (n === N) return;
+      N = n;
+      alloc();
+      seq = -1; dirty = true; forceNow = true;
+    },
     /* Call every frame. `now` forces the whole pass into this frame —
        used once, when a world has finished loading, so the first frame
        anyone sees already has its shadows. */
@@ -2462,7 +2542,8 @@ const terrainShadows = (() => {
       const v = chunkStreamer.version;
       if (v !== lastVersion || Math.hypot(fx - cen[0].x, fz - cen[0].z) > 40) dirty = true;
       const t = performance.now();
-      if (seq < 0 && dirty && (now || t - lastStart > 350)) {
+      if (forceNow) { now = true; forceNow = false; }
+      if (seq < 0 && dirty && (now || t - lastStart > minGap)) {
         // Centres snap to a multiple of each level's texels, so the
         // sampling grid never shifts by a fraction of one and the
         // shadows do not crawl when they are rebuilt.
@@ -2646,17 +2727,23 @@ const rockSystem = (() => {
         {
           // Pitted, vesicular surface detail, and dust on the up faces.
           vec3 wN = inverseTransformDirection( normal, viewMatrix );
+          #ifndef RK_CHEAP
           float fade = 1.0 - smoothstep( 6.0, 40.0, length( vViewPosition ) );
-          vec3 g = ( rkGrad( vRk * 7.0 ) * 0.6 + rkGrad( vRk * 23.0 ) * 0.3 + rkGrad( vRk * 61.0 ) * 0.15 ) * fade;
-          g -= dot( g, wN ) * wN;
-          vec3 bN = normalize( wN - g * 0.1 );
-          normal = normalize( ( viewMatrix * vec4( bN, 0.0 ) ).xyz );
+          if ( fade > 0.0 ) {
+            vec3 g = ( rkGrad( vRk * 7.0 ) * 0.6 + rkGrad( vRk * 23.0 ) * 0.3 + rkGrad( vRk * 61.0 ) * 0.15 ) * fade;
+            g -= dot( g, wN ) * wN;
+            vec3 bN = normalize( wN - g * 0.1 );
+            normal = normalize( ( viewMatrix * vec4( bN, 0.0 ) ).xyz );
+          }
+          #endif
           float dusty = smoothstep( 0.45, 0.92, wN.y ) * rkSoil.a * ( 0.7 + 0.3 * rkN( vRk * 3.0 ) );
           diffuseColor.rgb = mix( diffuseColor.rgb, rkSoil.rgb, dusty );
         }`);
   };
 
   const SIZE = 256, EXT = 1, MAXR = 900;
+  let pebbles = 1;            // carpet density, lowered on weak GPUs
+  let shapes = 99;            // prototypes per class: each is a draw call per chunk
   const live = new Map();   // "cx:cz" → Group of InstancedMeshes
   let lastCell = null;
 
@@ -2699,7 +2786,7 @@ const rockSystem = (() => {
     // Background scatter, and a carpet of pebbles.
     for (let i = 0; i < 40 * nMul; i++)
       consider(x0 + rnd() * SIZE, z0 + rnd() * SIZE, 0.12 + Math.pow(rnd(), 3.4) * 2.0);
-    for (let i = 0; i < 420 * nMul; i++)
+    for (let i = 0; i < 420 * nMul * pebbles; i++)
       consider(x0 + rnd() * SIZE, z0 + rnd() * SIZE, 0.03 + Math.pow(rnd(), 2) * 0.12);
 
     // Venusian rock does not come from impacts, it comes from lava
@@ -2710,7 +2797,7 @@ const rockSystem = (() => {
     const buckets = CLASSES.map((C) => C.protos.map(() => []));
     for (const r of slots) {
       const ci = r.size < CLASSES[0].max ? 0 : r.size < CLASSES[1].max ? 1 : 2;
-      const pi = Math.floor(rnd() * CLASSES[ci].protos.length);
+      const pi = Math.floor(rnd() * Math.min(CLASSES[ci].protos.length, shapes));
       const proto = CLASSES[ci].protos[pi];
       // Resting pose: any heading, a modest tilt — more for the big
       // ejecta blocks, which land where they land.
@@ -2771,6 +2858,16 @@ const rockSystem = (() => {
   return {
     hapke: rockHapke,
     soil: ROCK_U.rkSoil,
+    material: rockMat,
+    // Pebble density, and whether pebbles cast shadows: thousands of
+    // tiny casters in two shadow maps are a real cost on an iGPU.
+    setDetail(density, pebbleShadows, protoLimit) {
+      if (density === pebbles && CLASSES[0].shadow === pebbleShadows && protoLimit === shapes) return;
+      pebbles = density;
+      shapes = protoLimit;
+      CLASSES[0].shadow = pebbleShadows;
+      this.reset();
+    },
     reset() {
       for (const g of live.values()) drop(g);
       live.clear();
@@ -4380,6 +4477,15 @@ const eyePass = (() => {
     adaptQ.render(renderer);
     adaptU.uReset.value = 0;
     EYE_TEX.value = adapt[cur].texture;
+    // With no bloom after it, exposure can ride along in the grade pass
+    // and save a full-resolution read and write — which is most of what
+    // a pass costs on an integrated GPU.
+    const inGrade = !bloomPass.enabled;
+    pass.needsSwap = !inGrade;
+    gradePass.uniforms.uExpose.value = inGrade ? 1 : 0;
+    // ShaderPass cloned its uniforms, so it gets the texture directly.
+    gradePass.uniforms.tEye.value = adapt[cur].texture;
+    if (inGrade) return;
     expose.material.uniforms.tSrc.value = readBuffer.texture;
     expose.material.uniforms.tEye.value = adapt[cur].texture;
     renderer.setRenderTarget(writeBuffer);
@@ -4403,12 +4509,12 @@ composer.addPass(bloomPass);
 
 const gradePass = new ShaderPass({
   uniforms: {
-    tDiffuse: { value: null },
+    tDiffuse: { value: null }, tEye: { value: null }, uExpose: { value: 0 },
     uTime: { value: 0 }, uRes: { value: new THREE.Vector2() },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uTime; uniform vec2 uRes;
+    uniform sampler2D tDiffuse, tEye; uniform float uTime, uExpose; uniform vec2 uRes;
     varying vec2 vUv;
     void main() {
       vec2 c = vUv - 0.5;
@@ -4419,6 +4525,7 @@ const gradePass = new ShaderPass({
       col.r = texture2D( tDiffuse, vUv + c * ca ).r;
       col.g = texture2D( tDiffuse, vUv ).g;
       col.b = texture2D( tDiffuse, vUv - c * ca ).b;
+      if ( uExpose > 0.5 ) col *= exp2( texture2D( tEye, vec2( 0.5 ) ).r );
       col *= 1.0 - 0.30 * r2 - 0.26 * r2 * r2;
       // Grain, proportional to signal as film grain is, plus a trace
       // of read noise in the blacks.
@@ -4430,6 +4537,173 @@ const gradePass = new ShaderPass({
 });
 composer.addPass(gradePass);
 composer.addPass(new OutputPass());
+
+// FXAA, for the low tier, which gives up MSAA. It runs last, on the
+// tone-mapped image, where luminance edges are what the eye sees.
+const fxaaPass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uInv: { value: new THREE.Vector2(1 / innerWidth, 1 / innerHeight) } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec2 uInv;
+    varying vec2 vUv;
+    float lum( vec3 c ) { return dot( c, vec3( 0.299, 0.587, 0.114 ) ); }
+    void main() {
+      vec3 cM = texture2D( tDiffuse, vUv ).rgb;
+      vec3 cNW = texture2D( tDiffuse, vUv + vec2( -1.0, -1.0 ) * uInv ).rgb;
+      vec3 cNE = texture2D( tDiffuse, vUv + vec2( 1.0, -1.0 ) * uInv ).rgb;
+      vec3 cSW = texture2D( tDiffuse, vUv + vec2( -1.0, 1.0 ) * uInv ).rgb;
+      vec3 cSE = texture2D( tDiffuse, vUv + vec2( 1.0, 1.0 ) * uInv ).rgb;
+      float lM = lum( cM ), lNW = lum( cNW ), lNE = lum( cNE ), lSW = lum( cSW ), lSE = lum( cSE );
+      float lMin = min( lM, min( min( lNW, lNE ), min( lSW, lSE ) ) );
+      float lMax = max( lM, max( max( lNW, lNE ), max( lSW, lSE ) ) );
+      vec2 dir = vec2( -( ( lNW + lNE ) - ( lSW + lSE ) ), ( lNW + lSW ) - ( lNE + lSE ) );
+      float red = max( ( lNW + lNE + lSW + lSE ) * 0.03125, 1.0 / 128.0 );
+      dir = clamp( dir / ( min( abs( dir.x ), abs( dir.y ) ) + red ), -8.0, 8.0 ) * uInv;
+      vec3 a = 0.5 * ( texture2D( tDiffuse, vUv - dir / 6.0 ).rgb + texture2D( tDiffuse, vUv + dir / 6.0 ).rgb );
+      vec3 b = a * 0.5 + 0.25 * ( texture2D( tDiffuse, vUv - dir * 0.5 ).rgb + texture2D( tDiffuse, vUv + dir * 0.5 ).rgb );
+      float lB = lum( b );
+      gl_FragColor = vec4( ( lB < lMin || lB > lMax ) ? a : b, 1.0 );
+    }`,
+});
+fxaaPass.enabled = false;
+composer.addPass(fxaaPass);
+
+/* ═════════════════════════════════════════════════════════════
+   10b. QUALITY — three tiers, and a governor on resolution.
+
+   Everything above is written for a discrete GPU. On an integrated
+   one the costs that matter are per pixel and per byte moved, not
+   per vertex: a HiDPI pixel ratio, 4× MSAA on a half-float target,
+   16× anisotropic filtering across ground seen at grazing angles,
+   three-way texture blending, soft shadow filtering, and thousands of
+   pebbles drawn into two shadow maps. The tiers trade exactly those,
+   and leave the things that make it look like the Moon — Hapke, the
+   terrain shadows, the eye — on everywhere.
+
+   On top of the tier, the internal resolution floats: it is measured
+   once a second and lowered until the frame rate reaches the tier's
+   target, then raised again when there is room. The canvas is scaled
+   back up by the browser.
+
+   The tier is guessed from the GPU's name — Intel and the software
+   rasterisers start on low — remembered once chosen, and cycled
+   with Q.
+   ═════════════════════════════════════════════════════════════ */
+const quality = (() => {
+  const TIERS = {
+    high:   { name: 'HIGH',   dpr: 2, msaa: 4, fxaa: false, bloom: true,  soft: true,  far: 2048, farEvery: 1,
+              clip: 1024, gap: 350, cheap: false, aniso: 16, coarse: false, pebbles: 1,    pebbleShadow: true,  shapes: 99, lut: false, fps: 50, minScale: 0.6 },
+    medium: { name: 'MEDIUM', dpr: 1, msaa: 2, fxaa: false, bloom: true,  soft: false, far: 1024, farEvery: 1,
+              clip: 1024, gap: 350, cheap: false, aniso: 4,  coarse: false, pebbles: 0.7,  pebbleShadow: true,  shapes: 3,  lut: true,  fps: 34, minScale: 0.55 },
+    low:    { name: 'LOW',    dpr: 1, msaa: 0, fxaa: true,  bloom: false, soft: false, far: 1024, farEvery: 2,
+              clip: 512,  gap: 700, cheap: true,  aniso: 2,  coarse: true,  pebbles: 0.35, pebbleShadow: false, shapes: 2,  lut: true,  fps: 26, minScale: 0.5 },
+  };
+  const ORDER = ['high', 'medium', 'low'];
+  const KEY = 'surfacewalk.quality';
+  let id = 'high', T = TIERS.high, scale = 1;
+  let frames = 0, t0 = performance.now(), fps = 0, lastChange = 0, farTick = 0;
+
+  function detect() {
+    try { const saved = localStorage.getItem(KEY); if (TIERS[saved]) return saved; } catch (e) { /* no storage */ }
+    let name = '';
+    try {
+      const gl = renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    } catch (e) { /* unknown */ }
+    if (/intel|uhd|iris|hd graphics|llvmpipe|softpipe|swiftshader|mali|adreno|powervr|videocore/i.test(name)) return 'low';
+    if (/apple|radeon.*vega|radeon\(tm\) graphics/i.test(name)) return 'medium';
+    return 'high';
+  }
+
+  function resolution() {
+    const pr = Math.min(devicePixelRatio, T.dpr) * scale;
+    renderer.setPixelRatio(pr);
+    renderer.setSize(innerWidth, innerHeight);
+    composer.setPixelRatio(pr);
+    composer.setSize(innerWidth, innerHeight);
+    const w = Math.floor(innerWidth * pr), h = Math.floor(innerHeight * pr);
+    gradePass.uniforms.uRes.value.set(w, h);
+    fxaaPass.uniforms.uInv.value.set(1 / w, 1 / h);
+  }
+
+  const setDefine = (m, key, on) => {
+    m.defines = m.defines || {};
+    if (!!on === (key in m.defines)) return;
+    if (on) m.defines[key] = ''; else delete m.defines[key];
+    m.needsUpdate = true;
+  };
+  const sizeShadow = (light, n) => {
+    if (light.shadow.mapSize.x === n) return;
+    light.shadow.mapSize.set(n, n);
+    if (light.shadow.map) { light.shadow.map.dispose(); light.shadow.map = null; }
+  };
+
+  function set(next) {
+    id = next; T = TIERS[id];
+    try { localStorage.setItem(KEY, id); } catch (e) { /* no storage */ }
+    // Anti-aliasing: MSAA on the scene target, or FXAA at the end.
+    for (const r of [composer.renderTarget1, composer.renderTarget2]) {
+      if (r.samples !== T.msaa) { r.samples = T.msaa; r.dispose(); }
+    }
+    fxaaPass.enabled = T.fxaa;
+    bloomPass.enabled = T.bloom;
+    // Shadows. The near cascade keeps its 2048² everywhere: it is what
+    // keeps a rock's shadow attached to the rock.
+    const type = T.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    const retype = renderer.shadowMap.type !== type;
+    renderer.shadowMap.type = type;
+    sizeShadow(sunFar, T.far);
+    sunFar.shadow.autoUpdate = T.farEvery === 1;
+    terrainShadows.configure(T.clip, T.gap);
+    // Surfaces.
+    ANISO = Math.min(T.aniso, renderer.capabilities.getMaxAnisotropy());
+    for (const m of regoCache.values()) {
+      for (const t of [m.map, m.normalMap]) { t.anisotropy = ANISO; t.needsUpdate = true; }
+    }
+    setDefine(groundMat, 'RG_CHEAP', T.cheap);
+    for (const m of [groundMat, rockSystem.material, ...stampSystems.map((st) => st.material)]) setDefine(m, 'HPK_LUT', T.lut);
+    setDefine(rockSystem.material, 'RK_CHEAP', T.cheap);
+    // Geometry.
+    if (LOD_COARSE !== T.coarse) { LOD_COARSE = T.coarse; chunkStreamer.refresh(); }
+    rockSystem.setDetail(T.pebbles, T.pebbleShadow, T.shapes);
+    if (retype) scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+    scale = 1;
+    resolution();
+    frames = 0; t0 = performance.now(); lastChange = t0;
+  }
+
+  return {
+    get id() { return id; },
+    get fps() { return fps; },
+    get scale() { return scale; },
+    get label() { return T.name; },
+    auto: true,               // the resolution governor; off only for measuring
+    init() { set(detect()); },
+    set,
+    cycle() { set(ORDER[(ORDER.indexOf(id) + 1) % ORDER.length]); return T.name; },
+    resize() { resolution(); },
+    // Once per rendered frame.
+    tick() {
+      if (T.farEvery > 1) sunFar.shadow.needsUpdate = (farTick++ % T.farEvery) === 0;
+      frames++;
+      const now = performance.now();
+      if (now - t0 < 1000) return;
+      fps = frames * 1000 / (now - t0);
+      frames = 0; t0 = now;
+      if (!this.auto || now - lastChange < 2000 || document.hidden) return;
+      // Pixel cost goes as scale², so the square root of the shortfall
+      // is the step that should about close it.
+      let next = scale;
+      if (fps < T.fps * 0.9) next = Math.max(T.minScale, scale * Math.max(0.75, Math.sqrt(fps / T.fps)));
+      else if (fps > T.fps * 1.3 && scale < 1) next = Math.min(1, scale * 1.1);
+      if (Math.abs(next - scale) > 0.02) { scale = next; resolution(); lastChange = now; }
+    },
+    // After a stall that is not the renderer's fault — a world load.
+    settle() { frames = 0; t0 = performance.now(); lastChange = t0; },
+  };
+})();
+quality.init();
 
 /* ═════════════════════════════════════════════════════════════
    11. ROVER — the Lunar Roving Vehicle, built from primitives to its
@@ -4608,6 +4882,49 @@ const rover = (() => {
     wheels.push({ g: wg, spin, front });
   }
 
+  /* Merge by material. Built above as some hundred and fifty meshes —
+     every tube its own — which is fine for reading and ruinous for
+     drawing: each is a draw call in the scene and in both shadow
+     cascades. Whatever does not move relative to its parent is folded
+     into one mesh per material: the chassis, each wheel's spinning
+     part, each wheel's steering part, and the dish's ribs. */
+  function mergeInto(parent) {
+    const byMat = new Map();
+    for (const m of [...parent.children]) {
+      if (!m.isMesh || m === dish) continue;
+      m.updateMatrix();
+      const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+      g.applyMatrix4(m.matrix);
+      if (!byMat.has(m.material)) byMat.set(m.material, []);
+      byMat.get(m.material).push(g);
+      parent.remove(m);
+      m.geometry.dispose();
+    }
+    for (const [mat, list] of byMat) {
+      const n = list.reduce((a, g) => a + g.attributes.position.count, 0);
+      const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      let o = 0;
+      for (const g of list) {
+        pos.set(g.attributes.position.array, o * 3);
+        nrm.set(g.attributes.normal.array, o * 3);
+        if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+        o += g.attributes.position.count;
+        g.dispose();
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      parent.add(mesh);
+    }
+  }
+  mergeInto(group);
+  mergeInto(dish);
+  for (const w of wheels) { mergeInto(w.spin); mergeInto(w.g); }
+
   const state = {
     spawned: false,
     pos: new THREE.Vector3(),
@@ -4782,6 +5099,7 @@ const el = {
   p: document.getElementById('r-p'), s: document.getElementById('r-s'),
   world: document.getElementById('r-world'), site: document.getElementById('r-site'),
   note: document.getElementById('r-note'),
+  fps: document.getElementById('r-fps'),
 };
 
 function note(text) {
@@ -4832,7 +5150,7 @@ function setMode(next) {
 function updateKeysHelp() {
   const k = document.getElementById('keys');
   const tail = '<div><b>1</b>–<b>5</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &nbsp; <b>0</b> demo</div>' +
-    '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>';
+    '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>ESC</b> release</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
       '<div><b>R</b> dismount &nbsp; <b>F</b> fly</div>' + tail;
@@ -4864,6 +5182,7 @@ addEventListener('keydown', (e) => {
 
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'KeyQ') note('QUALITY ' + quality.cycle());
   if (e.code === 'KeyG') {
     setGravity(player.gravity === G_LIST[worldId] ? G_EARTH : G_LIST[worldId]);
   }
@@ -5374,6 +5693,8 @@ function step(dt, t) {
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';   // the demo moves it
+    el.fps.textContent = (quality.fps ? quality.fps.toFixed(0) + ' fps · ' : '') +
+      Math.round(quality.scale * 100) + '% · ' + quality.label;
   }
 }
 
@@ -5575,6 +5896,7 @@ renderer.setAnimationLoop(() => {
       if (!everStarted) overlay.hidden = false;
       if (demo.on) overlay.classList.add('hidden');
       clock.getDelta();
+      quality.settle();
     }
     return;
   }
@@ -5583,14 +5905,13 @@ renderer.setAnimationLoop(() => {
   eyePass.uniforms.uDt.value = dt;
   step(dt, elapsed);
   composer.render();
+  quality.tick();
 });
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
-  gradePass.uniforms.uRes.value.set(innerWidth, innerHeight);
+  quality.resize();
 });
 </script>
 </body>
