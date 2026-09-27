@@ -154,7 +154,7 @@ Three quality tiers, guessed from the GPU's name the first time — Intel and ot
 
 The tiers trade what costs the most on a weak GPU and leave what makes it look like the Moon: Hapke photometry, terrain shadows at every range, the eye's adaptation and the shadow a rock casts are the same on all three. What low gives up is the pixel ratio above 1, MSAA (FXAA instead), bloom, soft shadow filtering, anisotropic filtering beyond 2×, the three-way blending that hides the regolith tile's repeat, a third of the terrain's vertices beyond the nearest 400 m, two thirds of the pebbles and their shadows, and half the resolution of the terrain-shadow maps. Medium and low read Hapke from a precomputed table rather than evaluating it per pixel.
 
-On top of the tier, the internal resolution floats: it is measured once a second and lowered until the frame rate reaches the tier's target — 26 fps on low — then raised again when there is room.
+On top of the tier, the internal resolution floats: it is measured once a second and lowered until the frame rate reaches the tier's target — 26 fps on low — then raised again when there is room. It goes by the typical frame rather than the average, so the odd stall while new ground streams in does not make it hunt.
 
 ## Demo mode
 

@@ -4583,7 +4583,11 @@ composer.addPass(fxaaPass);
    On top of the tier, the internal resolution floats: it is measured
    once a second and lowered until the frame rate reaches the tier's
    target, then raised again when there is room. The canvas is scaled
-   back up by the browser.
+   back up by the browser. It goes by the typical (median) frame, so
+   the stall of a chunk arriving or a shadow rebuild — which no
+   resolution would have prevented — does not send it hunting. And it
+   changes the canvas only before a frame is drawn: resizing a canvas
+   clears it, and a resize after drawing puts a black frame on screen.
 
    The tier is guessed from the GPU's name — Intel and the software
    rasterisers start on low — remembered once chosen, and cycled
@@ -4601,7 +4605,8 @@ const quality = (() => {
   const ORDER = ['high', 'medium', 'low'];
   const KEY = 'surfacewalk.quality';
   let id = 'high', T = TIERS.high, scale = 1;
-  let frames = 0, t0 = performance.now(), fps = 0, lastChange = 0, farTick = 0;
+  let frames = 0, t0 = performance.now(), fps = 0, lastChange = 0, farTick = 0, tPrev = 0;
+  const gaps = [];     // frame intervals in the current second
 
   function detect() {
     try { const saved = localStorage.getItem(KEY); if (TIERS[saved]) return saved; } catch (e) { /* no storage */ }
@@ -4655,6 +4660,7 @@ const quality = (() => {
     renderer.shadowMap.type = type;
     sizeShadow(sunFar, T.far);
     sunFar.shadow.autoUpdate = T.farEvery === 1;
+    sunFar.shadow.needsUpdate = true;     // a resized map is empty until drawn
     terrainShadows.configure(T.clip, T.gap);
     // Surfaces.
     ANISO = Math.min(T.aniso, renderer.capabilities.getMaxAnisotropy());
@@ -4670,7 +4676,12 @@ const quality = (() => {
     if (retype) scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
     scale = 1;
     resolution();
+    restart();
+  }
+
+  function restart() {
     frames = 0; t0 = performance.now(); lastChange = t0;
+    tPrev = 0; gaps.length = 0;
   }
 
   return {
@@ -4683,24 +4694,29 @@ const quality = (() => {
     set,
     cycle() { set(ORDER[(ORDER.indexOf(id) + 1) % ORDER.length]); return T.name; },
     resize() { resolution(); },
-    // Once per rendered frame.
+    // Once per frame, before anything is drawn: it may resize the canvas.
     tick() {
-      if (T.farEvery > 1) sunFar.shadow.needsUpdate = (farTick++ % T.farEvery) === 0;
+      // Only ever a request; three clears it once the map is drawn.
+      if (T.farEvery > 1 && farTick++ % T.farEvery === 0) sunFar.shadow.needsUpdate = true;
       frames++;
       const now = performance.now();
+      if (tPrev) gaps.push(now - tPrev);
+      tPrev = now;
       if (now - t0 < 1000) return;
       fps = frames * 1000 / (now - t0);
-      frames = 0; t0 = now;
+      gaps.sort((a, b) => a - b);
+      const typical = gaps.length ? 1000 / gaps[gaps.length >> 1] : fps;
+      frames = 0; t0 = now; gaps.length = 0;
       if (!this.auto || now - lastChange < 2000 || document.hidden) return;
       // Pixel cost goes as scale², so the square root of the shortfall
       // is the step that should about close it.
       let next = scale;
-      if (fps < T.fps * 0.9) next = Math.max(T.minScale, scale * Math.max(0.75, Math.sqrt(fps / T.fps)));
-      else if (fps > T.fps * 1.3 && scale < 1) next = Math.min(1, scale * 1.1);
+      if (typical < T.fps * 0.9) next = Math.max(T.minScale, scale * Math.max(0.75, Math.sqrt(typical / T.fps)));
+      else if (typical > T.fps * 1.3 && scale < 1) next = Math.min(1, scale * 1.1);
       if (Math.abs(next - scale) > 0.02) { scale = next; resolution(); lastChange = now; }
     },
     // After a stall that is not the renderer's fault — a world load.
-    settle() { frames = 0; t0 = performance.now(); lastChange = t0; },
+    settle: restart,
   };
 })();
 quality.init();
@@ -5903,9 +5919,9 @@ renderer.setAnimationLoop(() => {
   elapsed += dt;
   gradePass.uniforms.uTime.value = elapsed;
   eyePass.uniforms.uDt.value = dt;
+  quality.tick();       // first: a resize after rendering blanks the frame
   step(dt, elapsed);
   composer.render();
-  quality.tick();
 });
 
 addEventListener('resize', () => {
