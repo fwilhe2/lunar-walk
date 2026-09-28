@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A first-person planetary surface simulator — Moon, Mars, Phobos, Deimos, Venus, Europa, Pluto — with an **unbounded, streamed surface** and three locomotion modes (EVA / rover / flight). Three.js r160, **no build step, no package manager, no tests, no network at runtime** — every texture is generated in the browser at load, and terrain chunks are generated forever in Web Workers as the player moves. `README.md` documents the physical modelling decisions (crater morphometry, Hapke photometry, terrain shadows, eye adaptation, curvature, Earth's phase); read it before changing anything that claims to be realistic, since most constants there are deliberate rather than tuned by eye.
+A first-person planetary surface simulator — Venus, Moon, Mars, Phobos, Deimos, Europa, Pluto, in order out from the sun — with an **unbounded, streamed surface** and three locomotion modes (EVA / rover / flight). Three.js r160, **no build step, no package manager, no tests, no network at runtime** — every texture is generated in the browser at load, and terrain chunks are generated forever in Web Workers as the player moves. `README.md` documents the physical modelling decisions (crater morphometry, Hapke photometry, terrain shadows, eye adaptation, curvature, Earth's phase); read it before changing anything that claims to be realistic, since most constants there are deliberate rather than tuned by eye.
 
 ## Running
 

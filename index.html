@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surface Walk — Moon · Mars · Phobos · Deimos · Venus · Europa · Pluto</title>
+<title>Surface Walk — Venus · Moon · Mars · Phobos · Deimos · Europa · Pluto</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -133,8 +133,8 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
    so both sides compute byte-identical heights: the surface you
    see is exactly the surface you stand on.
 
-   Six bodies share the kernel — Moon, Mars, Phobos, Deimos,
-   Venus, Europa — selected by setWorld(). Everything that differs between
+   Seven bodies share the kernel — Venus, the Moon, Mars, Phobos,
+   Deimos, Europa, Pluto — selected by setWorld(). Everything that differs between
    them is a row in the WORLDS table below, so a chunk built in a
    worker and a footstep tested on the main thread always agree
    about which world they are on.
@@ -1682,7 +1682,9 @@ const VIEW = {
   },
 };
 
-const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos', 'venus', 'europa', 'pluto'];
+// In order out from the sun, which is the order of keys 1–7, the
+// buttons on the opening screen and the demo's tour.
+const WORLD_IDS = ['venus', 'moon', 'mars', 'phobos', 'deimos', 'europa', 'pluto'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -6175,7 +6177,7 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
-  const tail = '<div><b>1</b>–<b>7</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &middot; europa &middot; pluto &nbsp; <b>0</b> demo</div>' +
+  const tail = '<div><b>1</b>–<b>7</b> venus &middot; moon &middot; mars &middot; phobos &middot; deimos &middot; europa &middot; pluto &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>ESC</b> release</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
