@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surface Walk — Moon · Mars · Phobos · Deimos · Venus · Europa</title>
+<title>Surface Walk — Moon · Mars · Phobos · Deimos · Venus · Europa · Pluto</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -195,7 +195,7 @@ function ridged(x, y, octaves) {
 }
 
 /* ── Worlds ─────────────────────────────────────────────────────
-   One kernel, six bodies. Gravity and radius are the real
+   One kernel, seven bodies. Gravity and radius are the real
    values; the rest describes what the ground actually looks
    like on each, and is shared verbatim with the mesh workers.
 
@@ -203,13 +203,16 @@ function ridged(x, y, octaves) {
    (Moon), 1 = wind-worked desert (Mars), 2 = saturated
    captured-asteroid regolith (Phobos, Deimos), 3 = young flood
    basalt under 92 bar (Venus), 4 = a young ice shell broken by
-   its own tides (Europa).
+   its own tides (Europa), 5 = old tholin-mantled ice under a
+   nitrogen haze (Pluto).
 
    Seeds are the dates that matter: Apollo 11's launch, Viking 1's
    launch, Asaph Hall's two nights in August 1877, the morning
    Venera 9 sent back the first picture ever taken on another
-   planet's surface, and the night in January 1610 Galileo first
-   saw Europa and Io as two points of light instead of one.       */
+   planet's surface, the night in January 1610 Galileo first saw
+   Europa and Io as two points of light instead of one, and the
+   day in February 1930 Clyde Tombaugh found Pluto on a pair of
+   photographic plates.                                           */
 var WORLDS = {
 
   moon: {
@@ -338,6 +341,26 @@ var WORLDS = {
       { cell:    24, salt: 53, rMin: 0.8, rMax:    4, count: 1, prob: 0.10, ageK: 1.6 },
     ],
     craterAmp: 1, depthK: 0.85, rampart: 0, rayLayers: 1, halo: 0.35,
+  },
+
+  /* Pluto, on the side that faces Charon. New Horizons saw this
+     hemisphere only on approach, at tens of kilometres a pixel, but
+     what it saw along the equator is the dark belt that runs most of
+     the way round — the same old, cratered ground as Cthulhu Macula,
+     mantled in tholins. Craters here are few for their age and fewer
+     the smaller they are: the Kuiper belt is short of small bodies
+     (Singer et al. 2019), so there is almost nothing under a few
+     hundred metres. See hPluto(). */
+  pluto: {
+    id: 'pluto', kind: 5, seed: 19300218,
+    g: 0.620, R: 1188300,
+    craters: [
+      { cell: 24000, salt:  7, rMin: 2500, rMax: 9000, count: 1, prob: 0.55, ageK: 1.5 },
+      { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.45, ageK: 1.7 },
+      { cell:  1500, salt: 29, rMin:  120, rMax:  500, count: 1, prob: 0.18, ageK: 2.0 },
+      { cell:   300, salt: 41, rMin:   20, rMax:  110, count: 1, prob: 0.06, ageK: 2.2 },
+    ],
+    craterAmp: 1, depthK: 0.55, rampart: 0, rayLayers: 0, halo: 0.2,
   },
 };
 
@@ -1062,12 +1085,62 @@ function hEuropa(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Pluto ──────────────────────────────────────────────────────
+   Pluto's crust is water ice, as hard at 40 K as granite, and on
+   this side of it everything is under a mantle of tholins: organic
+   dust made from methane by ultraviolet light in the haze, and
+   settling out of it for four billion years. That blanket softens
+   everything below the kilometre scale, so the ground rolls. Rising
+   out of it are mountains, blocks of the ice crust a few kilometres
+   high, and the few big, old craters the Kuiper belt had to give.
+
+   On their summits is the strangest thing on Pluto. Methane frost
+   caps them like snow on an Earth mountain, but for the opposite
+   reason: Pluto's air is warmer higher up, and richer in methane,
+   so above a certain height methane condenses onto the ice rather
+   than off it (Bertrand et al. 2020). The line follows height, not
+   geology — the same thing the frost line on Venus does, for a
+   completely different reason. PL_FROST is where it falls here.  */
+var PL_FROST = 1200;
+
+// Where the ice crust stands up in ranges. Shared with nothing: the
+// colour follows height, not the mask.
+function plutoRange(x, z) {
+  return sstep(0.51, 0.68, fbm(x * 0.000045 - 6.1, z * 0.000045 + 3.3, 3));
+}
+
+// The landing site is put on flat ground nine kilometres west of a
+// range, so that Charon, which stands 27° up in the east, hangs clear
+// above frost-capped peaks that reach 12°.
+// Craters are left where they are, so the spawn fade holds.
+var PL_OX = -13000, PL_OZ = -9000;
+
+function hPluto(x0, z0) {
+  var x = x0 + PL_OX, z = z0 + PL_OZ;
+  var nx = x * 0.00009, nz = z * 0.00009;
+  var h = (fbm(nx, nz, 4) - 0.5) * 900;                          // regional relief
+  h += (fbm(nx * 6 + 11, nz * 6 - 4, 3) - 0.5) * 140;            // hills under the mantle
+  h += (fbm(nx * 40 - 3, nz * 40 + 8, 3) - 0.5) * 14;            // swales
+  // Gated like the lunar highlands: ridged() is the dearest thing here.
+  var mk = plutoRange(x, z);
+  if (mk > 0.004) {
+    var k = mk * mk;
+    h += ridged(nx * 1.9 + 21, nz * 1.9 - 13, 5) * k * 2600;
+    h += ridged(nx * 9 - 5, nz * 9 + 17, 3) * k * 240;
+  }
+  // The mantle leaves little roughness at the metre scale.
+  h += (fbm(x * 0.03 + 2, z * 0.03 - 7, 3) - 0.5) * 2.2;
+  h += (fbm(x * 0.14, z * 0.14, 2) - 0.5) * 0.35;
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
 function terrainHeight(x, z) {
   return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z)
-       : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z) : hSmall(x, z);
+       : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z)
+       : WK === 5 ? hPluto(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -1195,6 +1268,28 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, out) {
     out[1] = v * (0.982 + ((0.60 + 0.14 * yel) - 0.982) * k);
     out[2] = v * (1.000 + ((0.46 + 0.02 * yel) - 1.000) * k) * (1 + cl * 0.05);
 
+  } else if (WK === 5) {
+    // Tholin is dark and deep red — reflectance under a tenth — in a
+    // mottle of darker and more orange patches as the haze fallout
+    // has been swept and resettled. Above the frost line it is under
+    // bright methane frost, ragged at its lower edge, which is ice
+    // that reflects four-fifths of the light.
+    var m1 = valueNoise(x * 0.0011 + 3.3, z * 0.0011 - 8.2);
+    var m2 = valueNoise(x * 0.00016 - 1.7, z * 0.00016 + 4.4);
+    var m3 = valueNoise(x * 0.05, z * 0.05);
+    var o = sstep(0.45, 0.75, m2);
+    v = (0.82 + m1 * 0.36) * (0.93 + m3 * 0.14) * (1 + fresh * WORLD.halo) * (1 + slope * 0.25);
+    out[0] = v * (0.24 + o * 0.14);
+    out[1] = v * (0.140 + o * 0.075);
+    out[2] = v * (0.095 + o * 0.035);
+    var fr = sstep(PL_FROST - 120, PL_FROST + 180, h + (m1 - 0.5) * 420 + (valueNoise(x * 0.007, z * 0.007) - 0.5) * 320 - slope * 160);
+    if (fr > 0) {
+      var fv = 1.36 + m3 * 0.12;
+      out[0] += (fv - out[0]) * fr;
+      out[1] += (fv * 0.99 - out[1]) * fr;
+      out[2] += (fv * 1.01 - out[2]) * fr;
+    }
+
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
     // has two units, a redder one over most of the body and a bluer
@@ -1310,7 +1405,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>6</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>7</b> change world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -1351,7 +1446,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a hard jump would be a launch,<br>' +
           'so you push off with a toe and drift for a minute. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1</b>–<b>6</b> change world.',
+          'the sky and never moves. <b>1</b>–<b>7</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -1379,7 +1474,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1</b>–<b>6</b> change world.',
+          'you want back. <b>1</b>–<b>7</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -1480,7 +1575,7 @@ const VIEW = {
     title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
     fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
           'Jupiter hangs 12° wide over the chaos to the east, bands on end, and never<br>' +
-          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>6</b> change world.',
+          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>7</b> change world.',
     air: false, stars: 1,
     // Light here is kept in units ten times the Moon's — a sun of
     // 1.26 rather than 0.126 — and the stars and the eye's range are
@@ -1516,8 +1611,9 @@ const VIEW = {
     exposure: 1.0, eye: [0.40, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0],
     companions: ['jupiter', 'io', 'ganymede', 'callisto'],
     // Earth is never more than 12° from the sun from here, so that is
-    // where the rover's dish looks, not at Jupiter.
-    relay: 'sun',
+    // where the rover's dish looks, not at Jupiter: relay is how far
+    // along the sky from the sun it points.
+    relay: 0.14,
     // Surface dose from Jupiter's trapped electrons and ions: the
     // commonly quoted 5.4 Sv a day, against 1.4 mSv on the Moon (Chang'e
     // 4) and 0.64 on Mars (Curiosity). Four to five sieverts at once
@@ -1526,9 +1622,67 @@ const VIEW = {
     // trailing one takes, so here it is if anything an overestimate.
     dose: 5.4,
   },
+  /* Pluto is 33 AU out: 1.26 W/m², a thousandth of the Moon's
+     sunlight, from a sun 58 arcseconds across — a point, not a disc,
+     though still some two hundred and fifty full moons bright. Noon
+     here is lit like the first minutes after sunset at home. Light
+     is kept in units a thousand times the Moon's, so the numbers
+     below read like the Moon's; only the stars, which do not care
+     what Pluto's sun is doing, are relatively a thousand times
+     brighter against the ground. At twilight levels, against a black
+     sky, the brighter stars stay out at noon — so they do here, with
+     the ground in view.
+
+     The air is a hundred-thousandth of Earth's, ten microbars of
+     nitrogen, and does nothing to the light but one thing: its haze.
+     Twenty-odd layers of tholin haze stand up to 200 km over the
+     surface; they are what made Pluto a blue ring in New Horizons'
+     departure picture. From the ground that is a faint blue glow low
+     down, strongest toward the sun, where the haze scatters forward,
+     and a trace of blue sky-fill in the shadows. The zenith is all
+     but black.
+
+     Charon stands 27° above the eastern horizon, 3.65° across — seven
+     Moons — and never moves: the two are locked face to face, and
+     from Pluto's far side, where the famous heart is, it is never
+     seen at all. Its light in a shadow is a tenth of a percent of the
+     sun's. */
+  pluto: {
+    name: 'PLUTO', site: 'Charon-facing hemisphere', gTxt: '0.62 m/s²',
+    title: 'Pluto Walk', sub: 'Charon-facing hemisphere · 0.063 g · surface unbounded',
+    fine: 'Noon here is dusk: the sun is a point a thousandth as bright, and the<br>' +
+          'stars stay out. Charon hangs 3.7° wide in the east and never moves, over<br>' +
+          'mountains capped with methane frost. <b>1</b>–<b>7</b> change world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
+    corona: 2600, coronaColor: [1.6, 1.55, 1.45],
+    hemi: [0x1e1f2a, 0x4a3226, 1.0], amb: [0x000000, 0],
+    fog: null,
+    // Single scattering off a haze of vertical optical depth about
+    // 0.005, strongly forward-scattering: a per cent or two of the
+    // ground at the zenith, a tenth of it along the horizon, and around
+    // the sun a glow up to half as bright as the ground. Kept at the
+    // faint end of what the measured haze allows.
+    sky: { zenith: [0.0001, 0.0002, 0.0004], horizon: [0.0015, 0.0026, 0.0052],
+           aureole: [0.005, 0.0075, 0.014], k: 14, amt: 0.9 },
+    grey: 200, mapTint: [1.0, 0.98, 0.96], pits: 30, grain: 0.9, clods: 0.8, pebbles: 120,
+    // A compromise between the two materials this ground is made of,
+    // dark tholin and bright frost; the vertex colours carry which.
+    hapke: { w: 0.45, b: 0.30, c: 0.55, B0: 0.8, h: 0.06, theta: 20, Bc0: 0.3, hc: 0.006 },
+    micro: [0.35, 0.3, 0.6], sparkle: 0.6,
+    levels: L4, fly: 400, rover: true,
+    dustColor: 0x4a3024, dustDrag: 0, stampColor: 0x3a261c, soil: 0x5a3a2a,
+    // Blocks of the water-ice crust, under the same tholin dust.
+    rockTint: [1.35, 0.85, 0.62], rockAlb: [0.09, 0.08], rockN: 0.6, talus: 300,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    exposure: 1.0, eye: [0.16, 0.5, 20], starGain: 0.03, bloom: [0.55, 0.65, 3.0],
+    companions: ['charon'],
+    // Earth is never more than 1.7° from the sun from out here.
+    relay: 0.025,
+  },
 };
 
-const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos', 'venus', 'europa'];
+const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos', 'venus', 'europa', 'pluto'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -4438,6 +4592,65 @@ function galileanMaps(kind) {
   return { day: t };
 }
 
+/* ── Charon ─────────────────────────────────────────────────────
+   Half Pluto's size, water ice at a reflectance of about 0.4, and
+   grey — except for its north pole, Mordor Macula, which is stained
+   red-brown by methane that escaped Pluto, froze out onto Charon's
+   cold winter pole and was cooked into tholin by sunlight. Around
+   its middle runs a belt of canyons, Serenity and Mandjet Chasma,
+   where the crust split as an ocean underneath froze and swelled;
+   south of it are the smoother plains of Vulcan Planitia, resurfaced
+   from below. Charon is locked to Pluto as Pluto is to it, so the
+   face you see never changes. */
+function charonMaps() {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const img = x.createImageData(W, H);
+  let s = 2015; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const craters = Array.from({ length: 150 }, () =>
+    [rnd() * W, Math.acos(1 - 2 * rnd()) / Math.PI * H, 0.8 + Math.pow(rnd(), 3) * 6, rnd()]);
+  // The canyon belt: a few long troughs, roughly east–west, wandering.
+  const troughs = Array.from({ length: 3 }, () => [4 + rnd() * 16, rnd() * 6.28, 1.6 + rnd() * 1.4]);
+  for (let y = 0; y < H; y++) {
+    const lat = 90 - (y + 0.5) / H * 180;
+    for (let xx = 0; xx < W; xx++) {
+      const lon = xx / W * 360;
+      const n1 = fbm(xx * 0.02 + 5, y * 0.02, 4), n2 = fbm(xx * 0.09, y * 0.09 - 3, 3);
+      const plains = THREE.MathUtils.smoothstep(-lat, 0, 12);
+      let v = 160 + (n1 - 0.5) * 50 * (1 - plains * 0.6) + (n2 - 0.5) * 22 + plains * 10;
+      let r = v, g = v * 0.99, b = v * 0.975;
+      for (const [tl, ph, w] of troughs) {
+        const tlat = tl + Math.sin(lon * DEG * 2 + ph) * 3 + Math.sin(lon * DEG * 5 + ph * 2) * 1.2;
+        const d = Math.abs(lat - tlat) / w;
+        if (d < 2.2) {
+          const k = Math.exp(-d * d * 2) * 0.35 - Math.exp(-(d - 1.2) * (d - 1.2) * 6) * 0.15;
+          r -= k * 90; g -= k * 90; b -= k * 88;
+        }
+      }
+      const mordor = THREE.MathUtils.smoothstep(lat + (n1 - 0.5) * 14, 52, 72);
+      r += (104 - r) * mordor; g += (66 - g) * mordor; b += (50 - b) * mordor;
+      for (const [cx, cy, cr, ck] of craters) {
+        let dx = Math.abs(xx - cx); dx = Math.min(dx, W - dx);
+        const d = Math.hypot(dx * Math.max(0.2, Math.cos(lat * DEG)), y - cy) / cr;
+        if (d > 3) continue;
+        // Most fresh craters are bright; a few, like Organa, threw
+        // out dark, ammonia-rich ice instead.
+        const tone = ck > 0.92 ? 70 : 225;
+        const k = d < 1 ? (1 - d) * 0.7 : Math.max(0, 1 - (d - 1) / 2) * 0.18 * (ck > 0.6 ? 1 : 0);
+        r += (tone - r) * k; g += (tone - g) * k; b += (tone * 1.01 - b) * k;
+      }
+      const o = (y * W + xx) * 4;
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return { day: t };
+}
+
 /* ── What hangs overhead ────────────────────────────────────────
    Every companion sits on the same 6.2 km shell and is drawn at a
    stated angular size, so the sizes below are comparable to each
@@ -4452,24 +4665,50 @@ const COMPANION_DIST = 6200;
 const TEXGEN = {
   earth: earthMaps, mars: marsMaps,
   phobos: () => moonletMaps('phobos'), deimos: () => moonletMaps('deimos'),
-  jupiter: jupiterMaps, io: () => galileanMaps('io'),
+  jupiter: jupiterMaps, io: () => galileanMaps('io'), charon: charonMaps,
   ganymede: () => galileanMaps('ganymede'), callisto: () => galileanMaps('callisto'),
 };
+
+/* Where a locked companion hangs, and how it is turned, as seen from
+   a site at latitude b and east longitude l. The body frame has X
+   toward the companion (the sub-companion point is longitude 0), Z
+   north, and the companion's orbit in its equator; this maps a
+   vector in it to scene axes (x east, y up, z south). */
+function siteFrame(bDeg, lDeg) {
+  const b = bDeg * DEG, l = lDeg * DEG;
+  const E = [-Math.sin(l), Math.cos(l), 0];
+  const N = [-Math.sin(b) * Math.cos(l), -Math.sin(b) * Math.sin(l), Math.cos(b)];
+  const U = [Math.cos(b) * Math.cos(l), Math.cos(b) * Math.sin(l), Math.sin(b)];
+  const dot = (v, a) => v[0] * a[0] + v[1] * a[1] + v[2] * a[2];
+  const F = (v) => [dot(v, E), dot(v, U), -dot(v, N)];
+  F.up = U;
+  return F;
+}
 
 /* Jupiter's frame, as seen from the site. Europa is locked, and its
    orbit, Jupiter's equator and the orbits of the other three all
    lie in one plane, which from Europa's surface is a great circle
    across the sky through Jupiter. Everything below is computed from
-   where you stand — 10°S, 75°W, in Tara Regio — in scene axes (x
-   east, y up, z south). J is toward Jupiter, which comes out 15°
-   above the eastern horizon; X and Y span the orbital plane (X from
-   Jupiter toward Europa, Y along Europa's motion); Z is Jupiter's
-   north, and Europa's. */
+   where you stand — 10°S, 75°W, in Tara Regio. J is toward Jupiter,
+   which comes out 15° above the eastern horizon; X and Y span the
+   orbital plane (X from Jupiter toward Europa, Y along Europa's
+   motion); Z is Jupiter's north, and Europa's. Jupiter is so far
+   off, 430 Europa radii, that where on Europa you stand shifts it by
+   a tenth of a degree, and that is left out. */
 const JOV = (() => {
-  const b = -10 * DEG, l = -75 * DEG;
-  const J = [-Math.sin(l), Math.cos(b) * Math.cos(l), Math.sin(b) * Math.cos(l)];
-  const Y = [-Math.cos(l), -Math.cos(b) * Math.sin(l), -Math.sin(b) * Math.sin(l)];
-  return { J, X: J.map((v) => -v), Y, Z: [0, Math.sin(b), -Math.cos(b)], aE: 671100 };
+  const F = siteFrame(-10, -75);
+  return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 671100 };
+})();
+
+/* Charon's place in Pluto's sky, from 5°S, 60° west of the point
+   beneath it. Here the parallax is not small: Charon is only sixteen
+   Pluto radii away, so standing on the surface rather than at the
+   centre lowers it by three degrees, and it is computed. */
+const CHARON = (() => {
+  const F = siteFrame(-5, -60), a = 19591, R = 1188.3;
+  const rel = [0, 1, 2].map((i) => (i === 0 ? a : 0) - R * F.up[i]);
+  const d = Math.hypot(...rel);
+  return { dir: F(rel.map((v) => v / d)), pole: F([0, 0, 1]), d, ang: Math.asin(606 / d) };
 })();
 const texCache = new Map();
 function bodyTex(k) {
@@ -4582,6 +4821,17 @@ const COMPANIONS = {
   callisto: {
     tex: 'callisto', r: 1, gain: 1.0, bright: 0.5,
     kepler: { a: 1882700, R: 2410.3, rate: 0.0082, phase: 2.0 },
+  },
+
+  /* Charon from Pluto: 3.65° across, at true size, 27° over the
+     eastern horizon. Its north, and Pluto's, points along the
+     horizon, so Mordor's red cap sits on its left-hand limb and the
+     canyon belt runs up and down the disc. Its brightness is the
+     physical one: an albedo of 0.4 in the same sunlight as ground at
+     0.1, so it is the brightest thing in the sky but the sun. */
+  charon: {
+    tex: 'charon', r: COMPANION_DIST * Math.sin(CHARON.ang), dir: CHARON.dir, pole: CHARON.pole,
+    gain: 1.0, bright: 1.08,
   },
 };
 
@@ -4847,11 +5097,11 @@ const COMPANION_AIM = new THREE.Vector3(0, 0, -1);
 // the dish sits at the zenith and waits for the pass.
 const ZENITH_AIM = new THREE.Vector3(0, COMPANION_DIST, 0);
 
-// From Europa the relay is Earth, which never strays more than 12°
+// From Europa and Pluto the relay is Earth, which never strays far
 // from the sun, so the dish tracks a point just along the sky from it.
 const _up = new THREE.Vector3(0, 1, 0);
 function relayAim(out) {
-  if (world.relay === 'sun') return out.copy(SUN_DIR).applyAxisAngle(_up, 0.14).multiplyScalar(COMPANION_DIST);
+  if (world.relay) return out.copy(SUN_DIR).applyAxisAngle(_up, world.relay).multiplyScalar(COMPANION_DIST);
   return out.copy(liveCompanions.length ? liveCompanions[0].userData.pos : ZENITH_AIM);
 }
 
@@ -5846,8 +6096,8 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
    push with a toe instead, and use the suit jets to come back
    down: hold SPACE and C. That is not a game concession, it is
    what EVA on a body this small would actually be. */
-const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315 };
-const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085, venus: 4.00, europa: 2.65 };
+const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620 };
+const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085, venus: 4.00, europa: 2.65, pluto: 2.65 };
 
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
@@ -5925,7 +6175,7 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
-  const tail = '<div><b>1</b>–<b>6</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &middot; europa &nbsp; <b>0</b> demo</div>' +
+  const tail = '<div><b>1</b>–<b>7</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &middot; europa &middot; pluto &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>ESC</b> release</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
@@ -5964,7 +6214,7 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (e.code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].indexOf(e.code);
+  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7'].indexOf(e.code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
     sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), 0.045, 1.35);
