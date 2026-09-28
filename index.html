@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surface Walk — Moon · Mars · Phobos · Deimos · Venus</title>
+<title>Surface Walk — Moon · Mars · Phobos · Deimos · Venus · Europa</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -36,7 +36,7 @@
     pointer-events: auto; cursor: pointer; transition: opacity .5s ease;
   }
   #overlay.hidden { opacity: 0; pointer-events: none; }
-  #panel { text-align: center; max-width: 500px; padding: 0 24px; }
+  #panel { text-align: center; max-width: 560px; padding: 0 24px; }
   #panel h1 { font: 300 34px/1.15 ui-monospace, Menlo, monospace; letter-spacing: .15em; text-transform: uppercase; color: #f2f2f5; }
   #panel .sub { margin-top: 10px; color: #8b949e; letter-spacing: .08em; }
   #panel .go { margin-top: 28px; display: inline-block; border: 1px solid #4a5058; padding: 11px 26px; letter-spacing: .18em; text-transform: uppercase; color: #e6e6ea; }
@@ -83,6 +83,7 @@
     <div><span class="k">ALTITUDE </span><span class="v" id="r-a">0.00 m</span></div>
     <div><span class="k">POSITION </span><span class="v" id="r-p">0 E &middot; 0 N</span></div>
     <div><span class="k">SUN ELEV </span><span class="v" id="r-s">16.0°</span></div>
+    <div id="r-doseline" hidden><span class="k">DOSE     </span><span class="warn" id="r-dose">0 mSv</span> <span class="k" id="r-rate"></span></div>
     <div><span class="k">RENDER   </span><span class="v" id="r-fps">—</span></div>
     <div><span class="warn" id="r-note"></span></div>
   </div>
@@ -132,8 +133,8 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
    so both sides compute byte-identical heights: the surface you
    see is exactly the surface you stand on.
 
-   Five bodies share the kernel — Moon, Mars, Phobos, Deimos,
-   Venus — selected by setWorld(). Everything that differs between
+   Six bodies share the kernel — Moon, Mars, Phobos, Deimos,
+   Venus, Europa — selected by setWorld(). Everything that differs between
    them is a row in the WORLDS table below, so a chunk built in a
    worker and a footstep tested on the main thread always agree
    about which world they are on.
@@ -194,19 +195,21 @@ function ridged(x, y, octaves) {
 }
 
 /* ── Worlds ─────────────────────────────────────────────────────
-   One kernel, five bodies. Gravity and radius are the real
+   One kernel, six bodies. Gravity and radius are the real
    values; the rest describes what the ground actually looks
    like on each, and is shared verbatim with the mesh workers.
 
    kind selects the height function: 0 = airless mare/highland
    (Moon), 1 = wind-worked desert (Mars), 2 = saturated
    captured-asteroid regolith (Phobos, Deimos), 3 = young flood
-   basalt under 92 bar (Venus).
+   basalt under 92 bar (Venus), 4 = a young ice shell broken by
+   its own tides (Europa).
 
    Seeds are the dates that matter: Apollo 11's launch, Viking 1's
-   launch, Asaph Hall's two nights in August 1877, and the morning
+   launch, Asaph Hall's two nights in August 1877, the morning
    Venera 9 sent back the first picture ever taken on another
-   planet's surface.                                              */
+   planet's surface, and the night in January 1610 Galileo first
+   saw Europa and Io as two points of light instead of one.       */
 var WORLDS = {
 
   moon: {
@@ -316,6 +319,26 @@ var WORLDS = {
     // what the rampart term draws.
     craterAmp: 1, depthK: 0.18, rampart: 0.8, rayLayers: 0,
   },
+
+  /* Europa: a shell of ice over an ocean, and the youngest surface
+     in the set after Venus — 40 to 90 Myr, so craters are rare and
+     almost everything is tectonic. Most of what is small is not
+     even a primary: secondaries, thrown out together by some distant
+     impact, land in clusters and are absent everywhere else, which
+     is what clump does. Ice craters of this size are about as deep
+     for their width as rock ones. See hEuropa().               */
+  europa: {
+    id: 'europa', kind: 4, seed: 16100108,
+    g: 1.315, R: 1560800,
+    craters: [
+      { cell: 20480, salt:  7, rMin: 500, rMax: 2400, count: 1, prob: 0.22, ageK: 1.0 },
+      { cell:  5120, salt: 13, rMin: 110, rMax:  500, count: 1, prob: 0.16, ageK: 1.2 },
+      { cell:  1280, salt: 29, rMin:  25, rMax:  110, count: 1, prob: 0.10, ageK: 1.4 },
+      { cell:   160, salt: 41, rMin:   4, rMax:   22, count: 2, prob: 0.85, ageK: 1.1, clump: 5200 },
+      { cell:    24, salt: 53, rMin: 0.8, rMax:    4, count: 1, prob: 0.10, ageK: 1.6 },
+    ],
+    craterAmp: 1, depthK: 0.85, rampart: 0, rayLayers: 1, halo: 0.35,
+  },
 };
 
 var WORLD = WORLDS.moon;      // active row; setWorld() swaps it
@@ -369,8 +392,16 @@ function cellCraters(li, cx, cz) {
   var L = CRATER_LAYERS[li];
   var dK = WORLD.depthK;
   var out = [];
+  // Secondaries arrive in clusters, all thrown out by one distant
+  // impact, so a class with clump set only fills the cells that fall
+  // inside a coarse field of clusters. Still a function of the cell.
+  var prob = L.prob;
+  if (L.clump) {
+    var cq = L.cell / L.clump;
+    prob *= sstep(0.64, 0.80, valueNoise(cx * cq + L.salt, cz * cq - L.salt));
+  }
   for (var k = 0; k < L.count; k++) {
-    if (cellRnd(cx, cz, L.salt, k * 6) > L.prob) continue;
+    if (cellRnd(cx, cz, L.salt, k * 6) > prob) continue;
     var u = cellRnd(cx, cz, L.salt, k * 6 + 1);
     // u² biases toward the small end of the class — the power law.
     var r = L.rMin + (L.rMax - L.rMin) * u * u;
@@ -767,12 +798,276 @@ function hVenus(x, z) {
    crests reach it.                                               */
 var FROST_H = 420;
 
+/* ── Europa ─────────────────────────────────────────────────────
+   Twenty kilometres of ice over an ocean, flexed twice a day by
+   Jupiter's tide, and cracked by it everywhere. Almost nothing
+   here was made by an impact. What you walk on is ridged plains:
+   generation after generation of ridges, each one grown along a
+   crack that cut through everything already there, so every
+   younger ridge buries the older ones where its flanks meet them.
+   The newest are double ridges — two crests with a trough between
+   them, a hundred to three hundred metres high and one or two
+   kilometres across, running straight for hundreds of kilometres.
+
+   Three things break the plains up:
+   - bands, where the shell pulled apart and the gap filled from
+     below with finely grooved new ice, kilometres wide;
+   - chaos, where it melted through or nearly: the old plains
+     broke into rafts that drifted and turned in a slushy matrix
+     and froze again, still carrying their ridges, now out of line
+     with their neighbours — the jigsaw Conamara is famous for;
+   - lenticulae, domes and pits and dark spots a few kilometres
+     across, spaced a dozen or so apart, most with a small chaos on
+     top: diapirs of warmer ice rising through the shell.
+
+   Families are the ridge generations, oldest first. Each is a set
+   of parallel lanes holding at most one ridge, kept wholly inside
+   its lane so no lane boundary can ever leave a seam: bearing,
+   spacing, presence, full width (min + spread), height (min +
+   spread), central trough depth as a fraction of the crest. The
+   background fabric is the first four, and which of them dominates
+   changes from place to place (rg), as it does in every Galileo
+   close-up; the last is young enough to wear the dark flanking
+   margins of a triple band.                                       */
+var EU_FAM = [
+  { a: 0.42, sp: 230,  p: 0.80, w0: 70,   w1: 90,   h0: 3,   h1: 7,   tr: 0.00, rg: 1 },
+  { a: 1.63, sp: 290,  p: 0.75, w0: 80,   w1: 110,  h0: 4,   h1: 9,   tr: 0.25, rg: 1 },
+  { a: 2.71, sp: 190,  p: 0.70, w0: 60,   w1: 70,   h0: 2.5, h1: 6,   tr: 0.00, rg: 1 },
+  { a: 2.98, sp: 1150, p: 0.45, w0: 220,  w1: 300,  h0: 14,  h1: 40,  tr: 0.45, rg: 1 },
+  { a: 1.05, sp: 2300, p: 0.38, w0: 450,  w1: 650,  h0: 45,  h1: 110, tr: 0.55 },
+  { a: 2.20, sp: 3700, p: 0.45, w0: 650,  w1: 850,  h0: 80,  h1: 140, tr: 0.60 },
+  { a: 0.13, sp: 9500, p: 0.50, w0: 1000, w1: 1100, h0: 130, h1: 150, tr: 0.62, m: 2.6 },
+];
+for (var fi = 0; fi < EU_FAM.length; fi++) {
+  EU_FAM[fi].c = Math.cos(EU_FAM[fi].a);
+  EU_FAM[fi].s = Math.sin(EU_FAM[fi].a);
+  EU_FAM[fi].salt = 311 + fi * 97;
+  EU_FAM[fi].m = EU_FAM[fi].m || 1;   // reach, in half-widths: > 1 for dark margins
+}
+var EU_BAND_C = Math.cos(2.55), EU_BAND_S = Math.sin(2.55), EU_BAND_SP = 26000;
+var EU_RAFT = 1500;        // chaos raft cell
+var EU_BLOCK = 170;        // matrix block cell
+var EU_LENT = 14000;       // lenticula cell
+
+// Side outputs for the colour pass, like CR_ALB. EU_DARK is how much
+// non-ice material lies on the surface here, −1 (clean frost) to +1;
+// EU_YEL how much of that is the yellow of irradiated sea salt.
+var EU_DARK = 0, EU_YEL = 0;
+
+// Where the shell has broken into chaos. Shared with the colour pass.
+function euChaos(x, z) {
+  return fbm(x * 0.000055 + 2.7, z * 0.000055 - 8.4, 4);
+}
+
+// Ridge families [f0, f1) over warped coordinates, on top of h.
+function euRidges(xw, zw, f0, f1, h) {
+  for (var fi = f0; fi < f1; fi++) {
+    var F = EU_FAM[fi];
+    var u = (xw * F.c + zw * F.s) / F.sp;
+    var lane = Math.floor(u);
+    if (hash2(lane, F.salt) > F.p) continue;
+    var hw = (F.w0 + F.w1 * hash2(lane, F.salt + 1)) * 0.5 / F.sp;
+    var t0 = (hash2(lane, F.salt + 2) - 0.5) * (1 - 2 * hw * F.m) * 0.9;
+    var s = (u - lane - 0.5 - t0) / hw;
+    var as = s < 0 ? -s : s;
+    if (as >= F.m) continue;
+    if (F.m > 1) {
+      // Triple band: dark margins either side of a young ridge, a
+      // few kilometres across and brightest-edged at the crest — the
+      // dark lineae that cross Europa in every picture from orbit.
+      EU_DARK += 0.8 * sstep(F.m, 1.2, as) * sstep(0.35, 0.95, as);
+    }
+    if (as >= 1) continue;
+    var along = (zw * F.c - xw * F.s) / (F.sp * 4 + 600);
+    var amp = (F.h0 + F.h1 * hash2(lane, F.salt + 3))
+            * (0.45 + valueNoise(along, lane * 1.37 + fi * 17.1));
+    if (F.rg) amp *= sstep(0.25, 0.7, valueNoise(xw * 0.00022 + fi * 13.7, zw * 0.00022 - fi * 5.3)) * 1.4 + 0.1;
+    var f = 1 - s * s; f *= f;
+    var prof = F.tr > 0 ? f * (1 - F.tr * Math.exp(-s * s * 16)) : f;
+    // A younger ridge buries the older relief its flanks rest on — all
+    // of it if it is the bigger of the two, and only notches it if not.
+    var foot = sstep(1, 0.72, as) * amp / (amp + 0.6 * (h < 0 ? -h : h) + 1e-3);
+    h = h * (1 - foot) + amp * prof;
+    if (F.m > 1) EU_DARK -= 0.3 * prof;
+  }
+  return h;
+}
+
+/* Everything older than the chaos, as relief above the local base:
+   the ridge fabric, the bands, and the youngest ridges. A chaos raft
+   is a piece of exactly this, moved. */
+function euPre(x, z) {
+  var wx = (valueNoise(x * 0.00012 + 3.1, z * 0.00012 - 7.7) - 0.5) * 1300
+         + (valueNoise(x * 0.0007, z * 0.0007 + 5.5) - 0.5) * 260;
+  var wz = (valueNoise(x * 0.00012 - 11.3, z * 0.00012 + 2.9) - 0.5) * 1300
+         + (valueNoise(x * 0.0007 + 8.2, z * 0.0007) - 0.5) * 260;
+  var xw = x + wx, zw = z + wz;
+  EU_DARK = 0;
+  var h = euRidges(xw, zw, 0, 6, 0);
+
+  // A band: a strip of new ice kilometres wide, grooved along its
+  // length and cutting straight through every ridge older than it.
+  // Young ones are dark; old ones have been frosted over.
+  var ub = (xw * EU_BAND_C + zw * EU_BAND_S) / EU_BAND_SP;
+  var bl = Math.floor(ub);
+  if (hash2(bl, 881) < 0.55) {
+    var bhw = (2600 + hash2(bl, 882) * 2600) / EU_BAND_SP;
+    var bt0 = (hash2(bl, 883) - 0.5) * (1 - 2.3 * bhw) * 0.9;
+    var bs = (ub - bl - 0.5 - bt0) / bhw;
+    var bas = bs < 0 ? -bs : bs;
+    if (bas < 1.1) {
+      var bfoot = sstep(1.1, 0.95, bas);
+      var q = bs * bhw * EU_BAND_SP / 330;
+      var qf = q - Math.floor(q);
+      var grv = smoothT(qf < 0.5 ? qf * 2 : 2 - qf * 2);
+      var hb = -14 + grv * 13 * (0.5 + valueNoise(q * 0.35, (xw * EU_BAND_S - zw * EU_BAND_C) * 0.0007))
+             - 22 * Math.exp(-bs * bs * 60);
+      h = h * (1 - bfoot) + hb * bfoot;
+      EU_DARK = EU_DARK * (1 - bfoot) + bfoot * (hash2(bl, 884) < 0.6 ? 0.45 : -0.1);
+    }
+  }
+  return euRidges(xw, zw, 6, 7, h);
+}
+
+// The landing site sits on the margin of a chaos, with the rafts
+// between you and Jupiter: the tectonic field is shifted to put it
+// there. Craters are left where they are, so the spawn fade holds.
+var EU_OX = 1500, EU_OZ = 300;
+
+function hEuropa(x0, z0) {
+  var x = x0 + EU_OX, z = z0 + EU_OZ;
+  var nx = x * 0.00012, nz = z * 0.00012;
+  // The shell is flat at long wavelengths: a few hundred metres of
+  // regional relief over tens of kilometres.
+  var base = (fbm(nx, nz, 4) - 0.5) * 170;
+  base += (fbm(nx * 7.3 + 13, nz * 7.3 - 6, 2) - 0.5) * 22;
+
+  // Lenticulae. Most carry a small chaos on top, which feeds the
+  // chaos mask below; spots are dark and flat, pits dark and low.
+  // A centre sits in the middle 60% of its cell and reaches at most
+  // 0.43 of a cell, so only the 2×2 cells nearest the point can touch it.
+  var lc = 0, ldark = 0;
+  var lcx = Math.floor(x / EU_LENT - 0.5), lcz = Math.floor(z / EU_LENT - 0.5);
+  for (var dz = 0; dz <= 1; dz++) {
+    for (var dx = 0; dx <= 1; dx++) {
+      var ix = lcx + dx, iz = lcz + dz;
+      var k0 = hash2(ix * 7 + 3, iz * 11 - 5);
+      if (k0 > 0.55) continue;
+      var cxl = (ix + 0.2 + 0.6 * hash2(ix * 13 + 1, iz * 5 + 9)) * EU_LENT;
+      var czl = (iz + 0.2 + 0.6 * hash2(ix * 3 - 7, iz * 17 + 2)) * EU_LENT;
+      var rl = 2200 + 3800 * hash2(ix * 19 + 4, iz * 23 - 1);
+      var ox = x - cxl, oz = z - czl;
+      var d2 = (ox * ox + oz * oz) / (rl * rl);
+      if (d2 >= 1) continue;
+      var pf = (1 - d2) * (1 - d2);
+      var ty = k0 / 0.55;
+      if (ty < 0.55) {            // dome, broken on top
+        base += pf * (40 + 110 * hash2(ix * 29, iz * 31));
+        lc = Math.max(lc, sstep(0.55, 0.18, d2) * 0.9);
+      } else if (ty < 0.8) {      // pit
+        base -= pf * (30 + 60 * hash2(ix * 29, iz * 31));
+        ldark = Math.max(ldark, pf * 0.5);
+      } else {                    // spot: a small chaos, flush
+        lc = Math.max(lc, sstep(0.7, 0.3, d2));
+      }
+    }
+  }
+
+  var pre = euPre(x, z);
+  var dark = EU_DARK + ldark;
+
+  // Chaos. cmW grows slowly toward the interior and sets how far the
+  // rafts have drifted and how much matrix has opened between them;
+  // cmE is the region's edge, which is sharp, as the real ones are.
+  var cf = euChaos(x, z);
+  var cmE = Math.max(sstep(0.585, 0.600, cf), lc);
+  var h;
+  if (cmE > 0.004) {
+    var cmW = Math.max(sstep(0.59, 0.72, cf), lc * 0.8);
+    // The matrix: hummocky, lumpy ice, jumbled with blocks too small
+    // to have kept their ridges, standing below the rafts.
+    // Each octave on its own rotated lattice, or value noise's grid
+    // shows through as rounded squares.
+    var b1 = valueNoise((x * 0.88 + z * 0.47) / 260 + 4.1, (z * 0.88 - x * 0.47) / 260 - 2.2) * 2 - 1;
+    var b2 = valueNoise((x * 0.36 - z * 0.93) / 95 - 7.3, (z * 0.36 + x * 0.93) / 95 + 1.9) * 2 - 1;
+    var b3 = valueNoise((x * 0.97 + z * 0.24) / 34 + 2.6, (z * 0.97 - x * 0.24) / 34 - 8.8) * 2 - 1;
+    var mat = (-47 + (1 - (b1 < 0 ? -b1 : b1)) * 42 + (1 - (b2 < 0 ? -b2 : b2)) * 14
+                   + (1 - (b3 < 0 ? -b3 : b3)) * 4) * (0.35 + 0.65 * cmW);
+    var bcx = Math.floor(x / EU_BLOCK), bcz = Math.floor(z / EU_BLOCK);
+    var e1 = 1e9, e2 = 1e9, eh = 0;
+    if (cmW > 0.01) for (var dz = -1; dz <= 1; dz++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        var ix = bcx + dx, iz = bcz + dz;
+        var ox = x - (ix + 0.15 + 0.7 * hash2(ix * 5 + 1, iz * 3 - 4)) * EU_BLOCK;
+        var oz = z - (iz + 0.15 + 0.7 * hash2(ix * 7 - 2, iz * 11 + 6)) * EU_BLOCK;
+        var dd = ox * ox + oz * oz;
+        if (dd < e1) { e2 = e1; e1 = dd; eh = hash2(ix * 13 + 5, iz * 17 - 3); }
+        else if (dd < e2) e2 = dd;
+      }
+    }
+    if (cmW > 0.01) mat += (eh * 18 - 5) * sstep(4, 50, Math.sqrt(e2) - Math.sqrt(e1)) * cmW;
+
+    // Rafts: the cells of a Voronoi diagram, so they tile the plane
+    // and meet along straight fracture lines, shrinking apart as the
+    // matrix opens. Each carries the plains that were there, turned
+    // and shifted, lifted on its own freeboard with its own tilt.
+    var rcx = Math.floor(x / EU_RAFT), rcz = Math.floor(z / EU_RAFT);
+    var f1 = 1e9, f2 = 1e9, sx = 0, sz = 0, si = 0, sj = 0;
+    for (var dz = -1; dz <= 1; dz++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        var ix = rcx + dx, iz = rcz + dz;
+        var px = (ix + 0.1 + 0.8 * hash2(ix * 31 + 7, iz * 17 - 1)) * EU_RAFT;
+        var pz = (iz + 0.1 + 0.8 * hash2(ix * 11 - 3, iz * 29 + 5)) * EU_RAFT;
+        var dd = (x - px) * (x - px) + (z - pz) * (z - pz);
+        if (dd < f1) { f2 = f1; f1 = dd; sx = px; sz = pz; si = ix; sj = iz; }
+        else if (dd < f2) f2 = dd;
+      }
+    }
+    var gap = (Math.sqrt(f2) - Math.sqrt(f1)) * 0.5;
+    var r1 = hash2(si * 3 + 1, sj * 7 + 2), r2 = hash2(si * 5 - 3, sj * 3 + 8);
+    var half = cmW * EU_RAFT * (0.05 + 0.30 * r1);         // half the matrix gap
+    var raft = sstep(half, half + 150, gap);
+    var hc = mat;
+    if (raft > 0) {
+      var th = (r2 - 0.5) * 1.1 * cmW, ct = Math.cos(th), st = Math.sin(th);
+      var qx = x - sx, qz = z - sz;
+      var tx = sx + qx * ct - qz * st + (hash2(si * 17, sj * 19) - 0.5) * 500 * cmW;
+      var tz = sz + qx * st + qz * ct + (hash2(si * 23, sj * 13) - 0.5) * 500 * cmW;
+      var lift = 60 + 110 * hash2(si * 41 + 9, sj * 37 - 4);
+      var tilt = (qx * (r1 - 0.5) + qz * (r2 - 0.5)) * 0.07 * cmW;
+      var rp = euPre(tx, tz);
+      hc = mat * (1 - raft) + (lift * cmW + rp + tilt) * raft;
+      dark = dark * (1 - cmE) + (EU_DARK * raft + 0.75 * (1 - raft)) * cmE;
+    } else {
+      dark = dark * (1 - cmE) + 0.75 * cmE;
+    }
+    h = base + pre * (1 - cmE) + (hc + 25 * cmW) * cmE;
+    EU_YEL = cmE * (1 - raft * 0.8);
+  } else {
+    h = base + pre;
+    EU_YEL = 0;
+  }
+
+  // Dark lag gathers in the lows and frost on the crests.
+  EU_DARK = dark + sstep(20, -30, pre) * 0.25 - sstep(20, 120, pre) * 0.3;
+
+  // Roughness: the ridged plains are corrugated at every scale Galileo
+  // could see, and mass wasting has softened none of it smooth. Ridge
+  // flanks are lumpier than the flats between them — slumped blocks,
+  // talus lobes — and chaos lumpier than either.
+  var rq = pre < 0 ? -pre : pre;
+  h += (fbm(x * 0.0075 + 1.3, z * 0.0075 - 4.1, 3) - 0.5) * (5 + 0.05 * rq + 12 * EU_YEL);
+  h += (fbm(x * 0.028 + 3, z * 0.028 - 5, 2) - 0.5) * (3.2 + 0.02 * rq);
+  h += (fbm(x * 0.12, z * 0.12, 2) - 0.5) * 0.45;
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
 function terrainHeight(x, z) {
   return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z)
-       : WK === 3 ? hVenus(x, z) : hSmall(x, z);
+       : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -819,7 +1114,7 @@ function curveDrop(dx, dz) {
    0.28 for the ferric dust that coats everything else on Mars,
    and 0.10 for Venusian basalt, which is about as dark as the
    Moon and looks nothing like it.                               */
-function surfaceTint(x, z, h, slope, fresh, out) {
+function surfaceTint(x, z, h, slope, fresh, dark, yel, out) {
   var v;
   if (WK === 0) {
     // Steep walls shed dust and expose brighter bedrock, crater
@@ -877,6 +1172,28 @@ function surfaceTint(x, z, h, slope, fresh, out) {
       out[1] += (fm * 0.98 - out[1]) * fr;
       out[2] += (fm * 1.06 - out[2]) * fr;
     }
+
+  } else if (WK === 4) {
+    // Europa is water ice, and most of it is nearly white: a
+    // geometric albedo of 0.67, ten times the Moon's. What darkens it
+    // is non-ice material brought up from below and then cooked by
+    // Jupiter's radiation — reddish-brown along the lineae, and in
+    // chaos the yellow-brown of irradiated sea salt, which is what
+    // Hubble found in Tara Regio. It lies in the lows as a lag and
+    // off the crests, where frost collects; steep faces shed it and
+    // show clean ice, and a fresh crater throws out clean, bluer ice
+    // with rays across everything around it.
+    var d = dark + (valueNoise(x * 0.00031 + 5.1, z * 0.00031 - 2.3) - 0.5) * 0.34
+                 + (valueNoise(x * 0.021, z * 0.021) - 0.5) * 0.14;
+    var cl = fresh * WORLD.halo + rayBrightness(x, z) * 0.8;
+    d -= slope * 0.25 + cl * 1.4;
+    d = d < -1 ? -1 : d > 1 ? 1 : d;
+    var t = d > 0 ? d : 0;
+    v = (1 - t * 0.58 + (d < 0 ? -d : 0) * 0.14) * (0.94 + valueNoise(x * 0.09, z * 0.09) * 0.12);
+    var k = t * 0.85;
+    out[0] = v * (0.965 + ((0.80 + 0.07 * yel) - 0.965) * k);
+    out[1] = v * (0.982 + ((0.60 + 0.14 * yel) - 0.982) * k);
+    out[2] = v * (1.000 + ((0.46 + 0.02 * yel) - 1.000) * k) * (1 + cl * 0.05);
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -993,7 +1310,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>5</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>6</b> change world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -1034,7 +1351,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a hard jump would be a launch,<br>' +
           'so you push off with a toe and drift for a minute. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1</b>–<b>5</b> change world.',
+          'the sky and never moves. <b>1</b>–<b>6</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -1062,7 +1379,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1</b>–<b>5</b> change world.',
+          'you want back. <b>1</b>–<b>6</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -1139,9 +1456,79 @@ const VIEW = {
     exposure: 1.0, eye: [0.16, 0.3, 6], tone: 'aces', bloom: [0.2, 0.75, 3.0],
     companions: [],
   },
+
+  /* Europa is five times further from the sun than the Moon: 50 W/m²,
+     one part in twenty-seven, from a disc a tenth of a degree across.
+     That is still an overcast day's worth of light, and it falls on
+     ice ten times as reflective as lunar soil, so the eye stops down
+     and this is the brightest ground in the set to stand on.
+
+     The same reflectivity changes the shadows. With no air there is
+     no sky to light them, so they are lit by the sunlit ice around
+     them, and ice returns two-thirds of what it gets: a shadow here
+     sits at a sixth of the lit ground, where a lunar one sits at a
+     fiftieth. And it is lit by ice, not by sky, so it is the colour
+     of the ice — Earth's snow shadows are blue, and these are not.
+     Jupitershine adds under 1%, which is nothing next to that.
+
+     Tara Regio is chaos on the leading hemisphere, 75° west of the
+     point under Jupiter, which puts Jupiter 15° above the eastern
+     horizon. See the jupiter companion for why it looks the way it
+     does from here. */
+  europa: {
+    name: 'EUROPA', site: 'Tara Regio', gTxt: '1.31 m/s²',
+    title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
+    fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
+          'Jupiter hangs 12° wide over the chaos to the east, bands on end, and never<br>' +
+          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>6</b> change world.',
+    air: false, stars: 1,
+    // Light here is kept in units ten times the Moon's — a sun of
+    // 1.26 rather than 0.126 — and the stars and the eye's range are
+    // scaled to match, so every ratio is the physical one. In the
+    // Moon's units the ground's radiance is small enough that the
+    // eye's exposure amplifies the output dither into coloured noise.
+    sunColor: 0xfff8f2, sunPower: 1.26, sunSize: 10.7, sunHDR: [60, 57, 52],
+    corona: 2000, coronaColor: [0.68, 0.66, 0.62],
+    // Bounce off the ice, a third of the Moon's in absolute terms: a
+    // twenty-seventh of the sun, off ground seven times as bright,
+    // bounced again off the ground it lands on.
+    hemi: [0x181715, 0x37383a, 10.0], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 214, mapTint: [0.985, 1.0, 1.02], pits: 18, grain: 0.55, clods: 0.5, pebbles: 110,
+    // Europa's photometry (Domingue et al. 1991): bright grains, w =
+    // 0.96, backscattering, and an opposition surge a fraction of a
+    // degree wide — much narrower than the Moon's, as fine frost
+    // gives. Multiple scattering in ice this bright fills in what
+    // roughness would shade, so theta is small.
+    hapke: { w: 0.96, b: 0.35, c: 0.80, B0: 0.5, h: 0.002, theta: 10, Bc0: 0.25, hc: 0.004 },
+    // Grain shadows are filled from inside by the same scattering, so
+    // they are half as deep (the third term) as on dark regolith.
+    micro: [0.25, 0.22, 0.3], sparkle: 3.0,
+    levels: L4, fly: 400, rover: true,
+    dustColor: 0xd3d6db, dustDrag: 0, stampColor: 0xc4cad2, soil: 0xd6d8dc,
+    // Blocks of ice, cleaner than the frost around them; few of them
+    // come from craters, most are talus shed off steep faces.
+    rockTint: [0.97, 0.99, 1.03], rockAlb: [0.50, 0.25], rockN: 0.35, talus: 700,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    // The key sits higher than on the dark bodies: an eye anchors
+    // white on the brightest surface in view, and ice this reflective
+    // should read as white, not as the mid-grey the Moon's mare does.
+    exposure: 1.0, eye: [0.40, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0],
+    companions: ['jupiter', 'io', 'ganymede', 'callisto'],
+    // Earth is never more than 12° from the sun from here, so that is
+    // where the rover's dish looks, not at Jupiter.
+    relay: 'sun',
+    // Surface dose from Jupiter's trapped electrons and ions: the
+    // commonly quoted 5.4 Sv a day, against 1.4 mSv on the Moon (Chang'e
+    // 4) and 0.64 on Mars (Curiosity). Four to five sieverts at once
+    // kills half the people who receive it. The leading hemisphere,
+    // where this is, is spared some of the electrons that the
+    // trailing one takes, so here it is if anything an overestimate.
+    dose: 5.4,
+  },
 };
 
-const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos', 'venus'];
+const WORLD_IDS = ['moon', 'mars', 'phobos', 'deimos', 'venus', 'europa'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -1181,11 +1568,13 @@ onmessage = function (e) {
 
   var hg = new Float32Array(V);          // true heights, incl. 1-ring outside
   var fg = new Float32Array(V);          // fresh-ejecta weight, from the same pass
+  var dg = new Float32Array(V), yg = new Float32Array(V);   // Europa: non-ice, and salt
   for (var j = 0; j < W; j++) {
     var pz = z0 + (j - 1) * step;
     for (var i = 0; i < W; i++) {
       hg[j * W + i] = terrainHeight(x0 + (i - 1) * step, pz);
       fg[j * W + i] = CR_ALB;
+      dg[j * W + i] = EU_DARK; yg[j * W + i] = EU_YEL;
     }
   }
 
@@ -1231,7 +1620,7 @@ onmessage = function (e) {
       // Albedo comes from the kernel, so it changes with the body.
       var slope = Math.hypot(hR - hL, hU - hD) * inv2s * 0.7;
       if (slope > 1) slope = 1;
-      surfaceTint(px, pz, hC, slope, fg[kc], _tint);
+      surfaceTint(px, pz, hC, slope, fg[kc], dg[kc], yg[kc], _tint);
       col[k * 3] = _tint[0]; col[k * 3 + 1] = _tint[1]; col[k * 3 + 2] = _tint[2];
     }
   }
@@ -1836,7 +2225,7 @@ void RE_Direct_Regolith( const in IncidentLight directLight, const in vec3 geome
 const GLSL_GROUND = `
 uniform float rgMean;   // mean linear albedo of the regolith map
 uniform vec3 rgMeanC;   // …and its mean colour, for where the tile is too far to resolve
-uniform vec4 rgMicro;   // micro-craters: ( strength, occupancy, –, – )
+uniform vec4 rgMicro;   // ( micro-crater strength, occupancy, grain-shadow depth, – )
 uniform vec3 uSunView;
 uniform float uSparkle;
 
@@ -1991,7 +2380,7 @@ const GROUND_NORMAL = `
   float rgSeen = smoothstep( 0.02, 0.3, rgPhase );
   // Resolved only up close: further out, grain-scale shadowing is what
   // Hapke's roughness term already accounts for.
-  float grainSh = 0.6 * rgSeen * ( 1.0 - smoothstep( 4.0, 16.0, rgDist ) );
+  float grainSh = rgMicro.z * rgSeen * ( 1.0 - smoothstep( 4.0, 16.0, rgDist ) );
   float microLit = mix( 1.0, smoothstep( -0.1, 0.1, tsSun.x - tMicro ), grainSh ) * mcLit;
   microLit = mix( 1.0, microLit, tsSun.w );
 `;
@@ -2104,7 +2493,7 @@ const groundHapke = hapkeUniforms();
 const GROUND_U = {
   rgMean: { value: 0.1 },
   rgMeanC: { value: new THREE.Color(0.1, 0.1, 0.1) },
-  rgMicro: { value: new THREE.Vector4(1, 0.85, 0, 0) },
+  rgMicro: { value: new THREE.Vector4(1, 0.85, 0.6, 0) },
   uSunView, uSparkle,
 };
 
@@ -2782,6 +3171,14 @@ const rockSystem = (() => {
           }
         }
       }
+    }
+    // Talus. Where the rock comes from steep faces rather than from
+    // craters — on Europa, the flanks of every ridge and the scarps
+    // round every chaos raft — blocks lie where slopes shed them.
+    for (let i = 0; i < (world.talus || 0); i++) {
+      const x = x0 + rnd() * SIZE, z = z0 + rnd() * SIZE, e = 2, h0 = terrainHeight(x, z);
+      const sl = Math.hypot(terrainHeight(x + e, z) - h0, terrainHeight(x, z + e) - h0) / e;
+      if (rnd() < (sl - 0.13) * 4) consider(x, z, 0.08 + Math.pow(rnd(), 2.4) * 1.8);
     }
     // Background scatter, and a carpet of pebbles.
     for (let i = 0; i < 40 * nMul; i++)
@@ -3777,6 +4174,270 @@ function moonletMaps(kind) {
   return { day: t };
 }
 
+/* ── Jupiter ────────────────────────────────────────────────────
+   From Europa it is 12° across, twenty-four times our Moon, so the
+   map is looked at closely and has to hold up. What makes Jupiter
+   Jupiter is its jets: a dozen zonal winds, alternating east and
+   west with latitude, shear everything into bands — pale zones
+   where gas rises and cold ammonia cloud forms, darker belts where
+   it sinks and the deeper, browner cloud shows through — and the
+   shear at every boundary rolls up into eddies and ovals. So the
+   map is built the way the planet is: a latitude profile of belts
+   and zones, displaced by turbulence that is stretched along the
+   jets, stirred by eddies on the boundaries, and then the named
+   features — the Great Red Spot in its hollow, oval BA, the String
+   of Pearls, the brown barges in the North Equatorial Belt, and
+   along its southern edge the blue-grey hot spots, holes down to
+   the warm depths, trailing festoons across the Equatorial Zone.
+   Colours are true colour, which is subtler than most pictures of
+   it: cream and tan and brown, and only the Red Spot is red. */
+function jupiterPixels(W, H) {
+  const px = new Uint8ClampedArray(W * H * 4);
+  // Noise that wraps in longitude, period P lattice cells.
+  const pn = (x, y, P) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const u = smoothT(x - xi), v = smoothT(y - yi);
+    const x0 = ((xi % P) + P) % P, x1 = (x0 + 1) % P;
+    return (hash2(x0, yi) * (1 - u) + hash2(x1, yi) * u) * (1 - v)
+         + (hash2(x0, yi + 1) * (1 - u) + hash2(x1, yi + 1) * u) * v;
+  };
+  const pf = (x, y, P, oct) => {
+    let sum = 0, amp = 0.5, f = 1, n = 0;
+    for (let i = 0; i < oct; i++) { sum += amp * pn(x * f, y * f, P * f); n += amp; amp *= 0.5; f *= 2; }
+    return sum / n;
+  };
+
+  // The profile, north to south: each row is a band's southern edge
+  // in latitude, its colour, and how turbulent it is. Belts churn;
+  // zones are smoother.
+  const BANDS = [
+    [ 64, 120, 118, 116, 0.9],   // north polar region, blue-grey
+    [ 57, 146, 140, 130, 0.8],
+    [ 51, 176, 168, 152, 0.6],
+    [ 45, 150, 138, 122, 0.8],
+    [ 39, 194, 184, 166, 0.5],   // north north temperate zone
+    [ 34, 160, 136, 110, 0.8],   // NNTB
+    [ 28, 212, 202, 182, 0.4],   // north temperate zone
+    [ 23, 178, 134,  96, 0.9],   // north temperate belt, orange-brown
+    [ 17, 228, 218, 196, 0.35],  // north tropical zone
+    [  7, 150, 104,  72, 1.0],   // north equatorial belt, the darkest
+    [ -7, 224, 206, 170, 0.5],   // equatorial zone, cream with ochre
+    [-19, 162, 120,  84, 1.0],   // south equatorial belt
+    [-26, 230, 221, 201, 0.35],  // south tropical zone, the Red Spot's
+    [-32, 172, 146, 116, 0.7],   // south temperate belt
+    [-38, 214, 205, 186, 0.4],   // south temperate zone
+    [-45, 162, 148, 128, 0.7],
+    [-51, 184, 176, 160, 0.6],
+    [-58, 148, 140, 128, 0.8],
+    [-65, 158, 152, 142, 0.7],
+    [-90, 118, 116, 114, 0.9],   // south polar region
+  ];
+  // Tabulated at 0.05°, and softened, so band edges are sharp but not
+  // aliased: a jet boundary on Jupiter is a few hundred kilometres.
+  const LN = 3601, lut = new Float32Array(LN * 4);
+  for (let k = 0; k < LN; k++) {
+    const lat = 90 - k * 0.05;
+    let b = 0;
+    while (b < BANDS.length - 1 && lat < BANDS[b][0]) b++;
+    lut.set([BANDS[b][1], BANDS[b][2], BANDS[b][3], BANDS[b][4]], k * 4);
+  }
+  const soft = new Float32Array(LN * 4);
+  for (let k = 0; k < LN; k++) {
+    for (let c = 0; c < 4; c++) {
+      let s = 0, n = 0;
+      for (let d = -14; d <= 14; d++) { const j = Math.min(LN - 1, Math.max(0, k + d)); s += lut[j * 4 + c]; n++; }
+      soft[k * 4 + c] = s / n;
+    }
+  }
+  const at = (lat, c) => soft[Math.min(LN - 1, Math.max(0, Math.round((90 - lat) * 20))) * 4 + c];
+
+  // Eddies: one chance per cell of a grid in (lon, lat), turning the
+  // sample point around the cell's centre. They roll up on the band
+  // boundaries, anticyclonic in zones, cyclonic in belts.
+  const eddy = (lon, lat) => {
+    const ci = Math.floor(lon / 7), cj = Math.floor((lat + 90) / 4.5);
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        const i = ((ci + di) % 52 + 52) % 52, j = cj + dj;
+        if (hash2(i * 3 + 11, j * 7 - 5) > 0.42) continue;
+        const cx = (i + 0.2 + 0.6 * hash2(i, j + 91)) * 7, cy = (j + 0.2 + 0.6 * hash2(i + 57, j)) * 4.5 - 90;
+        let dx = lon - cx; if (dx > 180) dx -= 360; else if (dx < -180) dx += 360;
+        const dy = lat - cy, r = 0.9 + 1.7 * hash2(i + 13, j - 29);
+        const d2 = (dx * dx * 0.45 + dy * dy) / (r * r);
+        if (d2 > 4) continue;
+        const a = (hash2(i - 7, j + 3) < 0.5 ? -1 : 1) * 1.1 * Math.exp(-d2 * 1.2);
+        const ca = Math.cos(a), sa = Math.sin(a);
+        lon = cx + dx * ca - dy * sa * 1.5;
+        lat = cy + dx * sa / 1.5 + dy * ca;
+      }
+    }
+    return [lon, lat];
+  };
+
+  // The named features, at stated longitudes: [lon, lat, half-width
+  // in longitude, half-height in latitude, colour, spin].
+  const GRS = [60, -22.5, 7.0, 4.9];
+  const OVALS = [[112, -33, 3.2, 2.2, [226, 216, 200]]];                  // oval BA
+  for (let k = 0; k < 8; k++) OVALS.push([150 + k * 24 + hash2(k, 5) * 8, -40.5, 1.5, 1.0, [236, 232, 222]]);
+  const BARGES = [];
+  for (let k = 0; k < 6; k++) BARGES.push([20 + k * 57 + hash2(k, 9) * 20, 15.2, 3.4, 1.1]);
+  const SPOTS = [];
+  for (let k = 0; k < 10; k++) SPOTS.push([k * 36 + hash2(k, 21) * 10, 6.8]);
+  const wrapD = (d) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
+
+  for (let y = 0; y < H; y++) {
+    const v = (y + 0.5) / H, lat0 = 90 - v * 180;
+    for (let x = 0; x < W; x++) {
+      const u = (x + 0.5) / W;
+      let lon = u * 360, lat = lat0;
+      const turb = at(lat, 3);
+
+      // The Red Spot turns the flow around it, and so do the ovals.
+      {
+        const dx = wrapD(lon - GRS[0]) / (GRS[2] * 1.7), dy = (lat - GRS[1]) / (GRS[3] * 1.7);
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 1) {
+          const a = 1.3 * (1 - d2) * (1 - d2);          // counter-clockwise, southern anticyclone
+          const ca = Math.cos(a), sa = Math.sin(a);
+          const ex = dx * ca - dy * sa, ey = dx * sa + dy * ca;
+          lon = GRS[0] + ex * GRS[2] * 1.7; lat = GRS[1] + ey * GRS[3] * 1.7;
+        }
+      }
+      [lon, lat] = eddy(lon, lat);
+
+      // Turbulence, stretched along the jets: a belt's edge wanders a
+      // degree or two, and everything is drawn out into streaks.
+      const uu = lon / 360;
+      const wl = (pf(uu * 10, v * 30, 10, 3) - 0.5) * 2.6 + (pf(uu * 36, v * 90, 36, 3) - 0.5) * 0.9;
+      const ls = lat + wl * turb;
+      const us = uu + (pf(uu * 5 + 0.3, v * 60, 5, 2) - 0.5) * 0.04;
+      let r = at(ls, 0), g = at(ls, 1), b = at(ls, 2);
+      const fine = pf(us * 90, v * 160, 90, 4);
+      const fl = 0.92 + (fine - 0.5) * (0.14 + 0.14 * turb);
+      r *= fl; g *= fl; b *= fl * 0.98 + 0.02;
+      // Zones carry faint bright convective puffs; belts dark rifts.
+      const puff = pf(us * 150 + 3, v * 150, 150, 2);
+      if (turb < 0.6) { const k = Math.max(0, puff - 0.62) * 0.9; r += (245 - r) * k; g += (240 - g) * k; b += (228 - b) * k; }
+      else { const k = Math.max(0, puff - 0.66) * 1.4; r += (240 - r) * k; g += (230 - g) * k; b += (210 - b) * k; }
+
+      // The Great Red Spot: salmon core, paler collar, and the hollow —
+      // a bright bay it clears in the south equatorial belt.
+      {
+        const dx = wrapD(lon - GRS[0]) / GRS[2], dy = (lat - GRS[1]) / GRS[3];
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const hollow = Math.max(0, 1 - Math.abs(Math.sqrt(dx * dx * 0.5 + dy * dy * 0.7) - 1.35) / 0.4);
+        if (hollow > 0) { const k = hollow * 0.55; r += (234 - r) * k; g += (224 - g) * k; b += (204 - b) * k; }
+        if (d < 1.15) {
+          const core = (1 - smoothT(clamp01((d - 0.45) / 0.5))) * (0.85 + 0.15 * fine);
+          const collar = Math.max(0, 1 - Math.abs(d - 0.95) / 0.2) * 0.5;
+          r += (206 - r) * core * 0.85 + (228 - r) * collar;
+          g += (122 - g) * core * 0.85 + (206 - g) * collar;
+          b += (86 - b) * core * 0.85 + (180 - b) * collar;
+        }
+      }
+      for (const [ox, oy, rx, ry, c] of OVALS) {
+        const dx = wrapD(lon - ox) / rx, dy = (lat - oy) / ry, d2 = dx * dx + dy * dy;
+        if (d2 < 1.6) {
+          const k = 1 - smoothT(clamp01((d2 - 0.55) / 1.0));
+          r += (c[0] - r) * k; g += (c[1] - g) * k; b += (c[2] - b) * k;
+        }
+      }
+      for (const [ox, oy, rx, ry] of BARGES) {
+        const dx = wrapD(lon - ox) / rx, dy = (lat - oy) / ry, d2 = dx * dx + dy * dy;
+        if (d2 < 1.4) { const k = (1 - smoothT(clamp01((d2 - 0.4) / 1.0))) * 0.8; r += (104 - r) * k; g += (66 - g) * k; b += (46 - b) * k; }
+      }
+      // Hot spots, and the festoons trailing off them into the zone.
+      for (const [ox, oy] of SPOTS) {
+        const dx = wrapD(lon - ox), dy = lat - oy;
+        const d2 = (dx * dx) / 6.5 + (dy * dy) / 0.9;
+        let k = d2 < 2 ? (1 - smoothT(clamp01((d2 - 0.3) / 1.7))) * 0.75 : 0;
+        // A festoon: a thin filament curving down and west across the EZ.
+        if (dy < 0 && dy > -8 && dx < 2 && dx > -16) {
+          const along = -dy / 8, off = dx + 5 * along + 7 * along * along;
+          k = Math.max(k, Math.exp(-off * off / 1.2) * (1 - along) * 0.45);
+        }
+        if (k > 0) { r += (92 - r) * k; g += (100 - g) * k; b += (112 - b) * k; }
+      }
+
+      const o = (y * W + x) * 4;
+      px[o] = r; px[o + 1] = g; px[o + 2] = b; px[o + 3] = 255;
+    }
+  }
+  return px;
+}
+function jupiterMaps() {
+  const W = 1024, H = 512;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.putImageData(new ImageData(jupiterPixels(W, H), W, H), 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return { day: t };
+}
+
+/* ── Io, Ganymede, Callisto ─────────────────────────────────────
+   The other three Galilean moons, as Europa sees them: under a
+   degree at best, so a map this coarse is already more than the
+   eye gets. Io is sulphur — yellow and cream and orange, pocked
+   with black volcanic paterae, red rings where the big plumes fall
+   back, darker reddish poles. Ganymede is two terrains, old dark
+   ground and younger bright grooved ice, and frost caps. Callisto
+   is the darkest, oldest surface of the four, spattered with the
+   bright ice of its craters. */
+function galileanMaps(kind) {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const img = x.createImageData(W, H);
+  let s = kind === 'io' ? 1979 : kind === 'ganymede' ? 1610 : 4242;
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const spots = Array.from({ length: kind === 'callisto' ? 260 : 90 }, () =>
+    [rnd() * W, Math.acos(1 - 2 * rnd()) / Math.PI * H, 0.8 + Math.pow(rnd(), 3) * 7, rnd()]);
+  for (let y = 0; y < H; y++) {
+    const lat = 90 - (y + 0.5) / H * 180, alat = Math.abs(lat);
+    for (let xx = 0; xx < W; xx++) {
+      const n1 = fbm(xx * 0.02 + 3, y * 0.02, 4), n2 = fbm(xx * 0.08, y * 0.08 + 9, 3);
+      let r, g, b;
+      if (kind === 'io') {
+        r = 214 + n1 * 30 - 15; g = 196 + n1 * 26 - 13; b = 128 + n2 * 40 - 20;
+        const pole = THREE.MathUtils.smoothstep(alat + n1 * 20, 50, 72);
+        r += (150 - r) * pole; g += (112 - g) * pole; b += (82 - b) * pole;
+        const frost = Math.max(0, n2 - 0.6) * 2;
+        r += (236 - r) * frost; g += (232 - g) * frost; b += (216 - b) * frost;
+      } else if (kind === 'ganymede') {
+        const bright = THREE.MathUtils.smoothstep(n1, 0.47, 0.53);
+        r = 112 + bright * 64 + n2 * 20; g = 102 + bright * 62 + n2 * 18; b = 92 + bright * 64 + n2 * 16;
+        const cap = THREE.MathUtils.smoothstep(alat + n2 * 12, 40, 55);
+        r += (206 - r) * cap * 0.7; g += (206 - g) * cap * 0.7; b += (212 - b) * cap * 0.7;
+      } else {
+        r = 92 + n1 * 26 + n2 * 10; g = 86 + n1 * 24 + n2 * 9; b = 78 + n1 * 20 + n2 * 8;
+      }
+      for (const [sx, sy, sr, sk] of spots) {
+        let dx = Math.abs(xx - sx); dx = Math.min(dx, W - dx);
+        const d = Math.hypot(dx * Math.max(0.2, Math.cos(lat * DEG)), y - sy) / sr;
+        if (d > 2.4) continue;
+        if (kind === 'io') {
+          // Black patera, and around the biggest a red plume ring.
+          if (d < 1) { const k = (1 - d) * 0.9; r += (40 - r) * k; g += (34 - g) * k; b += (28 - b) * k; }
+          if (sr > 4 && sk > 0.6) { const k = Math.max(0, 1 - Math.abs(d - 1.9) / 0.35) * 0.6; r += (200 - r) * k; g += (96 - g) * k; b += (60 - b) * k; }
+        } else if (d < 1.2) {
+          // Fresh craters: bright ice, rayed on Callisto.
+          const k = (1 - d / 1.2) * (kind === 'callisto' ? 0.8 : 0.6);
+          r += (230 - r) * k; g += (230 - g) * k; b += (232 - b) * k;
+        }
+      }
+      const o = (y * W + xx) * 4;
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return { day: t };
+}
+
 /* ── What hangs overhead ────────────────────────────────────────
    Every companion sits on the same 6.2 km shell and is drawn at a
    stated angular size, so the sizes below are comparable to each
@@ -3791,7 +4452,25 @@ const COMPANION_DIST = 6200;
 const TEXGEN = {
   earth: earthMaps, mars: marsMaps,
   phobos: () => moonletMaps('phobos'), deimos: () => moonletMaps('deimos'),
+  jupiter: jupiterMaps, io: () => galileanMaps('io'),
+  ganymede: () => galileanMaps('ganymede'), callisto: () => galileanMaps('callisto'),
 };
+
+/* Jupiter's frame, as seen from the site. Europa is locked, and its
+   orbit, Jupiter's equator and the orbits of the other three all
+   lie in one plane, which from Europa's surface is a great circle
+   across the sky through Jupiter. Everything below is computed from
+   where you stand — 10°S, 75°W, in Tara Regio — in scene axes (x
+   east, y up, z south). J is toward Jupiter, which comes out 15°
+   above the eastern horizon; X and Y span the orbital plane (X from
+   Jupiter toward Europa, Y along Europa's motion); Z is Jupiter's
+   north, and Europa's. */
+const JOV = (() => {
+  const b = -10 * DEG, l = -75 * DEG;
+  const J = [-Math.sin(l), Math.cos(b) * Math.cos(l), Math.sin(b) * Math.cos(l)];
+  const Y = [-Math.cos(l), -Math.cos(b) * Math.sin(l), -Math.sin(b) * Math.sin(l)];
+  return { J, X: J.map((v) => -v), Y, Z: [0, Math.sin(b), -Math.cos(b)], aE: 671100 };
+})();
 const texCache = new Map();
 function bodyTex(k) {
   let t = texCache.get(k);
@@ -3862,12 +4541,55 @@ const COMPANIONS = {
     tex: 'deimos', r: 7, dir: [0.30, 0.66, 0.69], gain: 1.3,
     orbit: { rate: 0.013, axis: [0.10, 0.36, 0.93] },
   },
+
+  /* Jupiter from Europa: 12.2° across, at true size, flattened by
+     its own spin to 0.935 at the poles. It never moves, but its
+     equator lies along the great circle its moons travel, and from
+     a site this far round from the point beneath it, that circle
+     climbs almost straight up out of the eastern horizon — so the
+     bands stand nearly on end, and the Red Spot is carried downward
+     across the disc as Jupiter turns, not sideways. Only from near
+     the line through Europa's poles and the sub-Jovian point would
+     the bands lie level.
+
+     Jupiter turns in 9h55m; here it turns in nine minutes, which is
+     a smaller exaggeration than the moons get. Its limb darkens
+     less than a matte ball's would (Minnaert k = 0.85), because it
+     is cloud, and its terminator is softened by its own air.
+
+     Its brightness is the physical one: sunlight on an albedo like
+     the ice you stand on, so it hangs as bright as the ground. */
+  jupiter: {
+    tex: 'jupiter', r: 660, dir: JOV.J, pole: JOV.Z, oblate: 0.9351, spin: 0.012,
+    gain: 1.0, bright: 0.5, limb: 0.85,
+    atmo: [0.50, 0.55, 0.70], atmoK: 0.10, atmoR: 1.006,
+  },
+  /* The other three, at their true sizes and distances as they move:
+     each is placed where the geometry of the two orbits puts it, so
+     Io swings out to 39° from Jupiter and back, grows to 0.84° as it
+     passes in front of the disc and shrinks to 0.19° behind it, and
+     Ganymede and Callisto go right round the sky along the same arc.
+     A cycle that takes Io 3.5 days takes ten minutes here; Ganymede
+     and Callisto keep the real ratios to it. */
+  io: {
+    tex: 'io', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 421700, R: 1821.6, rate: 0.0105, phase: 0.35 },
+  },
+  ganymede: {
+    tex: 'ganymede', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 1070400, R: 2634.1, rate: 0.00525, phase: 1.0 },
+  },
+  callisto: {
+    tex: 'callisto', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 1882700, R: 2410.3, rate: 0.0082, phase: 2.0 },
+  },
 };
 
 function makeCompanion(spec) {
   const T = bodyTex(spec.tex);
   const group = new THREE.Group();
   if (spec.tilt) group.rotation.set(spec.tilt[0], spec.tilt[1], spec.tilt[2]);
+  if (spec.pole) group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...spec.pole).normalize());
 
   const uni = {
     dayMap: { value: T.day },
@@ -3925,7 +4647,10 @@ function makeCompanion(spec) {
           vec3 up = abs( No.y ) > 0.99 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
           vec3 e = normalize( cross( up, No ) );
           mat3 M = mat3( modelMatrix );
-          vN = normalize( M * No );
+          // An oblate globe is a sphere scaled by c along its pole; its
+          // normal is the sphere's through the inverse of that scale,
+          // and M already holds the scale once, hence c².
+          vN = normalize( M * vec3( No.x, No.y / ${((spec.oblate || 1) ** 2).toFixed(5)}, No.z ) );
           vEast = normalize( M * e );
           vNorth = normalize( M * cross( No, e ) );
           vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
@@ -3979,6 +4704,11 @@ function makeCompanion(spec) {
           // An airless one has a knife edge, and gets 0.0 here.
           float day = smoothstep( -${(spec.atmo ? 0.14 : 0.01).toFixed(2)}, ${(spec.atmo ? 0.20 : 0.02).toFixed(2)}, ndl );
           float diff = max( ndl, 0.0 );
+          ` + (spec.limb ? `
+          // Minnaert: cloud darkens toward the limb less than a matte
+          // ball does.
+          diff = pow( diff, ${spec.limb.toFixed(2)} ) * pow( max( dot( Ng, V ), 0.05 ), ${(spec.limb - 1).toFixed(2)} );
+          ` : '') + `
 
           vec3 albedo = srgb2lin( texture2D( dayMap, vUv ).rgb );
           vec2 cUv = vec2( vUv.x + cloudShift, vUv.y );
@@ -4031,6 +4761,7 @@ function makeCompanion(spec) {
         }`,
     })
   );
+  if (spec.oblate) globe.scale.y = spec.oblate;
   group.add(globe);
 
   if (spec.atmo) {
@@ -4065,13 +4796,14 @@ function makeCompanion(spec) {
           }`,
       })
     );
+    if (spec.oblate) atmo.scale.y = spec.oblate;
     group.add(atmo);
   }
 
   // Where it sits, and where it is going. Orbiting companions swing
   // their direction vector around a fixed axis; locked ones do not
   // move at all, because from a locked moon the primary never does.
-  const base = new THREE.Vector3(...spec.dir).normalize();
+  const base = new THREE.Vector3(...(spec.dir || [0, 1, 0])).normalize();
   const pos = base.clone().multiplyScalar(COMPANION_DIST);
   const axis = spec.orbit ? new THREE.Vector3(...spec.orbit.axis).normalize() : null;
 
@@ -4081,7 +4813,23 @@ function makeCompanion(spec) {
   group.userData.sync = () => {
     uni.sunDir.value.copy(SUN_DIR).multiplyScalar(60000).sub(pos).normalize();
   };
+  // A moon of Jupiter seen from Europa: both orbits in one plane, so
+  // its offset from Europa is a vector in X, Y, and its distance sets
+  // its size. Nearer than Europa's own orbit it may cross in front of
+  // Jupiter, so it is drawn in front of it; further, behind.
+  const kp = spec.kepler, kv = new THREE.Vector3();
+  const tickKepler = (t) => {
+    const ph = kp.phase + t * kp.rate;
+    const rx = kp.a * Math.cos(ph) - JOV.aE, ry = kp.a * Math.sin(ph), d = Math.hypot(rx, ry);
+    const D = d < JOV.aE ? 4600 : 7800;
+    kv.set(rx * JOV.X[0] + ry * JOV.Y[0], rx * JOV.X[1] + ry * JOV.Y[1], rx * JOV.X[2] + ry * JOV.Y[2]);
+    pos.copy(kv).multiplyScalar(D / d);
+    group.scale.setScalar(D * kp.R / d);
+  };
+  if (kp) tickKepler(0);
+
   group.userData.tick = (t) => {
+    if (kp) tickKepler(t);
     if (axis) pos.copy(base).applyAxisAngle(axis, t * spec.orbit.rate).multiplyScalar(COMPANION_DIST);
     if (spec.clouds) uni.cloudShift.value = t * 0.0006;   // clouds drift over a turning globe
     if (spec.spin) globe.rotation.y = t * spec.spin;
@@ -4099,6 +4847,14 @@ const COMPANION_AIM = new THREE.Vector3(0, 0, -1);
 // the dish sits at the zenith and waits for the pass.
 const ZENITH_AIM = new THREE.Vector3(0, COMPANION_DIST, 0);
 
+// From Europa the relay is Earth, which never strays more than 12°
+// from the sun, so the dish tracks a point just along the sky from it.
+const _up = new THREE.Vector3(0, 1, 0);
+function relayAim(out) {
+  if (world.relay === 'sun') return out.copy(SUN_DIR).applyAxisAngle(_up, 0.14).multiplyScalar(COMPANION_DIST);
+  return out.copy(liveCompanions.length ? liveCompanions[0].userData.pos : ZENITH_AIM);
+}
+
 function setCompanions(ids) {
   for (const g of liveCompanions) scene.remove(g);
   liveCompanions = ids.map((id) => {
@@ -4107,7 +4863,7 @@ function setCompanions(ids) {
     scene.add(g);
     return g;
   });
-  COMPANION_AIM.copy(liveCompanions.length ? liveCompanions[0].userData.pos : ZENITH_AIM);
+  relayAim(COMPANION_AIM);
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -5090,8 +5846,8 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
    push with a toe instead, and use the suit jets to come back
    down: hold SPACE and C. That is not a game concession, it is
    what EVA on a body this small would actually be. */
-const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87 };
-const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085, venus: 4.00 };
+const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315 };
+const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085, venus: 4.00, europa: 2.65 };
 
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
@@ -5116,7 +5872,11 @@ const el = {
   world: document.getElementById('r-world'), site: document.getElementById('r-site'),
   note: document.getElementById('r-note'),
   fps: document.getElementById('r-fps'),
+  doseLine: document.getElementById('r-doseline'),
+  dose: document.getElementById('r-dose'), rate: document.getElementById('r-rate'),
 };
+// What you have soaked up since arriving, where that is worth showing.
+let doseSv = 0;
 
 function note(text) {
   el.note.textContent = text;
@@ -5165,7 +5925,7 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
-  const tail = '<div><b>1</b>–<b>5</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &nbsp; <b>0</b> demo</div>' +
+  const tail = '<div><b>1</b>–<b>6</b> moon &middot; mars &middot; phobos &middot; deimos &middot; venus &middot; europa &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>ESC</b> release</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
@@ -5204,7 +5964,7 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (e.code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
+  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].indexOf(e.code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
     sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), 0.045, 1.35);
@@ -5695,10 +6455,11 @@ function step(dt, t) {
     cg.updateMatrixWorld();
     cg.userData.sync();
   }
-  if (liveCompanions.length) COMPANION_AIM.copy(liveCompanions[0].userData.pos);
+  relayAim(COMPANION_AIM);
 
   dust.update(dt, player.gravity, world.dustDrag);
   dust.light();
+  if (world.dose) doseSv += world.dose * dt / 86400;
 
   if (noteTimer > 0 && (noteTimer -= dt) <= 0) el.note.textContent = '';
 
@@ -5709,6 +6470,7 @@ function step(dt, t) {
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';   // the demo moves it
+    if (world.dose) el.dose.textContent = doseSv < 1 ? (doseSv * 1000).toFixed(1) + ' mSv' : doseSv.toFixed(3) + ' Sv';
     el.fps.textContent = (quality.fps ? quality.fps.toFixed(0) + ' fps · ' : '') +
       Math.round(quality.scale * 100) + '% · ' + quality.label;
   }
@@ -5824,7 +6586,7 @@ function applyWorld(id) {
   setHapke(rockSystem.hapke, { ...hp, B0: hp.B0 * 0.5, Bc0: hp.Bc0 * 0.5, c: hp.c * 0.6, theta: hp.theta + 8 });
   GROUND_U.rgMean.value = rego.mean;
   GROUND_U.rgMeanC.value.copy(rego.meanC);
-  GROUND_U.rgMicro.value.set(world.micro[0], world.micro[1], 0, 0);
+  GROUND_U.rgMicro.value.set(world.micro[0], world.micro[1], world.micro[2] ?? 0.6, 0);
   uSparkle.value = world.sparkle;
   // The soil colour that settles on rock tops: the regolith map's
   // mean, through the body's typical vertex albedo.
@@ -5870,6 +6632,9 @@ function applyWorld(id) {
   el.world.textContent = world.name;
   el.site.textContent = world.site;
   el.note.textContent = '';
+  doseSv = 0;
+  el.doseLine.hidden = !world.dose;
+  if (world.dose) el.rate.textContent = world.dose + ' Sv/day';
   document.getElementById('p-title').textContent = world.title;
   document.getElementById('p-sub').textContent = world.sub;
   document.getElementById('p-fine').innerHTML = world.fine;
