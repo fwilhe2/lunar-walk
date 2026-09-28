@@ -54,15 +54,9 @@
   #boot { display: flex; align-items: center; justify-content: center; color: #6e7681; letter-spacing: .2em; }
   #boot[hidden] { display: none; }
 
-  /* Demo: no crosshair, no key list, nothing to read — it is meant
-     to be looked past, not at. */
+  /* Demo: no crosshair, no key list, no readout, no tag — a
+     screensaver has nothing to read, only to look past. */
   #hud.demo #crosshair, #hud.demo #keys, #hud.demo #readout { display: none; }
-  #demoTag { position: absolute; left: 22px; top: 20px; letter-spacing: .24em;
-             text-transform: uppercase; color: #9aa3ad; text-shadow: 0 1px 4px #000;
-             transition: opacity .8s ease; }
-  #demoTag b { color: #e8b04b; font-weight: 600; }
-  #demoTag i { display: block; font-style: normal; font-size: 10.5px; color: #5c636b;
-               letter-spacing: .1em; margin-top: 7px; }
   #panel .alt { margin-top: 14px; font-size: 11px; letter-spacing: .12em;
                 text-transform: uppercase; color: #6e7681; cursor: pointer; }
   #panel .alt:hover { color: #d6dae0; }
@@ -74,7 +68,6 @@
 
 <div id="hud" hidden>
   <div id="crosshair"></div>
-  <div id="demoTag" hidden></div>
   <div id="readout">
     <div><span class="k">BODY     </span><span class="warn" id="r-world">MOON</span> <span class="k" id="r-site">Mare Tranquillitatis</span></div>
     <div><span class="k">MODE     </span><span class="warn" id="r-mode">EVA</span></div>
@@ -6510,7 +6503,6 @@ function stepROVER(dt) {
 const demo = (() => {
   let on = false, act = 'walk', left = 0, sinceSwitch = 0, lastWorld = null;
   let yawTarget = 0, pitchTarget = 0, sunWay = 1, actAge = 0;
-  const tag = document.getElementById('demoTag');
 
   const clearKeys = () => { for (const k in keys) keys[k] = false; };
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -6533,11 +6525,6 @@ const demo = (() => {
     return ['walk', rnd(28, 50)];
   }
 
-  function retag() {
-    tag.innerHTML = '<b>' + world.name + '</b> &nbsp;' + world.site +
-      '<i>demo — press any key or click to take over</i>';
-  }
-
   return {
     get on() { return on; },
     start() {
@@ -6545,16 +6532,13 @@ const demo = (() => {
       on = true;
       lastWorld = null;
       hud.classList.add('demo');
-      tag.hidden = false;
       overlay.classList.add('hidden');
-      retag();
     },
     stop() {
       if (!on) return;
       on = false;
       clearKeys();
       hud.classList.remove('demo');
-      tag.hidden = true;
       if (!locked) overlay.classList.remove('hidden');
     },
     toggle() { on ? this.stop() : this.start(); },
@@ -6566,7 +6550,6 @@ const demo = (() => {
       if (worldId !== lastWorld) {
         lastWorld = worldId;
         sinceSwitch = 0;
-        retag();
         enter('walk');
         left = rnd(26, 40);
       }
@@ -6594,7 +6577,13 @@ const demo = (() => {
       const turn = Math.min(1, dt * (act === 'gaze' ? 0.5 : 0.32));
       let dy = yawTarget - yawObj.rotation.y;
       yawObj.rotation.y += dy * turn;
-      if (Math.abs(dy) < 0.05) yawTarget += rnd(-1.6, 1.6);
+      if (Math.abs(dy) < 0.05) {
+        // Walking gets rare, gentle course corrections rather than a
+        // new heading the moment the last one is reached — a wide
+        // random walk looks aimless, a straight leg looks deliberate.
+        if (act === 'walk') { if (Math.random() < dt * 0.05) yawTarget += rnd(-0.35, 0.35); }
+        else yawTarget += rnd(-1.6, 1.6);
+      }
       pitchObj.rotation.x += (pitchTarget - pitchObj.rotation.x) * Math.min(1, dt * 0.5);
 
       const gh = terrainHeight(player.pos.x, player.pos.z);
