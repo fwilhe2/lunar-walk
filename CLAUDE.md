@@ -12,7 +12,7 @@ A first-person planetary surface simulator — Venus, Moon, Mars, Phobos, Deimos
 python3 -m http.server 8000    # ES module imports are blocked over file://
 ```
 
-There is nothing to build, lint, or test. Verification is visual — see *Verifying changes* below.
+There is nothing to build, lint, or test. Verification is visual, plus a Node check on the terrain kernel — see *Verifying changes* below. `tools/` is dev tooling; nothing in the app loads it.
 
 ## Layout
 
@@ -114,7 +114,7 @@ Boot builds the opening rings in workers (a few seconds on real hardware); after
 - The ground shader skips the fine regolith octave past ~140 m, where it would only mip-average to its mean (`rgMeanC`).
 - Europa's talus rocks (`world.talus`) sample slope with three `terrainHeight()` calls per candidate on the main thread; the count is what keeps a rock chunk inside the lunar budget.
 
-Profile in Node rather than guessing — extract `TERRAIN_SOURCE`, eval it, and time the functions directly (warm them up first: the first few thousand calls run unoptimised and mislead).
+Profile in Node rather than guessing — `node tools/check.mjs` extracts `TERRAIN_SOURCE`, evals it and times `terrainHeight()` per world against a baseline; for anything finer, do the same by hand (warm up first: the first few thousand calls run unoptimised and mislead).
 
 ## Three.js r160 specifics
 
@@ -131,13 +131,20 @@ These are version-pinned and will silently break on upgrade:
 
 ## Verifying changes
 
-There is no headless GPU here, but Firefox is installed and renders under software GL (`LIBGL_ALWAYS_SOFTWARE=1 MOZ_HEADLESS=1`). `--screenshot` is too slow to complete; the working approach is a **reporting probe**:
+There is no headless GPU here, but Firefox is installed and renders under software GL (`LIBGL_ALWAYS_SOFTWARE=1 MOZ_HEADLESS=1`). `--screenshot` is too slow to complete; the working approach is a **reporting probe**, which lives in `tools/probe/`:
 
-1. Write a scratchpad Python server that serves the repo, logs `GET`/`POST /report?m=…` to a file, and saves a `POST /shot` data-URL body to a JPEG.
-2. Generate a throwaway `probe.html` from `index.html` by string replacement — optionally shrink `l0Step` and the §5b clipmap resolution (`const N = 1024` → 512) to cut time, hook `window.onerror`, `console.error`/`warn` and each worker's `onerror` to `navigator.sendBeacon('/report?…')`, add a hook after `composer.render()` in the animation loop, and replace the `overlay.hidden = false;` line with an async driver that removes the overlay, sets `keys.*` / `sunElev` / camera yaw and pitch, calls `setMode(…)` or `applyWorld(…)`, waits for `chunkStreamer.pending() === 0` plus a few frames (the shadow pass takes five), and posts `renderer.domElement.toDataURL('image/jpeg')` from the frame hook.
-3. Launch headless Firefox with its own `--profile` at the probe, poll the log for a `DONE` sentinel, then `Read` the JPEGs. Never start a second probe while one is running.
+```sh
+tools/probe/run.sh DRIVER.js OUT_DIR [960x540] [timeout_s]   # → OUT_DIR/probe.log, OUT_DIR/shots/*.jpg
+node tools/check.mjs [--save] [world…]                       # terrain kernel: NaNs, purity, µs per call
+```
 
-Set `eyePass.uniforms.uReset.value = 1` before each shot: at the probe's frame rate (one frame every one to three minutes at 1280×720) adaptation would otherwise never converge. For the same reason judge motion by position deltas, not expected speeds. Boot takes 2.5–5 minutes under software GL — though on the Fedora box in September 2026 headless Firefox ran at several frames a second and booted in seconds, so check before planning around it. The tier is remembered in the profile's localStorage: call `quality.set('low')` at the start of every driver, or a probe that once selected `high` will crawl on the next run. A debug view is easiest to get by string-replacing a line into the ground shader's `tonemapping_fragment` patch that writes an intermediate (`surfShadow`, `microLit`, a normal) to `gl_FragColor`, with the eye range pinned to `[1, 1]`. Delete `probe.html` when finished — it is scaffolding, not a deliverable.
+- `run.sh` builds `probe.html` from `index.html` (`mkprobe.py` — every anchor must match exactly once, so if `index.html` moves one, fix the anchor there), starts `server.py` and a headless Firefox with its own profile under `OUT_DIR`, waits for `DONE` in the log, then kills only the processes it started and deletes `probe.html`.
+- A driver is a file defining `async function drive(probe)`. It is appended inside the page's module script, so it sees `applyWorld`, `player`, `yawObj`, `pitchObj`, `keys`, `setMode`, `sunElev`, `chunkStreamer`, `quality` and the rest directly. `probe` (`lib.js`) has `at({ world, x, z, h, yaw, pitch, mode, sun })`, `idle()` (loading done, nothing pending, then a few frames for the shadow pass), `frames(n)`, `snap(name)` and `log(msg)`. See `tools/probe/drivers/worlds.js`.
+- The probe runs on **low** (`quality.set('low', false)`, which does not overwrite the remembered tier) at 960×540: 1–2 fps under software GL on the Fedora box in September 2026, booting in about 15 s. Medium runs at about 0.1 fps; set `window.__probeQuality` in a driver only if a tier-specific bug needs it.
+- Errors, warnings, worker errors and unhandled rejections are reported to the log. Never start a second probe while one is running (they share a port and the profile lock).
+- `check.mjs` compares against `tools/perf-baseline.json`, recorded on this machine. Don't run it while a probe is going; software GL loads every core. Re-record with `--save` only after a change you meant to cost something.
+
+`snap()` sets `eyePass.uniforms.uReset.value = 1` before each shot: at the probe's frame rate adaptation would otherwise never converge. For the same reason judge motion by position deltas, not expected speeds. A debug view is easiest to get by string-replacing a line into the ground shader's `tonemapping_fragment` patch that writes an intermediate (`surfShadow`, `microLit`, a normal) to `gl_FragColor`, with the eye range pinned to `[1, 1]` — or, for geometry, by swapping each chunk's material for a flat `MeshBasicMaterial` per level (`-mesh.position.y` is the level's sink), which shows cracks as sky. `probe.html` is scaffolding, not a deliverable; `run.sh` deletes it.
 
 Physics is verifiable numerically in the same probe: hold `keys.Space` for a second, release, and measure apex and hang time (currently 0.87 m / 2.05 s lunar at the probe's 50 ms frames, against 0.82 m / 2.02 s from `pushSpeed()`; the suited astronaut cannot leave the ground under `G_EARTH`). Walking settles at `sqrt(Fr·g·L)` from `SUIT`. On-foot physics has no tuning constants beyond `SUIT`, `JET` and each world's `mu`; if a number feels wrong, find which of those is wrong rather than adding a factor. The rover's grip scales with its spring load (`st.load`), which is zero in the air.
 

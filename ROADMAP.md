@@ -31,25 +31,25 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 2. Commit the probe and a Node check as dev tooling
+## 2. Commit the probe and a Node check as dev tooling ✅
 
 **Why.** Every session rebuilds the probe from scratch, and the Node profiling that `CLAUDE.md` recommends is done by hand. Every later item on this list is verified with both.
 
 **Substeps**
-- [ ] `tools/probe/server.py`: serves the repo, logs `/report?m=…`, and saves `POST /shot?n=…` data URLs as JPEGs.
-- [ ] `tools/probe/mkprobe.py`: builds `probe.html` by string replacement. Each anchor is asserted to match exactly once, so it fails loudly when `index.html` changes. It adds error, console and worker-error hooks, a frame hook after `composer.render()`, and starts the driver in place of `overlay.hidden = false`.
-- [ ] `tools/probe/lib.js`: `frames(n)`, `idle()` (loading done, `pending() === 0`, then 8 frames), and `snap(name)` (sets `uReset`, waits, posts `toDataURL`). Drivers become small files that use these.
-- [ ] `tools/probe/run.sh`:
-  - [ ] launch headless Firefox with its own profile and `user.js`;
-  - [ ] poll for `DONE`;
-  - [ ] kill only its own PID tree;
-  - [ ] delete `probe.html`.
-- [ ] Default drivers to `quality.set('low', false)` at 960×540. Measured under software GL: low runs at 1–2 fps, medium at about 0.1 fps.
-- [ ] `tools/check.mjs`: extract `TERRAIN_SOURCE` and, for each world:
-  - [ ] scan a grid for NaN or Infinity;
-  - [ ] check determinism across `craterCacheReset()`;
-  - [ ] time µs per call after warm-up against a committed baseline, and warn above +20%.
-- [ ] Point the "Verifying changes" section of `CLAUDE.md` at it. It is dev tooling and nothing in the app loads it.
+- [x] `tools/probe/server.py`: serves the repo, logs `/report?m=…`, and saves `POST /shot?n=…` data URLs as JPEGs.
+- [x] `tools/probe/mkprobe.py`: builds `probe.html` by string replacement. Each anchor is asserted to match exactly once, so it fails loudly when `index.html` changes. It adds error, console and worker-error hooks, a frame hook after `composer.render()`, and starts the driver in place of `overlay.hidden = false`.
+- [x] `tools/probe/lib.js`: `frames(n)`, `idle()` (loading done, `pending() === 0`, then 8 frames), and `snap(name)` (sets `uReset`, waits, posts `toDataURL`). Drivers become small files that use these.
+- [x] `tools/probe/run.sh`:
+  - [x] launch headless Firefox with its own profile and `user.js`;
+  - [x] poll for `DONE`;
+  - [x] kill only its own PID tree;
+  - [x] delete `probe.html`.
+- [x] Default drivers to `quality.set('low', false)` at 960×540. Measured under software GL: low runs at 1–2 fps, medium at about 0.1 fps.
+- [x] `tools/check.mjs`: extract `TERRAIN_SOURCE` and, for each world:
+  - [x] scan a grid for NaN or Infinity;
+  - [x] check determinism across `craterCacheReset()`;
+  - [x] time µs per call after warm-up against a committed baseline, and warn above +20%.
+- [x] Point the "Verifying changes" section of `CLAUDE.md` at it. It is dev tooling and nothing in the app loads it.
 
 **Verify.** A full world sweep runs with one command and leaves the working tree clean.
 

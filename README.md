@@ -201,3 +201,4 @@ Any key, or a click, hands the controls back.
 - `index.html` — everything: generation, streaming, shaders, physics, HUD.
 - `three.module.js` — vendored Three.js r160 (MIT).
 - `jsm/` — vendored Three.js post-processing addons (MIT).
+- `tools/` — development only: a headless-Firefox probe that drives the app and takes screenshots, and a Node check on the terrain kernel. Nothing in the app loads it.
