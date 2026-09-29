@@ -5807,8 +5807,8 @@ const dust = (() => {
   /* Grains, not blobs. Real regolith is mostly finer than you can see —
      the median grain is sixty microns — so what the eye picks out of a
      plume is a haze of fines and, in it, a scatter of clods. Each point
-     here stands for a clump, its size drawn log-normally around 8 mm
-     (a couple of millimetres to five centimetres), its albedo a little
+     here stands for a clump, its size drawn log-normally around 6 mm
+     (a couple of millimetres to two centimetres), its albedo a little
      different from its neighbours'. A grain smaller than a pixel is not
      blown up to one: it covers part of a pixel and is drawn that much
      fainter, so thousands of fines read as a veil, not as sand.
@@ -5818,7 +5818,7 @@ const dust = (() => {
      the fines hang and drift while the clods drop out of the cloud —
      per grain around the world's own dustDrag, which is the median's. */
   const N = 12000;
-  const D_MED = 0.008;
+  const D_MED = 0.006;
   const pos = new Float32Array(N * 3).fill(-9999);
   const vel = new Float32Array(N * 3);
   const life = new Float32Array(N);
@@ -5836,41 +5836,76 @@ const dust = (() => {
     uniforms: Object.assign({
       color: { value: new THREE.Color(0xada79f) },
       uSun: { value: new THREE.Color() }, uFill: { value: new THREE.Color() },
-      uSunDir: { value: SUN_DIR },
+      uSunDir: { value: SUN_DIR }, uSunView,
       uScale: { value: 400 },
+      // The sun's two shadow cascades (§3), sampled by hand: rover,
+      // rocks and walker shade the dust that flies through their shadow.
+      uShOn: { value: 0 },
+      uShNear: { value: null }, uShNearM: { value: sun.shadow.matrix },
+      uShFar: { value: null }, uShFarM: { value: sunFar.shadow.matrix },
     }, TS),
     vertexShader: `
       attribute float aSize, aTone;
       uniform float uScale;
       varying vec3 vWPos;
-      varying float vCover, vTone;
+      varying float vCover, vTone, vPx;
       void main() {
         vec4 mv = modelViewMatrix * vec4( position, 1.0 );
         vWPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
         float px = aSize * uScale / -mv.z;           // diameter on screen, pixels
         gl_PointSize = max( px, 1.5 );
         vCover = min( 1.0, px * px / 2.25 );          // the share of that 1.5-pixel disc it fills
+        vPx = px;
         vTone = aTone;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: GLSL_TS + `
-      uniform vec3 color, uSun, uFill, uSunDir;
-      varying float vCover, vTone;
+      #include <packing>
+      uniform vec3 color, uSun, uFill, uSunDir, uSunView;
+      uniform float uShOn;
+      uniform sampler2D uShNear, uShFar;
+      uniform mat4 uShNearM, uShFarM;
+      varying float vCover, vTone, vPx;
+      // Four taps half a texel apart: the maps are 2048², a grain is
+      // far smaller than a texel, and one tap would snap on and off.
+      float shTaps( sampler2D map, vec3 q, float bias ) {
+        vec2 t = vec2( 0.5 / 2048.0, 0.0 );
+        return 0.25 * ( step( q.z + bias, unpackRGBAToDepth( texture2D( map, q.xy + t.xy ) ) )
+                      + step( q.z + bias, unpackRGBAToDepth( texture2D( map, q.xy - t.xy ) ) )
+                      + step( q.z + bias, unpackRGBAToDepth( texture2D( map, q.xy + t.yx ) ) )
+                      + step( q.z + bias, unpackRGBAToDepth( texture2D( map, q.xy - t.yx ) ) ) );
+      }
+      float objShadow() {
+        if ( uShOn < 0.5 ) return 1.0;
+        vec3 q = ( uShNearM * vec4( vWPos, 1.0 ) ).xyz;
+        if ( all( greaterThan( q, vec3( 0.0 ) ) ) && all( lessThan( q, vec3( 1.0 ) ) ) ) return shTaps( uShNear, q, -0.0002 );
+        q = ( uShFarM * vec4( vWPos, 1.0 ) ).xyz;
+        if ( all( greaterThan( q, vec3( 0.0 ) ) ) && all( lessThan( q, vec3( 1.0 ) ) ) ) return shTaps( uShFar, q, -0.0003 );
+        return 1.0;
+      }
       void main() {
         vec2 d = gl_PointCoord - 0.5;
-        float r2 = dot( d, d );
-        if ( r2 > 0.25 ) discard;
-        float sh = terrainShadow( vWPos, true );
-        // A grain is a tiny sphere, and how bright a sphere is depends
-        // on the phase angle: full with the sun behind you, a thin
-        // crescent into the sun. Lambert sphere, geometric albedo 2/3.
-        // So a plume thrown up at a low sun shines against the ground
-        // it came off — which is lit at a grazing angle — when you look
-        // down-sun, and hangs dark against it looking up-sun.
+        // A clod is not round: a lumpy outline, different per grain.
+        float ang = atan( d.y, d.x ), seed = vTone * 37.0;
+        float rim = 0.5 * ( 0.82 + 0.1 * sin( 3.0 * ang + seed ) + 0.08 * sin( 5.0 * ang - seed * 1.7 ) );
+        float r = length( d );
+        if ( r > rim ) discard;
+        float sun = terrainShadow( vWPos, true ) * objShadow();
+        // A grain is a small rough sphere, lit on one side. Big enough to
+        // show that, it is shaded per pixel, with a lumpy normal; too
+        // small, only its average over the disc counts, which for a
+        // Lambert sphere is 2/3 of the phase function — full with the sun
+        // behind you, a thin crescent into it. So a plume thrown up at a
+        // low sun shines against the grazing-lit ground looking down-sun
+        // and hangs dark against it looking up-sun.
         float g = acos( clamp( dot( uSunDir, normalize( cameraPosition - vWPos ) ), -1.0, 1.0 ) );
-        float phase = ( sin( g ) + ( 3.14159265 - g ) * cos( g ) ) / 3.14159265;
-        gl_FragColor = vec4( color * vTone * ( uSun * sh * 0.667 * phase + uFill ) * 0.3183,
-                             0.9 * vCover * ( 1.0 - smoothstep( 0.12, 0.25, r2 ) ) );
+        float avg = 0.667 * ( sin( g ) + ( 3.14159265 - g ) * cos( g ) ) / 3.14159265;
+        vec2 e = d / rim;
+        vec3 N = vec3( e.x, -e.y, sqrt( max( 0.0, 1.0 - dot( e, e ) ) ) );
+        N = normalize( N + 0.35 * vec3( sin( 9.0 * e.y + seed ), sin( 7.0 * e.x - seed ), 0.0 ) );
+        float lit = mix( avg, max( dot( N, normalize( uSunView ) ), 0.0 ), smoothstep( 2.5, 6.0, vPx ) );
+        gl_FragColor = vec4( color * vTone * ( uSun * sun * lit + uFill ) * 0.3183,
+                             0.9 * vCover * ( 1.0 - smoothstep( rim * rim * 0.5, rim * rim, r * r ) ) );
       }`,
     transparent: true, depthWrite: false,
   });
@@ -5887,7 +5922,7 @@ const dust = (() => {
     floor[k] = ground - 1.5;
     // Log-normal: the sum of three uniforms is near enough a gaussian.
     const n = (Math.random() + Math.random() + Math.random() - 1.5) * 2;
-    const d = Math.min(0.05, Math.max(0.0015, D_MED * Math.exp(0.9 * n)));
+    const d = Math.min(0.02, Math.max(0.0015, D_MED * Math.exp(0.8 * n)));
     size[k] = d;
     dragK[k] = Math.min(5, Math.max(0.2, (D_MED / d) ** 1.5));
     tone[k] = 0.7 + Math.random() * 0.6;
@@ -5904,6 +5939,9 @@ const dust = (() => {
       u.uFill.value.copy(hemiLight.color).add(hemiLight.groundColor).multiplyScalar(0.5 * hemiLight.intensity)
         .add(_ac.copy(ambLight.color).multiplyScalar(ambLight.intensity));
       u.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
+      const on = sun.castShadow && sun.shadow.map && sunFar.shadow.map;
+      u.uShOn.value = on ? 1 : 0;
+      if (on) { u.uShNear.value = sun.shadow.map.texture; u.uShFar.value = sunFar.shadow.map.texture; }
     },
     clear() {
       life.fill(0);
