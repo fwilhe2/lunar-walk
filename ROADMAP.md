@@ -6,7 +6,7 @@ Everything visual gets checked with the headless-Firefox probe described in `CLA
 
 ---
 
-## 1. Fix coarse terrain showing through on the low tier — *bug*
+## 1. Fix coarse terrain showing through on the low tier — *bug* ✅
 
 **Why.** On **low**, which is picked automatically for Intel and other integrated GPUs, crater floors show flat, textureless discs with hard edges. The terrain shadows there are also cut by straight lines. Probe shots showed it on Pluto and on the Moon from the air. A bisect confirmed the cause: hiding rocks didn't remove the disc, turning terrain shadows off didn't either, and turning `LOD_COARSE` off did.
 
@@ -15,14 +15,14 @@ Everything visual gets checked with the headless-Firefox probe described in `CLA
 Every tier has a milder version of this, in the partial-overlap band at each level's edge (for example 4–5 km out between the 1 km and 4 km levels).
 
 **Substeps**
-- [ ] Stopgap: drop the trim in `extOf`. That brings back the 32 draw calls it saved on low, but removes the near-player overlap at once.
-- [ ] Cut holes instead of sinking: give each coarse chunk (level ≥ 1) that overlaps *built* chunks of the next finer level its own index buffer. The buffer leaves out every quad whose cell lies inside a built finer chunk. Chunks with no overlap keep the shared `gridIndex(W)` buffer.
-  - [ ] Map grid index to cell the way the worker does: column `i` ↔ `ci = clamp(i − 1, 0, n)`. Keep the skirt quads.
-  - [ ] Base the hole on chunks that are **built**, not on the desired set. That is the purge discipline again: a hole must never open before the fine ground under it exists.
-  - [ ] Rebuild the holed indices on `version` bumps, and only for coarse chunks overlapping the finer chunk that changed. The geometry is untouched, so this costs no worker time.
-  - [ ] Finer chunk edges (multiples of 256, 1024 or 4096 m) are multiples of every coarser step (16–512 m), so the cut is exact. The finer chunks' skirts cover the T-junctions.
-- [ ] Keep `sink` as it is. It becomes harmless rather than load-bearing.
-- [ ] Update the §5 header comment and the chunk-streamer section of `CLAUDE.md` ("partial overlaps are sunk").
+- [x] ~~Stopgap: drop the trim in `extOf`.~~ Not needed: with holes the trim is harmless, so low keeps its 32 draws fewer.
+- [x] Cut holes instead of sinking: give each coarse chunk (level ≥ 1) that overlaps *built* chunks of the next finer level its own index buffer. The buffer leaves out every quad whose cell lies inside a built finer chunk. Chunks with no overlap keep the shared `gridIndex(W)` buffer.
+  - [x] Map grid index to cell the way the worker does: column `i` ↔ `ci = clamp(i − 1, 0, n)`. Keep the skirt quads.
+  - [x] Base the hole on chunks that are **built**, not on the desired set. That is the purge discipline again: a hole must never open before the fine ground under it exists.
+  - [x] Rebuild the holed indices on `version` bumps, and only for coarse chunks overlapping the finer chunk that changed. The geometry is untouched, so this costs no worker time.
+  - [x] Finer chunk edges (multiples of 256, 1024 or 4096 m) are multiples of every coarser step (16–512 m), so the cut is exact. The finer chunks' skirts cover the T-junctions.
+- [x] Keep `sink` as it is. It becomes harmless rather than load-bearing.
+- [x] Update the §5 header comment and the chunk-streamer section of `CLAUDE.md` ("partial overlaps are sunk").
 
 **Verify.**
 - Probe on low: Pluto from 380 m up (yaw −0.95, pitch −0.6) and the Moon's flight view show no flat discs and no straight shadow edges.
