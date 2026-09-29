@@ -6756,7 +6756,8 @@ const rover = (() => {
   const gcI = new Int32Array(GC), gcJ = new Int32Array(GC), gcS = new Int8Array(GC), gcY = new Float64Array(GC);
   // Raw heights, without the curvature drop: the rover lives in raw
   // heights like everything physical, and near you the drop is
-  // micrometres. So nothing cached here ever goes stale.
+  // micrometres. So nothing cached here goes stale — until the world
+  // changes, and despawn() clears it.
   const gvtx = (i, j, s) => {
     const k = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ s) & (GC - 1);
     if (gcS[k] === s && gcI[k] === i && gcJ[k] === j) return gcY[k];
@@ -6974,6 +6975,7 @@ const rover = (() => {
     despawn() {
       state.spawned = false;
       group.visible = false;
+      gcS.fill(0);     // another world's ground
     },
     /* One frame of driving, or of standing parked (parked: the brake
        is on and nobody is steering, but the chassis still settles,
