@@ -2596,10 +2596,46 @@ const LIGHTS_BEGIN = (() => {
 ` + src.slice(b);
 })();
 
+/* Prints: the same Hapke function again, reading the undisturbed
+   ground's parameters (gpk*), cut from GLSL_HAPKE so there is still
+   one copy of the maths. */
+const GLSL_HAPKE_GROUND = `
+uniform vec4 gpkA, gpkB;
+uniform float gpkN;
+uniform vec3 uStampK;
+` + GLSL_HAPKE.slice(GLSL_HAPKE.indexOf('float hapkeR('), GLSL_HAPKE.indexOf('void RE_Direct_Regolith'))
+  .replace('hapkeR(', 'hapkeRG(').replace(/hpkA/g, 'gpkA').replace(/hpkB/g, 'gpkB');
+
+/* A print's output is not a colour but a factor for the ground under
+   it: the light pressed soil sends back (its Hapke set, on the relief
+   normal), over what the ground around it sends (the ground's set, on
+   the flat normal), under the same sun and shadow and the same
+   ambient. Albedo is common to both and cancels, which is what lets
+   the ground's own grain and tint show through; uStampK puts back the
+   part of it that pressing does change. Blended as dst × src, so
+   mixing toward white at the sole's edge fades it into the ground. */
+const PRINT_BLEND = `
+#if NUM_DIR_LIGHTS > 0
+  {
+    vec3 L = directionalLights[ 0 ].direction, V = geometryViewDir;
+    float cg = dot( L, V );
+    float mp = dot( normal, L ), mg = dot( nonPerturbedNormal, L );
+    float rP = mp > 0.0 ? hapkeR( mp, dot( normal, V ), cg ) * hpkN : 0.0;
+    float rG = mg > 0.0 ? hapkeRG( mg, dot( nonPerturbedNormal, V ), cg ) * gpkN : 0.0;
+    vec3 amb = reflectedLight.indirectDiffuse;
+    vec3 k = ( sunIrr * rP + amb ) / max( sunIrr * rG + amb, vec3( 1e-7 ) ) * uStampK;
+    gl_FragColor = vec4( mix( vec3( 1.0 ), k, diffuseColor.a ), 1.0 );
+  }
+#else
+  gl_FragColor = vec4( mix( vec3( 1.0 ), uStampK, diffuseColor.a ), 1.0 );
+#endif
+`;
+
 /* Patch a MeshStandardMaterial into one of four kinds of surface:
      ground  — the terrain: Hapke, hex-tiled relief, micro-craters,
                grain shadows, the terrain shadow, glass sparkle
-     print   — boot prints and wheel tracks: Hapke and terrain shadow
+     print   — boot prints and wheel tracks: Hapke and terrain shadow,
+               output as a factor multiplied into the ground (§8)
      rock    — Hapke, and the terrain shadow seen from above the ground
      object  — anything man-made: its own PBR, plus the terrain shadow
    `hpk` is a hapkeUniforms() set, for the three regolith kinds.     */
@@ -2622,7 +2658,8 @@ function surfacePatch(mat, kind, hpk, extra) {
       .replace('#include <common>', '#include <common>\n' + GLSL_TS + (kind === 'ground' ? GLSL_GROUND : ''));
     if (hpk) {
       fs = fs.replace('#include <lights_physical_pars_fragment>',
-                      '#include <lights_physical_pars_fragment>\n' + GLSL_HAPKE);
+                      '#include <lights_physical_pars_fragment>\n' + GLSL_HAPKE
+                      + (kind === 'print' ? GLSL_HAPKE_GROUND : ''));
     }
     let shadow;
     if (kind === 'ground') {
@@ -2633,7 +2670,18 @@ function surfacePatch(mat, kind, hpk, extra) {
     } else {
       shadow = `float surfShadow = terrainShadow( vWPos, ${kind === 'rock' || kind === 'object'} );`;
     }
-    fs = fs.replace('#include <lights_fragment_begin>', shadow + '\n' + LIGHTS_BEGIN);
+    let lights = LIGHTS_BEGIN;
+    if (kind === 'print') {
+      // Keep the sun's irradiance, shadowed, for the ratio.
+      const at = 'directLight.color *= objShadow * surfShadow;';
+      if (!lights.includes(at)) throw new Error('LIGHTS_BEGIN: sun line changed');
+      lights = 'vec3 sunIrr = vec3( 0.0 );\n' + lights.replace(at, at + '\n    sunIrr = directLight.color;');
+      // Fog pulls the factor toward 1, not toward the fog colour: the
+      // ground under the print has been fogged already.
+      fs = fs.replace('#include <opaque_fragment>', PRINT_BLEND)
+             .replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor', 'vec3( 1.0 )'));
+    }
+    fs = fs.replace('#include <lights_fragment_begin>', shadow + '\n' + lights);
     shader.fragmentShader = fs;
   };
   mat.customProgramCacheKey = () => 'surface-' + kind;
@@ -2881,6 +2929,13 @@ const chunkStreamer = (() => {
     },
     pending() {
       return pendingPerLevel[0] + pendingPerLevel[1] + pendingPerLevel[2] + pendingPerLevel[3];
+    },
+    // The vertex spacing of the finest chunk drawn at (x, z), so a
+    // decal can sit on the triangles actually on screen (§8).
+    stepAt(x, z) {
+      const L = LEVELS[0], cx = Math.floor(x / L.size), cz = Math.floor(z / L.size);
+      for (const s of [1, 2, 4, 8]) if (chunks.has('0:' + cx + ':' + cz + ':' + s)) return s;
+      return 1;
     },
     // Re-plan around the current position, e.g. after LOD_COARSE
     // changes. New chunks build while the old ones stand, as always.
@@ -3287,6 +3342,14 @@ const rockSystem = (() => {
   };
 
   const SIZE = 256, EXT = 1, MAXR = 900;
+  // Stones under this size are pressed into the soil by a boot or a
+  // wheel (§8); anything bigger you would step over or drive round.
+  const PRESS_MAX = 0.12;
+  // Every live print and track, by its slot in the stamp ring: an
+  // oriented rectangle (centre, heading, half extents). Kept here so a
+  // chunk rebuilt after you walked away and came back presses its
+  // stones under the prints still lying on it.
+  const marks = new Map();
   let pebbles = 1;            // carpet density, lowered on weak GPUs
   let shapes = 99;            // prototypes per class: each is a draw call per chunk
   const live = new Map();   // "cx:cz" → Group of InstancedMeshes
@@ -3377,22 +3440,26 @@ const rockSystem = (() => {
       m.setPosition(p);
       // Rock albedo, as a fraction: rockAlb is [base, spread].
       const a = world.rockAlb[0] + Math.pow(rnd(), 1.6) * world.rockAlb[1];
-      buckets[ci][pi].push(m.clone(), a);
+      buckets[ci][pi].push(m.clone(), a, r);
     }
 
     const group = new THREE.Group();
     const tint = world.rockTint;
+    // Stones small enough for a boot or a wheel to press into the
+    // soil, so a print laid over them can push them down (press()).
+    const small = group.userData.small = [];
     CLASSES.forEach((C, ci) => {
       C.protos.forEach((proto, pi) => {
         const list = buckets[ci][pi];
-        const n = list.length / 2;
+        const n = list.length / 3;
         if (!n) return;
         const mesh = new THREE.InstancedMesh(proto.geo, rockMat, n);
         mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
         for (let i = 0; i < n; i++) {
-          mesh.setMatrixAt(i, list[i * 2]);
-          const a = list[i * 2 + 1];
+          mesh.setMatrixAt(i, list[i * 3]);
+          const a = list[i * 3 + 1], r = list[i * 3 + 2];
           mesh.instanceColor.setXYZ(i, a * tint[0], a * tint[1], a * tint[2]);
+          if (r.size < PRESS_MAX) small.push({ mesh, i, x: r.x, z: r.z, size: r.size, pressed: false });
         }
         mesh.castShadow = C.shadow;
         mesh.receiveShadow = C.receive;
@@ -3400,7 +3467,29 @@ const rockSystem = (() => {
         group.add(mesh);
       });
     });
+    for (const mk of marks.values()) pressGroup(group, mk, x0, z0);
     return group;
+  }
+
+  /* Pressing a stone: halve its height about its own centre and push
+     it down by most of what it stood proud by, which leaves its crown
+     flush with the soil — the way pebbles show in the floor of every
+     Apollo boot print, pressed in rather than pushed aside. */
+  const pm = new THREE.Matrix4(), squash = new THREE.Matrix4().makeScale(1, 0.5, 1);
+  function pressGroup(group, mk, x0, z0) {
+    if (mk.x + mk.r < x0 || mk.x - mk.r > x0 + SIZE || mk.z + mk.r < z0 || mk.z - mk.r > z0 + SIZE) return;
+    for (const st of group.userData.small) {
+      if (st.pressed) continue;
+      const dx = st.x - mk.x, dz = st.z - mk.z;
+      if (Math.abs(dx * mk.c - dz * mk.s) > mk.hw || Math.abs(dx * mk.s + dz * mk.c) > mk.hh) continue;
+      st.mesh.getMatrixAt(st.i, pm);
+      const el = pm.elements, sy = Math.hypot(el[4], el[5], el[6]);
+      pm.multiply(squash);
+      el[13] -= sy * 0.6;
+      st.mesh.setMatrixAt(st.i, pm);
+      st.mesh.instanceMatrix.needsUpdate = true;
+      st.pressed = true;
+    }
   }
 
   function drop(group) {
@@ -3426,6 +3515,18 @@ const rockSystem = (() => {
       live.clear();
       lastCell = null;
     },
+    // Lay a print or track over the ground: presses the stones under
+    // it now, and in any chunk built later. `key` is its ring slot, so
+    // a print that is overwritten stops pressing chunks built after.
+    press(key, x, z, yaw, hw, hh) {
+      const mk = { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hh, r: Math.hypot(hw, hh) };
+      marks.set(key, mk);
+      for (const [cell, g] of live) {
+        const [cx, cz] = cell.split(':').map(Number);
+        pressGroup(g, mk, cx * SIZE, cz * SIZE);
+      }
+    },
+    clearMarks() { marks.clear(); },
     update(px, pz) {
       const ccx = Math.floor(px / SIZE), ccz = Math.floor(pz / SIZE);
       const cell = ccx + ':' + ccz;
@@ -5134,13 +5235,36 @@ const stampSystems = [];
 // visibly darker looking down-sun, which is how the Apollo prints
 // show up in photographs. Set per world in applyWorld().
 const printHapke = hapkeUniforms();
+// What a print is measured against: the ground's own Hapke set, shared
+// by reference, and the albedo pressing leaves (applyWorld()).
+const PRINT_U = {
+  gpkA: groundHapke.hpkA, gpkB: groundHapke.hpkB, gpkN: groundHapke.hpkN,
+  uStampK: { value: new THREE.Color(1, 1, 1) },
+};
 
-/* A print is a decal with relief: drawSole marks where the soil was
-   pressed, drawTread what the sole's cleats left standing inside it.
-   Both are drawn on a 64-unit canvas. The relief becomes a normal map
-   in real millimetres, so a low sun rakes across the edges of every
-   print and picks out its tread. */
-function makeStampSystem(maxCount, drawSole, drawTread, w, h) {
+/* A print is a patch of pressed soil: drawSole marks where the soil
+   was pressed, drawTread what the sole's cleats left standing inside
+   it. Both are drawn on a 64-unit canvas. The relief becomes a normal
+   map in real millimetres, so a low sun rakes across the edges of
+   every print and picks out its tread.
+
+   It is not painted on. The print is drawn multiplied into the ground
+   already on screen, by the ratio of how pressed soil reflects to how
+   the undisturbed soil around it does (surfacePatch 'print'), so it
+   keeps the ground's own grain, colour and tint and changes only what
+   pressing changes: the opposition surge and the relief — plus, per
+   world, the albedo, where stampColor against soil says a boot turns
+   up darker material (Mars) or merely compacts it (the Moon).
+
+   And it lies on the triangles actually drawn. terrainHeight() is the
+   true surface, but the chunk under your feet is a 1 m mesh of it, and
+   between vertices the two differ by centimetres — enough to float a
+   decal or bury half of it. So each print is a small grid, and every
+   grid point is put on the mesh triangle beneath it, reconstructed
+   from the same lattice, the same diagonal and the same curvature
+   drop the chunk was built with (§5). */
+const PRINT_GX = 5, PRINT_GY = 7;
+function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
   const S = 128;
   const draw = (blur, fn) => {
     const c = document.createElement('canvas'); c.width = c.height = S;
@@ -5173,41 +5297,99 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h) {
     t.generateMipmaps = true; t.needsUpdate = true;
     return t;
   };
+  // Multiplied into the target: dst × src, and the target's alpha left
+  // alone. White is "no change", which is what the sole's soft edge
+  // fades to.
   const material = surfacePatch(new THREE.MeshStandardMaterial({
-    color: 0x57534e, alphaMap: tex(alpha), normalMap: tex(nrm), transparent: true, opacity: 0.85,
+    color: 0xffffff, alphaMap: tex(alpha), normalMap: tex(nrm), transparent: true,
     roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4,
-  }), 'print', printHapke);
-  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(w, h), material, maxCount);
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+    blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+  }), 'print', printHapke, PRINT_U);
+
+  // One grid of PRINT_GX × PRINT_GY points per slot, in world space.
+  const NV = PRINT_GX * PRINT_GY;
+  const pos = new Float32Array(maxCount * NV * 3), nor = new Float32Array(maxCount * NV * 3);
+  const uv = new Float32Array(maxCount * NV * 2);
+  const idx = new Uint32Array(maxCount * (PRINT_GX - 1) * (PRINT_GY - 1) * 6);
+  for (let k = 0, o = 0; k < maxCount; k++) {
+    for (let j = 0; j < PRINT_GY; j++) {
+      for (let i = 0; i < PRINT_GX; i++) {
+        const v = k * NV + j * PRINT_GX + i;
+        uv[v * 2] = i / (PRINT_GX - 1); uv[v * 2 + 1] = j / (PRINT_GY - 1);
+        if (i < PRINT_GX - 1 && j < PRINT_GY - 1) {
+          const a = v, b = v + 1, c = v + PRINT_GX, d = c + 1;
+          idx[o++] = a; idx[o++] = b; idx[o++] = c;
+          idx[o++] = b; idx[o++] = d; idx[o++] = c;
+        }
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage);
+  const norAttr = new THREE.BufferAttribute(nor, 3).setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('normal', norAttr);
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   mesh.receiveShadow = true;
-  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-  for (let i = 0; i < maxCount; i++) mesh.setMatrixAt(i, zero);
   scene.add(mesh);
 
+  const sysId = stampSystems.length;
   let cursor = 0;
-  const up = new THREE.Vector3(0, 1, 0);
-  const q = new THREE.Quaternion(), qy = new THREE.Quaternion();
-  // Lay the quad flat: rotate it out of XY and into the ground plane.
-  const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-  const m = new THREE.Matrix4(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  // Height of the drawn mesh at (x, z): the chunk lattice of spacing
+  // s, split along the b–c diagonal as gridIndex() splits it, with the
+  // drop applied per vertex as the worker applies it.
+  const vh = new Map();
+  const vtx = (i, j, s) => {
+    const k = i + ',' + j;
+    let y = vh.get(k);
+    if (y === undefined) {
+      const x = i * s, z = j * s;
+      vh.set(k, y = terrainHeight(x, z) - dropAt(x, z));
+    }
+    return y;
+  };
+  const meshHeight = (x, z, s) => {
+    const gx = x / s, gz = z / s, i = Math.floor(gx), j = Math.floor(gz);
+    const fx = gx - i, fz = gz - j;
+    const hb = vtx(i + 1, j, s), hc = vtx(i, j + 1, s);
+    if (fx + fz <= 1) { const ha = vtx(i, j, s); return ha + fx * (hb - ha) + fz * (hc - ha); }
+    const hd = vtx(i + 1, j + 1, s);
+    return hd + (1 - fx) * (hc - hd) + (1 - fz) * (hb - hd);
+  };
 
   const stamp = (px, pz, yaw) => {
+    const s = chunkStreamer.stepAt(px, pz);
     const n = terrainNormal(px, pz, 0.4);
-    p.set(px, terrainHeight(px, pz) - dropAt(px, pz) + 0.012, pz);
-    // Applied right to left: flatten, spin to the heading, then tip
-    // onto whatever slope was landed on.
-    q.setFromUnitVectors(up, n);
-    qy.setFromAxisAngle(up, yaw);
-    q.multiply(qy).multiply(flat);
-    mesh.setMatrixAt(cursor, m.compose(p, q, one));
-    mesh.instanceMatrix.needsUpdate = true;
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    vh.clear();
+    for (let j = 0; j < PRINT_GY; j++) {
+      // The texture's v runs along the print; +v is forward, which is
+      // -z before the heading is applied.
+      const ly = (j / (PRINT_GY - 1) - 0.5) * h;
+      for (let i = 0; i < PRINT_GX; i++) {
+        const lx = (i / (PRINT_GX - 1) - 0.5) * w;
+        const x = px + lx * c - ly * sn, z = pz - lx * sn - ly * c;
+        const v = (cursor * NV + j * PRINT_GX + i) * 3;
+        pos[v] = x; pos[v + 1] = meshHeight(x, z, s) + 0.002; pos[v + 2] = z;
+        nor[v] = n.x; nor[v + 1] = n.y; nor[v + 2] = n.z;
+      }
+    }
+    posAttr.needsUpdate = true;
+    norAttr.needsUpdate = true;
+    rockSystem.press(sysId + ':' + cursor, px, pz, yaw, w * sole[0] / 2, h * sole[1] / 2);
     cursor = (cursor + 1) % maxCount;
   };
   stamp.material = material;
   stamp.reset = () => {
-    for (let i = 0; i < maxCount; i++) mesh.setMatrixAt(i, zero);
-    mesh.instanceMatrix.needsUpdate = true;
+    pos.fill(0);
+    posAttr.needsUpdate = true;
     cursor = 0;
+    rockSystem.clearMarks();
   };
   stampSystems.push(stamp);
   return stamp;
@@ -5217,7 +5399,7 @@ const prints = (() => {
   const stamp = makeStampSystem(300,
     (x) => { x.beginPath(); x.roundRect(14, 8, 36, 48, 12); x.fill(); },          // sole
     (x) => { for (let i = 0; i < 7; i++) x.fillRect(14, 11 + i * 6.4, 36, 2.6); }, // tread ribs
-    0.34, 0.5);
+    0.34, 0.5, [36 / 64, 48 / 64]);
   let side = 1;
   return {
     place(x0, z0, yaw) {
@@ -5239,7 +5421,7 @@ const tracks = (() => {
         x.lineTo(45, 6.4 + i * 7); x.lineTo(32, 10.4 + i * 7); x.lineTo(19, 6.4 + i * 7);
         x.closePath(); x.fill();
       }
-    }, 0.26, 0.62);
+    }, 0.26, 0.62, [28 / 64, 60 / 64]);
   return {
     place(x0, z0, yaw, half) {   // half = track gauge / 2
       const ox = Math.cos(yaw) * half, oz = -Math.sin(yaw) * half;
@@ -6852,7 +7034,10 @@ function applyWorld(id) {
   TS.tsSun.value.y = Math.atan(world.sunSize / 12000);
   TS.tsSun.value.w = world.shadows === false ? 0 : 1;
   dust.material.uniforms.color.value.set(world.dustColor);
-  for (const s of stampSystems) { s.material.color.set(world.stampColor); s.reset(); }
+  // Pressed soil against undisturbed soil, as an albedo ratio.
+  const sc = new THREE.Color(world.stampColor), so = new THREE.Color(world.soil);
+  PRINT_U.uStampK.value.setRGB(sc.r / so.r, sc.g / so.g, sc.b / so.b);
+  for (const s of stampSystems) s.reset();
   // Whether the scene has fog is compiled into every program, so
   // every material in the scene needs a rebuild after that changes.
   scene.traverse((o) => {
