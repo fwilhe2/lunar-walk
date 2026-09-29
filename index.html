@@ -5848,7 +5848,7 @@ const dust = (() => {
       attribute float aSize, aTone;
       uniform float uScale;
       varying vec3 vWPos;
-      varying float vCover, vTone, vPx;
+      varying float vCover, vTone, vPx, vSize;
       void main() {
         vec4 mv = modelViewMatrix * vec4( position, 1.0 );
         vWPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
@@ -5856,6 +5856,7 @@ const dust = (() => {
         gl_PointSize = max( px, 1.5 );
         vCover = min( 1.0, px * px / 2.25 );          // the share of that 1.5-pixel disc it fills
         vPx = px;
+        vSize = aSize;
         vTone = aTone;
         gl_Position = projectionMatrix * mv;
       }`,
@@ -5865,7 +5866,7 @@ const dust = (() => {
       uniform float uShOn;
       uniform sampler2D uShNear, uShFar;
       uniform mat4 uShNearM, uShFarM;
-      varying float vCover, vTone, vPx;
+      varying float vCover, vTone, vPx, vSize;
       // Four taps half a texel apart: the maps are 2048², a grain is
       // far smaller than a texel, and one tap would snap on and off.
       float shTaps( sampler2D map, vec3 q, float bias ) {
@@ -5904,6 +5905,14 @@ const dust = (() => {
         vec3 N = vec3( e.x, -e.y, sqrt( max( 0.0, 1.0 - dot( e, e ) ) ) );
         N = normalize( N + 0.35 * vec3( sin( 9.0 * e.y + seed ), sin( 7.0 * e.x - seed ), 0.0 ) );
         float lit = mix( avg, max( dot( N, normalize( uSunView ) ), 0.0 ), smoothstep( 2.5, 6.0, vPx ) );
+        // Fines scatter forward. A clump of sixty-micron grains is not an
+        // opaque ball: much of the light it catches is diffracted a few
+        // degrees on past it, so a plume seen against the sun lights up —
+        // the lunar horizon glow, at arm's length. Henyey–Greenstein with
+        // g = 0.7, strongest in the finest grains, nothing in the clods.
+        float cs = -cos( g );                         // cosine of the scattering angle
+        float hg = 0.51 / ( 12.566 * pow( 1.49 - 1.4 * cs, 1.5 ) );
+        lit += ( 1.0 - smoothstep( 0.003, 0.012, vSize ) ) * 0.6 * 3.14159265 * hg;
         gl_FragColor = vec4( color * vTone * ( uSun * sun * lit + uFill ) * 0.3183,
                              0.9 * vCover * ( 1.0 - smoothstep( rim * rim * 0.5, rim * rim, r * r ) ) );
       }`,
