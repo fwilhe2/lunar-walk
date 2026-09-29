@@ -5810,14 +5810,14 @@ const dust = (() => {
      here stands for a clump, its size drawn log-normally around 6 mm
      (a couple of millimetres to two centimetres), its albedo a little
      different from its neighbours'. A grain smaller than a pixel is not
-     blown up to one: it covers part of a pixel and is drawn that much
-     fainter, so thousands of fines read as a veil, not as sand.
+     blown up to one: it is drawn that much fainter, so thousands of
+     fines read as a veil, not as sand.
 
      Size matters only where there is air. In vacuum every grain flies
      the same parabola; on Mars and Venus Stokes drag goes as 1/d², so
      the fines hang and drift while the clods drop out of the cloud —
      per grain around the world's own dustDrag, which is the median's. */
-  const N = 12000;
+  const N = 32000;
   const D_MED = 0.006;
   const pos = new Float32Array(N * 3).fill(-9999);
   const vel = new Float32Array(N * 3);
@@ -5854,7 +5854,9 @@ const dust = (() => {
         vWPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
         float px = aSize * uScale / -mv.z;           // diameter on screen, pixels
         gl_PointSize = max( px, 1.5 );
-        vCover = min( 1.0, px * px / 2.25 );          // the share of that 1.5-pixel disc it fills
+        // A point is a puff of fines, not one grain: shrinking below a
+        // pixel it thins out with its size, not its area.
+        vCover = min( 1.0, px / 1.5 );
         vPx = px;
         vSize = aSize;
         vTone = aTone;
@@ -5912,7 +5914,11 @@ const dust = (() => {
         // g = 0.7, strongest in the finest grains, nothing in the clods.
         float cs = -cos( g );                         // cosine of the scattering angle
         float hg = 0.51 / ( 12.566 * pow( 1.49 - 1.4 * cs, 1.5 ) );
-        lit += ( 1.0 - smoothstep( 0.003, 0.012, vSize ) ) * 0.6 * 3.14159265 * hg;
+        float fine = 1.0 - smoothstep( 0.003, 0.012, vSize );
+        lit += fine * 0.6 * 3.14159265 * hg;
+        // …and are brighter to begin with: ground finer, regolith's
+        // albedo rises, as it does in every Apollo shot of a fresh scuff.
+        lit *= 1.0 + 0.5 * fine;
         gl_FragColor = vec4( color * vTone * ( uSun * sun * lit + uFill ) * 0.3183,
                              0.9 * vCover * ( 1.0 - smoothstep( rim * rim * 0.5, rim * rim, r * r ) ) );
       }`,
@@ -6706,11 +6712,16 @@ const rover = (() => {
      per unit mass, so the vehicle's weight itself never appears. */
   const TRAVEL = ARM_L * Math.sin(ARM_MAX); // wheel travel either way from ride height
   const PRELOAD = 0.1;                      // share of its load a wheel still carries at full droop
-  const DAMP = 0.3;                         // damping ratio
+  const DAMP = 0.4;                         // damping ratio
+  const ROLL_BAR = 1.5;                     // anti-roll bar per axle, in units of a wheel's spring
   const STOP_K = 2500, STOP_C = 60;         // the bump stops: stiff, and lossy
   const RP2 = 0.9, RR2 = 0.4;               // radius of gyration², pitch and roll, m²
   const HCG = 0.55;                         // centre of mass above the contact patches
-  const MU = 0.8;                           // wire mesh in regolith
+  const MU = 0.8;                           // wire mesh in regolith, rolling and braking
+  // Sideways a wheel does better: it sits a few centimetres into the
+  // soil, and sliding it means bulldozing a wall of regolith with its
+  // side and shearing the chevrons across the ruts they cut.
+  const MU_SIDE = 1.3;
   const SUB = 1 / 240;                      // physics substep, s
 
   /* Where a wheel stands. A single height under the hub gets two things
@@ -6787,7 +6798,7 @@ const rover = (() => {
     });
     for (const dz of [-0.24, 0.24]) tube(side * ARM_PX, 0.03, wz + dz, side * ARM_PX, REST_Y - ARM_DY, wz + dz, 0.014, aluDull);
     group.add(wg);
-    wheels.push({ g: wg, steer, spin, arms, front, side, x: wx, z: wz, swing: 0, s: 0, contact: true, land: 0, step: 1 });
+    wheels.push({ g: wg, steer, spin, arms, front, side, x: wx, z: wz, swing: 0, s: 0, sd: 0, contact: true, land: 0, step: 1 });
   }
 
   /* Merge by material. Built above as some hundred and fifty meshes —
@@ -6913,7 +6924,7 @@ const rover = (() => {
       const h = terrainHeight(_wc.x, _wc.z);
       // Most of it is flung off near the ground and slower than the
       // tread; a little rides further round and goes out fast and steep.
-      for (let i = 0; i < 32; i++) {
+      for (let i = 0; i < 96; i++) {
         const r = Math.random();
         const phi = 0.12 + r * r * 0.6, k = sp * (0.35 + Math.random() * 0.7);
         const b = WHEEL_R * Math.sin(phi), lat = (Math.random() - 0.5) * 0.22;
@@ -6970,15 +6981,20 @@ const rover = (() => {
           _wv.set(w.x, 0, w.z).applyQuaternion(_q);
           const sNow = wheelGround(st.pos.x + _wv.x, st.pos.z + _wv.z, fx, fz, w.step)
                      + WHEEL_CTR - st.y - _wv.y - REST_Y;
-          const sd = (sNow - w.s) / h;
+          w.sd = (sNow - w.s) / h;
           w.s = sNow;
           const on = sNow > -TRAVEL;
-          if (on && !w.contact) w.land = Math.max(w.land, sd);
+          if (on && !w.contact) w.land = Math.max(w.land, w.sd);
           w.contact = on;
-          if (!on) continue;
+        }
+        for (let k = 0; k < 4; k++) {
+          const w = wheels[k];
+          if (!w.contact) continue;
           touching++;
-          let f = g / 4 * PRELOAD + kW * (sNow + TRAVEL) + cW * sd;
-          if (sNow > TRAVEL) f += STOP_K * (sNow - TRAVEL) + STOP_C * sd;
+          // Wheels go FL, FR, RL, RR: k ^ 1 is the other end of the axle.
+          const o = wheels[k ^ 1], sw = Math.max(w.s, -TRAVEL) - Math.max(o.s, -TRAVEL);
+          let f = g / 4 * PRELOAD + kW * (w.s + TRAVEL) + cW * w.sd + kW * ROLL_BAR * sw;
+          if (w.s > TRAVEL) f += STOP_K * (w.s - TRAVEL) + STOP_C * w.sd;
           f = Math.max(0, f);
           F += f; tp -= f * w.z; tr += f * w.x;
         }
@@ -7011,7 +7027,8 @@ const rover = (() => {
         // Bicycle-model yaw; almost no steering authority at rest, and
         // none beyond what the tyres can hold sideways.
         let yawRate = st.vel / WHEELBASE * Math.tan(st.steer);
-        if (Math.abs(st.vel * yawRate) > grip) yawRate = Math.sign(yawRate) * grip / Math.max(0.1, Math.abs(st.vel));
+        const side = MU_SIDE * F;
+        if (Math.abs(st.vel * yawRate) > side) yawRate = Math.sign(yawRate) * side / Math.max(0.1, Math.abs(st.vel));
         st.yaw += yawRate * h;
         // Local -z is forward; in world that is (-sin yaw, -cos yaw).
         st.pos.x -= Math.sin(st.yaw) * st.vel * h;
