@@ -5798,7 +5798,7 @@ const tracks = (() => {
    ═════════════════════════════════════════════════════════════ */
 const _ac = new THREE.Color();
 const dust = (() => {
-  const N = 900;
+  const N = 1800;
   const pos = new Float32Array(N * 3).fill(-9999);
   const vel = new Float32Array(N * 3);
   const life = new Float32Array(N);
@@ -5852,6 +5852,15 @@ const dust = (() => {
     clear() {
       life.fill(0);
       for (let k = 0; k < N; k++) pos[k * 3 + 1] = -9999;
+      g.attributes.position.needsUpdate = true;
+    },
+    // One grain, launched exactly: for sprays whose shape is worked
+    // out by the caller (the rover's wheels).
+    grain(x, y, z, vx, vy, vz) {
+      const k = cursor = (cursor + 1) % N;
+      pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
+      vel[k * 3] = vx; vel[k * 3 + 1] = vy; vel[k * 3 + 2] = vz;
+      life[k] = (2.5 + Math.random() * 1.5) * (world.dustLife || 1);
       g.attributes.position.needsUpdate = true;
     },
     burst(x, y, z, power, dirX = 0, dirZ = 0) {
@@ -6317,14 +6326,15 @@ quality.init();
    11. ROVER — the Lunar Roving Vehicle, built from primitives to its
    real dimensions: 3.1 m long, a 2.29 m wheelbase and 1.83 m track,
    wheels 82 cm across. A tubular aluminium chassis on double
-   A-arms; wheels of woven zinc-coated piano wire with titanium
-   chevrons riveted over half the contact band, the bump-stop frame
-   showing through the mesh; pale fibreglass fenders; two webbing
+   wishbones; wheels with a spun-aluminium hub and a tyre of woven
+   zinc-coated piano wire, titanium chevrons riveted over half the
+   tread; pale fibreglass fenders; two webbing
    seats with the console and T-handle between them; the LCRU up
    front under white thermal blankets, with the umbrella high-gain
    dish, the helical low-gain antenna and the TV camera on their
-   masts; the tool pallet at the back. Ackermann-ish steering,
-   wheels that follow the terrain, and it parks where you leave it.
+   masts; the tool pallet at the back; the commander in the left
+   seat while you drive. Ackermann-ish steering, wheels that follow
+   the terrain, and it parks where you leave it.
    ═════════════════════════════════════════════════════════════ */
 const rover = (() => {
   const WHEEL_R = 0.41, WHEELBASE = 2.3, TRACK = 1.83;
@@ -6345,21 +6355,40 @@ const rover = (() => {
     t.anisotropy = 4;
     return t;
   }
-  const wheelWeave = weave(256, 64, (x, w, h) => {
-    x.lineWidth = 1.6;
-    for (let i = -h; i < w + h; i += 7) {             // the diamond wire mesh
+  /* The tyre is not see-through. Its mesh is fine enough — a cell or
+     so to the centimetre — that from anywhere but arm's length it
+     reads as a grey fabric, and cut out with alphaTest it mip-maps
+     below the threshold and the whole tyre dissolves into sparkle.
+     So the weave is painted, not cut: bright wire over the darker
+     inside of the carcass, and the titanium chevrons riveted over
+     the middle of the tread. The texture wraps the lathe once: u
+     runs round the wheel, v across the profile from rim to rim. */
+  const tyreTex = (() => {
+    const w = 1024, h = 192;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d');
+    x.fillStyle = '#3a3b3d'; x.fillRect(0, 0, w, h);
+    x.strokeStyle = '#a9acb0'; x.lineWidth = 1.5;
+    for (let i = -h; i < w + h; i += 6) {             // the diamond wire mesh
       x.beginPath(); x.moveTo(i, 0); x.lineTo(i + h, h); x.stroke();
       x.beginPath(); x.moveTo(i + h, 0); x.lineTo(i, h); x.stroke();
     }
-    for (let i = 0; i < w; i += 16) {                  // titanium chevrons
+    // Chevrons across the tread (v 0.3…0.7), pointing the way it rolls.
+    x.fillStyle = '#c4c2bc';
+    const n = 40, v0 = h * 0.3, v1 = h * 0.7, vm = (v0 + v1) / 2;
+    for (let k = 0; k < n; k++) {
+      const u = k / n * w, d = w / n * 0.42, t = w / n * 0.2;
       x.beginPath();
-      x.moveTo(i, 6); x.lineTo(i + 7, h / 2); x.lineTo(i, h - 6);
-      x.lineTo(i + 5, h - 6); x.lineTo(i + 12, h / 2); x.lineTo(i + 5, 6);
+      x.moveTo(u, v0); x.lineTo(u + d, vm); x.lineTo(u, v1);
+      x.lineTo(u + t, v1); x.lineTo(u + d + t, vm); x.lineTo(u + t, v0);
       x.closePath(); x.fill();
     }
-    x.fillRect(0, 0, w, 3); x.fillRect(0, h - 3, w, 3);   // rim bands
-  });
-  wheelWeave.repeat.set(3, 1);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    return t;
+  })();
   const dishWeave = weave(128, 128, (x, w) => {
     x.lineWidth = 1.2;
     for (let i = 0; i <= w; i += 5) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, w); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(w, i); x.stroke(); }
@@ -6371,8 +6400,32 @@ const rover = (() => {
   const blanket = obj({ color: 0xe6e3dc, roughness: 0.88, metalness: 0 });
   const webbing = obj({ color: 0x9aa6b0, roughness: 0.95, metalness: 0 });
   const dark    = obj({ color: 0x2c2e31, roughness: 0.85, metalness: 0.15 });
-  const fender  = obj({ color: 0xbdb8ad, roughness: 0.72, metalness: 0.05, side: THREE.DoubleSide });
-  const wire    = obj({ color: 0xb9bcc0, roughness: 0.5, metalness: 0.7, alphaMap: wheelWeave, alphaTest: 0.5, side: THREE.DoubleSide });
+  const fender  = obj({ color: 0xbdb8ad, roughness: 0.72, metalness: 0.05 });
+  /* Close up the weave opens: where the texture shows the dark gap
+     between wires, and the gap spans enough pixels to be drawn without
+     shimmer, the fragment is cut away and the bump stop shows through.
+     Further off the cut threshold falls to nothing, so the holes shrink
+     shut rather than flicker; at the chase camera's distance a cell is
+     a pixel and a half, and the tyre is the painted fabric again. The
+     sun's shadow maps do not see the holes. */
+  const tyre    = obj({ map: tyreTex, roughness: 0.7, metalness: 0.35, side: THREE.DoubleSide });
+  {
+    const base = tyre.onBeforeCompile;
+    tyre.onBeforeCompile = (shader, r) => {
+      base(shader, r);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec2 tx = vMapUv * vec2( 1024.0, 192.0 );          // tyreTex texels
+          float fp = max( length( dFdx( tx ) ), length( dFdy( tx ) ) );
+          float cut = 0.14 * ( 1.0 - smoothstep( 0.6, 1.4, fp ) );
+          if ( dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) < cut ) discard;
+        }`);
+    };
+    tyre.customProgramCacheKey = () => 'surface-object-weave';
+  }
+  // Only its outward faces go into the shadow maps: with both, the
+  // shallow dish shadows itself in a sawtooth wherever the sun grazes it.
+  const hubAlu  = obj({ color: 0xc3c5c9, roughness: 0.35, metalness: 0.8, side: THREE.DoubleSide, shadowSide: THREE.FrontSide });
   const gmesh   = obj({ color: 0xd9b56a, roughness: 0.45, metalness: 0.8, alphaMap: dishWeave, alphaTest: 0.5, side: THREE.DoubleSide });
 
   const group = new THREE.Group();
@@ -6461,41 +6514,151 @@ const rover = (() => {
   }
   add(new THREE.BoxGeometry(0.14, 0.05, 0.12), dark, -0.2, 1.17, 1.42);          // scoop head
 
+  // ── the commander, in the left seat: sitting back against the
+  // webbing with the backpack over the seat back, boots on the
+  // footrest, right hand on the T-handle between the seats. Shown
+  // only while you drive; a parked rover is empty.
+  const suit  = obj({ color: 0xe4e1d9, roughness: 0.92, metalness: 0 });
+  const visor = obj({ color: 0xc99a3c, roughness: 0.12, metalness: 1 });
+  const crew = new THREE.Group();
+  group.add(crew);
+  {
+    const cx = -0.33;
+    const limb = (x0, y0, z0, x1, y1, z1, r, mat = suit) => {
+      _a.set(x0, y0, z0); _b.set(x1, y1, z1);
+      const len = _a.distanceTo(_b);
+      const m = add(new THREE.CapsuleGeometry(r, len, 4, 10), mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, crew);
+      m.quaternion.setFromUnitVectors(_up, _b.sub(_a).normalize());
+    };
+    add(new THREE.BoxGeometry(0.44, 0.52, 0.28), suit, cx, 0.7, 0.36, 0.08, 0, 0, crew);       // torso
+    add(new THREE.BoxGeometry(0.42, 0.62, 0.2), blanket, cx, 0.86, 0.58, 0.08, 0, 0, crew);    // PLSS
+    add(new THREE.BoxGeometry(0.3, 0.22, 0.18), blanket, cx, 1.26, 0.62, 0.08, 0, 0, crew);    // OPS on top
+    add(new THREE.BoxGeometry(0.26, 0.1, 0.12), dark, cx, 0.86, 0.17, 0.08, 0, 0, crew);       // chest controls
+    add(new THREE.SphereGeometry(0.16, 20, 14), suit, cx, 1.14, 0.3, 0, 0, 0, crew);           // helmet
+    add(new THREE.SphereGeometry(0.165, 20, 10, Math.PI * 1.12, Math.PI * 0.76, Math.PI * 0.3, Math.PI * 0.34),
+        visor, cx, 1.14, 0.3, 0, 0, 0, crew);                                                  // gold visor, facing -z
+    add(new THREE.BoxGeometry(0.4, 0.16, 0.34), suit, cx, 0.4, 0.44, 0, 0, 0, crew);           // hips on the seat
+    for (const dx of [-0.11, 0.11]) {
+      limb(cx + dx, 0.42, 0.42, cx + dx * 1.1, 0.46, 0.0, 0.085);                            // thigh
+      limb(cx + dx * 1.1, 0.46, 0.0, cx + dx * 1.15, 0.2, -0.44, 0.075);                     // shin
+      add(new THREE.BoxGeometry(0.13, 0.1, 0.26), blanket, cx + dx * 1.15, 0.17, -0.5, -0.5, 0, 0, crew);  // boot
+    }
+    limb(cx - 0.25, 0.9, 0.36, cx - 0.29, 0.62, 0.3, 0.07);                                  // left upper arm
+    limb(cx - 0.29, 0.62, 0.3, cx - 0.27, 0.5, 0.02, 0.06);                                  // … forearm on the rest
+    limb(cx + 0.25, 0.9, 0.36, cx + 0.28, 0.66, 0.22, 0.07);                                 // right upper arm
+    limb(cx + 0.28, 0.66, 0.22, 0.0, 0.64, 0.04, 0.06);                                      // … forearm to the handle
+    add(new THREE.SphereGeometry(0.055, 10, 8), dark, 0.0, 0.64, 0.03, 0, 0, 0, crew);        // glove
+    add(new THREE.SphereGeometry(0.055, 10, 8), dark, cx - 0.27, 0.49, -0.02, 0, 0, 0, crew);
+  }
+  crew.visible = false;
+
   // ── wheels, fenders, suspension. Front pair steers; all four spin.
+  /* The wheel, as built: a spun-aluminium hub disc, and bolted to its
+     rim a tyre of woven wire shaped like any other tyre — sidewalls
+     bulging out from the rim, a flat tread with the chevrons on it.
+     The titanium bump stop inside it shows through the weave when you
+     are close. Tyre and hub are lathed about +y and then laid on
+     their side, so the axle runs along x. */
+  const RIM_R = 0.25, TYRE_W = 0.115;
+  const tyreProfile = [];
+  for (let i = 0; i <= 24; i++) {
+    // A superellipse from rim to rim: boxy, like an inflated section.
+    const t = i / 24 * Math.PI, c = Math.cos(t), s = Math.sin(t);
+    tyreProfile.push(new THREE.Vector2(RIM_R + (WHEEL_R - RIM_R) * Math.pow(s, 0.45),
+                                       -TYRE_W * Math.sign(c) * Math.pow(Math.abs(c), 0.45)));
+  }
+  const tyreGeo = new THREE.LatheGeometry(tyreProfile, 64).rotateZ(Math.PI / 2);
+  // The hub: a dished disc on each face, out to the rim, and a cap.
+  const hubGeo = new THREE.LatheGeometry([0, 0.06, 0.14, 0.2, RIM_R].map((r, i) =>
+    new THREE.Vector2(r + 0.001, TYRE_W - 0.07 + 0.07 * (i / 4) * (i / 4))), 40).rotateZ(Math.PI / 2);
+  /* Fenders are fibreglass shells a centimetre and a half thick: an
+     annular sector swept across the width of the wheel, with its ends
+     closed, arching over the top from ahead of the axle to behind it. */
+  const fenderGeo = (() => {
+    const r0 = 0.47, r1 = 0.485, a0 = 0.32, a1 = Math.PI - 0.32;
+    const sh = new THREE.Shape();
+    sh.absarc(0, 0, r1, a0, a1, false);
+    sh.absarc(0, 0, r0, a1, a0, true);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.3, bevelEnabled: false, curveSegments: 24 });
+    return g.translate(0, 0, -0.15).rotateY(Math.PI / 2);
+  })();
+
+  /* Suspension: double wishbones, upper and lower, pivoting on torsion
+     bars that run fore and aft under the chassis. Both arms are the
+     same length and swing through the same angle, so the upright they
+     carry stays vertical and the wheel moves on an arc — up, and a
+     little inboard. The steering knuckle turns on the upright; the
+     arms do not steer. */
+  const ARM_L = 0.36;                       // pivot to upright
+  const KNUCKLE = 0.1;                      // upright, inboard of the wheel centre
+  const ARM_PX = TRACK / 2 - KNUCKLE - ARM_L;
+  const REST_Y = WHEEL_CTR - CHASSIS_H;     // wheel centre with the chassis at ride height
+  const ARM_DY = 0.07;                      // half the spacing of the two arms
+  const ARM_MAX = 0.72;                     // swing either way, rad
+  /* Mass. What the springs, the tyres and the body's own inertia do is
+     what makes it look heavy: at a sixth of a g the suspension swings
+     slowly and far, and a rover coming over a crater rim at speed keeps
+     going up after the ground has stopped — the Grand Prix footage from
+     Apollo 16 has all four wheels off the ground. Everything below is
+     per unit mass, so the vehicle's weight itself never appears. */
+  const TRAVEL = ARM_L * Math.sin(ARM_MAX); // wheel travel either way from ride height
+  const PRELOAD = 0.1;                      // share of its load a wheel still carries at full droop
+  const DAMP = 0.3;                         // damping ratio
+  const STOP_K = 2500, STOP_C = 60;         // the bump stops: stiff, and lossy
+  const RP2 = 0.9, RR2 = 0.4;               // radius of gyration², pitch and roll, m²
+  const HCG = 0.55;                         // centre of mass above the contact patches
+  const MU = 0.8;                           // wire mesh in regolith
+  const SUB = 1 / 240;                      // physics substep, s
   const wheels = [];
   for (const [wx, wz, front] of [[-TRACK / 2, -WHEELBASE / 2, 1], [TRACK / 2, -WHEELBASE / 2, 1],
                                  [-TRACK / 2, WHEELBASE / 2, 0], [TRACK / 2, WHEELBASE / 2, 0]]) {
-    const wg = new THREE.Group();
-    wg.position.set(wx, 0, wz);
-    const spin = new THREE.Group();
-    wg.add(spin);
     const side = Math.sign(wx);
-    // Tyre: the woven band, open, with the inner bump-stop frame
-    // and the hub drive visible through it.
-    add(new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.23, 56, 1, true), wire, 0, 0, 0, 0, 0, Math.PI / 2, spin);
-    add(new THREE.CylinderGeometry(0.3, 0.3, 0.16, 24, 1, true), dark, 0, 0, 0, 0, 0, Math.PI / 2, spin);
-    for (const o of [-0.115, 0.115]) add(new THREE.TorusGeometry(WHEEL_R, 0.012, 6, 40), alu, o, 0, 0, 0, Math.PI / 2, 0, spin);
-    for (let k = 0; k < 6; k++) {       // spokes of the inner frame
-      const a = k / 6 * 6.2832;
-      tube(0, 0, 0, 0, Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0.012, aluDull, spin);
+    const wg = new THREE.Group();            // the upright: rides the arm ends
+    wg.position.set(wx, REST_Y, wz);
+    const steer = new THREE.Group();         // the knuckle: turns with the wheel
+    wg.add(steer);
+    const spin = new THREE.Group();
+    steer.add(spin);
+    add(tyreGeo.clone(), tyre, 0, 0, 0, 0, 0, 0, spin);
+    add(hubGeo.clone(), hubAlu, 0, 0, 0, 0, 0, 0, spin);
+    add(hubGeo.clone().rotateY(Math.PI), hubAlu, 0, 0, 0, 0, 0, 0, spin);
+    for (const o of [-TYRE_W, TYRE_W]) add(new THREE.TorusGeometry(RIM_R, 0.012, 6, 40), alu, o, 0, 0, 0, Math.PI / 2, 0, spin);
+    // The titanium bump stop inside the carcass, on struts off the rim.
+    add(new THREE.CylinderGeometry(0.33, 0.33, 0.15, 40, 1, true), aluDull, 0, 0, 0, 0, 0, Math.PI / 2, spin);
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * 6.2832;
+      tube(0, Math.cos(a) * RIM_R, Math.sin(a) * RIM_R, 0, Math.cos(a) * 0.33, Math.sin(a) * 0.33, 0.012, aluDull, spin);
     }
-    add(new THREE.CylinderGeometry(0.09, 0.09, 0.2, 14), aluDull, -side * 0.08, 0, 0, 0, 0, Math.PI / 2, wg);   // hub drive
-    // Fender: a pale shell over the top of the wheel.
-    add(new THREE.CylinderGeometry(0.48, 0.48, 0.3, 24, 1, true, 0.32, 2.5), fender, 0, 0.02, 0, 0, 0, Math.PI / 2, wg);
-    // A-arms reaching in to the chassis rail.
-    tube(-side * 0.1, 0.06, 0, -side * (TRACK / 2 - RX), 0.12, -0.18, 0.018, alu, wg);
-    tube(-side * 0.1, 0.06, 0, -side * (TRACK / 2 - RX), 0.12, 0.18, 0.018, alu, wg);
-    tube(-side * 0.1, -0.06, 0, -side * (TRACK / 2 - RX), 0.0, 0.0, 0.018, alu, wg);
+    add(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 12), aluDull, 0, 0, 0, 0, 0, Math.PI / 2, spin);   // axle cap
+    // Traction drive and the knuckle it hangs on; the fender turns with them.
+    add(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 14), aluDull, -side * 0.12, 0, 0, 0, 0, Math.PI / 2, steer);
+    add(fenderGeo.clone(), fender, 0, 0.02, 0, 0, 0, 0, steer);
+    tube(-side * 0.19, 0, 0, -side * 0.19, 0.3, 0, 0.012, aluDull, steer);       // fender strut
+    tube(-side * KNUCKLE, -ARM_DY - 0.02, 0, -side * KNUCKLE, ARM_DY + 0.02, 0, 0.022, aluDull, wg);
+    // Wishbones: each an A from two bearings on its torsion bar to a
+    // ball joint on the upright.
+    const arms = [ARM_DY, -ARM_DY].map(dy => {
+      const a = new THREE.Group();
+      a.position.set(side * ARM_PX, REST_Y + dy, wz);
+      tube(0, 0, -0.22, side * ARM_L, 0, 0, 0.016, alu, a);
+      tube(0, 0, 0.22, side * ARM_L, 0, 0, 0.016, alu, a);
+      group.add(a);
+      // The torsion bar, and a bracket from each end up to the frame.
+      tube(side * ARM_PX, REST_Y + dy, wz - 0.25, side * ARM_PX, REST_Y + dy, wz + 0.25, 0.02, aluDull);
+      return a;
+    });
+    for (const dz of [-0.24, 0.24]) tube(side * ARM_PX, 0.03, wz + dz, side * ARM_PX, REST_Y - ARM_DY, wz + dz, 0.014, aluDull);
     group.add(wg);
-    wheels.push({ g: wg, spin, front });
+    wheels.push({ g: wg, steer, spin, arms, front, side, x: wx, z: wz, swing: 0, s: 0, contact: true, land: 0 });
   }
 
   /* Merge by material. Built above as some hundred and fifty meshes —
      every tube its own — which is fine for reading and ruinous for
      drawing: each is a draw call in the scene and in both shadow
      cascades. Whatever does not move relative to its parent is folded
-     into one mesh per material: the chassis, each wheel's spinning
-     part, each wheel's steering part, and the dish's ribs. */
+     into one mesh per material: the chassis, and per wheel the
+     spinning part, the steering knuckle, the upright and each of the
+     two wishbones; and the dish's ribs. */
   function mergeInto(parent) {
     const byMat = new Map();
     for (const m of [...parent.children]) {
@@ -6531,22 +6694,27 @@ const rover = (() => {
   }
   mergeInto(group);
   mergeInto(dish);
-  for (const w of wheels) { mergeInto(w.spin); mergeInto(w.g); }
+  mergeInto(crew);
+  for (const w of wheels) { mergeInto(w.spin); mergeInto(w.steer); mergeInto(w.g); w.arms.forEach(mergeInto); }
 
   const state = {
     spawned: false,
     pos: new THREE.Vector3(),
     yaw: 0, vel: 0, steer: 0,
-    pitch: 0, roll: 0, y: 0,   // smoothed chassis attitude
-    trackAcc: 0,
+    pitch: 0, roll: 0, y: 0,   // chassis attitude and height
+    vy: 0, pitchRate: 0, rollRate: 0,
+    air: 0,                    // seconds with no wheel on the ground
+    trackAcc: 0, sprayAcc: 0,
   };
-  const euler = new THREE.Euler();
+  const euler = new THREE.Euler(), _q = new THREE.Quaternion();
 
   function settle() {
-    // Rest the chassis on the terrain immediately (no smoothing).
+    // Rest the chassis on the terrain immediately, and still.
     const a = poseFromWheels();
     state.y = a.y; state.pitch = a.pitch; state.roll = a.roll;
-    apply(true);
+    state.vy = state.pitchRate = state.rollRate = 0;
+    state.air = 0;
+    apply();
   }
 
   function poseFromWheels() {
@@ -6561,24 +6729,54 @@ const rover = (() => {
     return {
       y: (hFL + hFR + hRL + hRR) / 4 + CHASSIS_H,
       pitch: Math.atan2((hFL + hFR - hRL - hRR) / 2, WHEELBASE),
-      roll: Math.atan2((hFL + hRL - hFR - hRR) / 2, TRACK),
+      roll: Math.atan2((hFR + hRR - hFL - hRL) / 2, TRACK),   // +z roll lifts the right (+x) side
       gradeFwd: ((hFL + hFR) - (hRL + hRR)) / (2 * WHEELBASE),
     };
   }
 
   const _wv = new THREE.Vector3(), _aim = new THREE.Vector3();
-  function apply(snap) {
+  function apply() {
     group.position.set(state.pos.x, state.y, state.pos.z);
     euler.set(state.pitch, state.yaw, state.roll, 'YXZ');
     group.quaternion.setFromEuler(euler);
     // Per-wheel suspension: put each wheel's contact patch on its own
-    // ground, clamped to the travel the arms would allow.
+    // ground by swinging its wishbones, as far as they will swing.
+    const sMax = Math.sin(ARM_MAX);
     for (const w of wheels) {
-      _wv.set(w.g.position.x, 0, w.g.position.z).applyQuaternion(group.quaternion);
+      _wv.set(w.x, 0, w.z).applyQuaternion(group.quaternion);
       const hW = terrainHeight(state.pos.x + _wv.x, state.pos.z + _wv.z);
-      let ly = hW + WHEEL_CTR - state.y - _wv.y;
-      ly = Math.max(-0.34, Math.min(0.26, ly));
-      w.g.position.y = snap ? ly : w.g.position.y + (ly - w.g.position.y) * 0.35;
+      const ly = hW + WHEEL_CTR - state.y - _wv.y;
+      w.s = ly - REST_Y;
+      w.swing = Math.asin(Math.max(-sMax, Math.min(sMax, w.s / ARM_L)));
+      for (const a of w.arms) a.rotation.z = w.side * w.swing;
+      w.g.position.set(w.side * (ARM_PX + ARM_L * Math.cos(w.swing) + KNUCKLE),
+                       REST_Y + ARM_L * Math.sin(w.swing), w.z);
+    }
+  }
+
+  /* Rooster tails. The tread picks grains up where it leaves the
+     ground and lets them go a little way round the back of the wheel.
+     A point on the tyre an angle φ past the contact patch moves, over
+     the ground, at v(1 − cos φ) forward and v·sin φ up — so the spray
+     leaves slower than the rover and falls behind it, steep and in
+     clean parabolas. The fender takes everything released much above
+     the axle; what is left goes out low, between 8° and 40°. */
+  const _wc = new THREE.Vector3();
+  function spray(v) {
+    const fx = -Math.sin(state.yaw) * Math.sign(v), fz = -Math.cos(state.yaw) * Math.sign(v);
+    const sp = Math.abs(v);
+    group.updateMatrixWorld();
+    for (const w of wheels) {
+      if (!w.contact) continue;
+      w.g.getWorldPosition(_wc);
+      const h = terrainHeight(_wc.x, _wc.z);
+      for (let i = 0; i < 6; i++) {
+        const phi = 0.14 + Math.random() * 0.56, k = sp * (0.7 + Math.random() * 0.35);
+        const b = WHEEL_R * Math.sin(phi), lat = (Math.random() - 0.5) * 0.2;
+        const vf = k * (1 - Math.cos(phi)), vl = (Math.random() - 0.5) * 0.25 * k;
+        dust.grain(_wc.x - fx * b - fz * lat, h + WHEEL_R * (1 - Math.cos(phi)), _wc.z - fz * b + fx * lat,
+                   fx * vf - fz * vl, k * Math.sin(phi), fz * vf + fx * vl);
+      }
     }
   }
 
@@ -6591,12 +6789,17 @@ const rover = (() => {
       group.visible = true;
       settle();
     },
+    // Someone in the seat while you drive; nobody when it is parked.
+    setCrew(on) { crew.visible = on; },
     // Left behind when you change body — it does not follow.
     despawn() {
       state.spawned = false;
       group.visible = false;
     },
-    step(dt, keys, gravity) {
+    /* One frame of driving, or of standing parked (parked: the brake
+       is on and nobody is steering, but the chassis still settles,
+       and a rover left in the air still comes down). */
+    step(dt, keys, gravity, parked = false) {
       const st = state;
       // Steering: rate-limited toward the held direction.
       const steerTarget = (keys.KeyA || keys.ArrowLeft ? 0.5 : 0) + (keys.KeyD || keys.ArrowRight ? -0.5 : 0);
@@ -6605,55 +6808,116 @@ const rover = (() => {
       // Throttle. The real LRV topped out at ~17 km/h.
       const fwd = keys.KeyW || keys.ArrowUp, rev = keys.KeyS || keys.ArrowDown;
       const pose = poseFromWheels();
-      if (fwd) st.vel += 2.4 * dt;
-      if (rev) st.vel -= (st.vel > 0.1 ? 5.0 : 1.6) * dt;   // brake first, then reverse
-      st.vel += -gravity * pose.gradeFwd * 0.9 * dt;         // rolls downhill
-      if (!fwd && !rev) st.vel *= Math.max(0, 1 - 0.5 * dt);
-      // Aerodynamic drag: nothing at all on four of these bodies, and
-      // the whole design problem on the fifth. Dragging a rover-sized
-      // frontal area through 65 kg/m³ at walking pace takes about a
-      // kilowatt, so a Venus rover is slow because of what it is
-      // driving through, not what it is driving over — and it does
-      // not coast, it stops.
-      if (world.roverDrag) st.vel -= world.roverDrag * st.vel * Math.abs(st.vel) * dt;
       const topF = world.roverTop || 4.8, topR = Math.min(2, topF * 0.5);
-      st.vel = Math.max(-topR, Math.min(topF, st.vel));
+      const g = gravity;
+      // Springs scaled to the body, so it rides at its design height
+      // everywhere: the torsion bars of a Venus rover are not a Moon
+      // rover's. What changes with g is how fast it all happens.
+      const kW = g * (1 - PRELOAD) / (4 * TRAVEL);
+      const cW = DAMP * Math.sqrt(kW);        // 2ζω per wheel, with ω² = 4kW over all four
+      const T = Math.min(dt, 0.1), n = Math.ceil(T / SUB), h = T / n;
+      for (let i = 0; i < n; i++) {
+        // Wheel loads, from where the ground is under each corner.
+        euler.set(st.pitch, st.yaw, st.roll, 'YXZ');
+        _q.setFromEuler(euler);
+        let F = 0, tp = 0, tr = 0, touching = 0;
+        for (const w of wheels) {
+          _wv.set(w.x, 0, w.z).applyQuaternion(_q);
+          const sNow = terrainHeight(st.pos.x + _wv.x, st.pos.z + _wv.z) + WHEEL_CTR - st.y - _wv.y - REST_Y;
+          const sd = (sNow - w.s) / h;
+          w.s = sNow;
+          const on = sNow > -TRAVEL;
+          if (on && !w.contact) w.land = Math.max(w.land, sd);
+          w.contact = on;
+          if (!on) continue;
+          touching++;
+          let f = g / 4 * PRELOAD + kW * (sNow + TRAVEL) + cW * sd;
+          if (sNow > TRAVEL) f += STOP_K * (sNow - TRAVEL) + STOP_C * sd;
+          f = Math.max(0, f);
+          F += f; tp -= f * w.z; tr += f * w.x;
+        }
+
+        // Traction: the tyres can push only as hard as they are pressed
+        // down, and at a sixth of a g that is not hard. Throttle, brake
+        // and steering all run out of grip long before the motors or the
+        // wheel angle run out — the rover carries its speed into a turn
+        // and runs wide, and it takes its time to stop.
+        const grip = MU * F;
+        st.vel += -g * pose.gradeFwd * 0.9 * (touching / 4) * h;   // rolls downhill
+        let a = 0;
+        if (parked) a = -Math.sign(st.vel) * Math.min(grip, Math.abs(st.vel) / h);
+        else {
+          if (fwd) a += 2.4;
+          if (rev) a -= st.vel > 0.1 ? 5.0 : 1.6;   // brake first, then reverse
+          a = Math.max(-grip, Math.min(grip, a));
+        }
+        st.vel += a * h;
+        if (!fwd && !rev) st.vel *= Math.max(0, 1 - 0.5 * (touching / 4) * h);
+        // Aerodynamic drag: nothing at all on four of these bodies, and
+        // the whole design problem on the fifth. Dragging a rover-sized
+        // frontal area through 65 kg/m³ at walking pace takes about a
+        // kilowatt, so a Venus rover is slow because of what it is
+        // driving through, not what it is driving over — and it does
+        // not coast, it stops.
+        if (world.roverDrag) st.vel -= world.roverDrag * st.vel * Math.abs(st.vel) * h;
+        st.vel = Math.max(-topR, Math.min(topF, st.vel));
+
+        // Bicycle-model yaw; almost no steering authority at rest, and
+        // none beyond what the tyres can hold sideways.
+        let yawRate = st.vel / WHEELBASE * Math.tan(st.steer);
+        if (Math.abs(st.vel * yawRate) > grip) yawRate = Math.sign(yawRate) * grip / Math.max(0.1, Math.abs(st.vel));
+        st.yaw += yawRate * h;
+        // Local -z is forward; in world that is (-sin yaw, -cos yaw).
+        st.pos.x -= Math.sin(st.yaw) * st.vel * h;
+        st.pos.z -= Math.cos(st.yaw) * st.vel * h;
+
+        // The chassis: a rigid body on four springs. Weight against the
+        // wheel loads; pitch and roll from where those loads act, plus
+        // the tyres' own push at the ground, a centre of mass's height
+        // below the mass — squat under throttle, dive under the brake,
+        // lean out of a turn.
+        st.vy += (F - g) * h;
+        st.pitchRate += (tp + a * HCG) / RP2 * h;
+        st.rollRate += (tr - st.vel * yawRate * HCG) / RR2 * h;
+        st.y += st.vy * h;
+        st.pitch += st.pitchRate * h;
+        st.roll += st.rollRate * h;
+      }
       if (!fwd && !rev && Math.abs(st.vel) < 0.03) st.vel = 0;
-
-      // Bicycle-model yaw; almost no steering authority at rest.
-      st.yaw += st.vel / WHEELBASE * Math.tan(st.steer) * dt;
-
-      // Local -z is forward; in world that is (-sin yaw, -cos yaw).
-      st.pos.x -= Math.sin(st.yaw) * st.vel * dt;
-      st.pos.z -= Math.cos(st.yaw) * st.vel * dt;
-
-      // Chassis follows the wheels with a soft suspension lag.
-      const k = Math.min(1, dt * 7);
-      st.y += (pose.y - st.y) * k;
-      st.pitch += (pose.pitch - st.pitch) * k;
-      st.roll += (pose.roll - st.roll) * k;
+      // Nothing here rolls it over; keep a bad landing from trying.
+      if (Math.abs(st.pitch) > 0.9) { st.pitch = Math.sign(st.pitch) * 0.9; st.pitchRate = 0; }
+      if (Math.abs(st.roll) > 0.7) { st.roll = Math.sign(st.roll) * 0.7; st.rollRate = 0; }
+      st.air = wheels.some(w => w.contact) ? 0 : st.air + dt;
       apply();
 
       // Wheels: spin with speed, front pair follows the steer angle.
       for (const w of wheels) {
-        if (w.front) w.g.rotation.y = st.steer;
+        if (w.front) w.steer.rotation.y = st.steer;
         w.spin.rotation.x -= st.vel / WHEEL_R * dt;
       }
       // Keep the high-gain dish on the relay — Earth from the Moon,
       // and from Mars whichever moon is carrying the link.
       dish.lookAt(_aim.copy(group.position).add(COMPANION_AIM));
 
-      // Tracks and rooster-tails of dust off the wheels.
+      // A wheel coming down hard kicks up a ring of soil.
+      for (const w of wheels) {
+        if (w.land > 0.6) {
+          w.g.getWorldPosition(_wc);
+          dust.burst(_wc.x, terrainHeight(_wc.x, _wc.z), _wc.z, Math.min(1.2, w.land * 0.3));
+        }
+        w.land = 0;
+      }
+
+      // Tracks, and rooster tails off every wheel.
       st.trackAcc += Math.abs(st.vel) * dt;
-      if (st.trackAcc > 0.72 && Math.abs(st.vel) > 0.3) {
+      if (st.trackAcc > 0.72 && Math.abs(st.vel) > 0.3 && st.air === 0) {
         st.trackAcc = 0;
         tracks.place(st.pos.x, st.pos.z, st.yaw, TRACK / 2);
-        if (Math.abs(st.vel) > topF * 0.46) {
-          const bx = st.pos.x + Math.sin(st.yaw) * WHEELBASE / 2;
-          const bz = st.pos.z + Math.cos(st.yaw) * WHEELBASE / 2;
-          dust.burst(bx, terrainHeight(bx, bz), bz, Math.abs(st.vel) * 0.16,
-                     Math.sin(st.yaw) * st.vel * 0.4, Math.cos(st.yaw) * st.vel * 0.4);
-        }
+      }
+      st.sprayAcc += Math.abs(st.vel) * dt;
+      if (st.sprayAcc > 0.3) {
+        st.sprayAcc = 0;
+        if (Math.abs(st.vel) > 1.2) spray(st.vel);
       }
       return pose;
     },
@@ -6738,6 +7002,7 @@ function setMode(next) {
     );
     player.vel.set(0, 0, 0);
     yawObj.rotation.y = s.yaw;
+    rover.setCrew(false);
   }
   if (next === 'ROVER') {
     const s = rover.state;
@@ -6748,6 +7013,7 @@ function setMode(next) {
       rover.spawnAt(player.pos.x - Math.sin(yaw) * 3.5, player.pos.z - Math.cos(yaw) * 3.5, yaw);
     }
     pitchObj.rotation.x = -0.3;
+    rover.setCrew(true);
   }
   if (next === 'FLY' && mode === 'EVA') {
     player.vel.y = Math.max(player.vel.y, 2);
@@ -7252,9 +7518,13 @@ function placeShadowRig(light, x, y, z) {
   light.position.copy(_rt).addScaledVector(SUN_DIR, light.userData.dist);
 }
 
+const NO_KEYS = Object.freeze({});
 function step(dt, t) {
   demo.update(dt);
   const gh = mode === 'EVA' ? stepEVA(dt) : mode === 'FLY' ? stepFLY(dt) : stepROVER(dt);
+  // A parked rover, brake on, still settles on its springs — and one
+  // you bailed out of mid-jump still comes down.
+  if (mode !== 'ROVER' && rover.state.spawned) rover.step(dt, NO_KEYS, player.gravity, true);
   const focus = mode === 'ROVER' ? rover.state.pos : player.pos;
 
   // Stream the world around whatever is moving.
