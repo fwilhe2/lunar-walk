@@ -55,28 +55,28 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 3. Complex craters
+## 3. Complex craters ✅
 
 **Why.** Every crater is a simple bowl (`cellCraters`, line 468: fresh depth 0.4 r, i.e. D/5). That includes Venus's craters up to 24 km, Pluto's and Charon's up to 18 km, and Europa's up to 4.8 km. Above each body's transition diameter, real craters have flat floors, central peaks and terraced walls, and they are shallower for their width.
 
 **Substeps**
-- [ ] Add a transition diameter `Dtr` to each `WORLDS` row, with values sourced from the literature. For rocky bodies it scales roughly as 1/g; the Moon's is about 15–20 km. Icy bodies and Venus don't follow the rock scaling, so look those up rather than guessing.
-- [ ] In `cellCraters`, when `2r > Dtr`, derive and store on the crater object:
+- [x] Add a transition diameter `Dtr` to each `WORLDS` row, with values sourced from the literature. For rocky bodies it scales roughly as 1/g; the Moon's is about 15–20 km. Icy bodies and Venus don't follow the rock scaling, so look those up rather than guessing.
+- [x] In `cellCraters`, when `2r > Dtr`, derive and store on the crater object:
   - complex depth (Pike's complex-crater power laws for the Moon, scaled per body);
   - floor radius;
   - central-peak height and width;
   - terrace count.
 
   The cache holds them, so the per-query cost stays in the profile, not the setup.
-- [ ] Add a complex branch to `craterField`:
-  - [ ] a flat floor with low hummocky noise;
-  - [ ] a ridged central peak, varied per crater with `hashF` of its centre;
-  - [ ] walls as smoothed steps between floor and rim;
-  - [ ] the same rim, ejecta blanket, 1.9 r cutoff and age rounding as simple craters.
-- [ ] Blend simple into complex over a band around `Dtr`, so the population has no visible jump.
-- [ ] Keep `CR_ALB` consistent (fresh halos). Optionally brighten fresh peaks and walls.
-- [ ] Check that rock clustering (§6) still looks right on terraces and peaks.
-- [ ] Update README ("simple-crater morphometry").
+- [x] Add a complex branch to `craterField`:
+  - [x] a flat floor with low hummocky noise;
+  - [x] a ridged central peak, varied per crater with `hashF` of its centre;
+  - [x] walls as smoothed steps between floor and rim;
+  - [x] the same rim, ejecta blanket, 1.9 r cutoff and age rounding as simple craters.
+- [x] Blend simple into complex over a band around `Dtr`, so the population has no visible jump.
+- [x] Keep `CR_ALB` consistent (fresh halos). (Brightening fresh peaks and walls not done.)
+- [ ] Check that rock clustering (§6) still looks right on terraces and peaks — deferred to item 4, where the Moon gets craters big enough to show them.
+- [x] Update README ("simple-crater morphometry").
 
 **Verify.**
 - In Node: radial height profiles through one crater per affected world, and µs per call before and after for Venus, Europa, Pluto and Charon.

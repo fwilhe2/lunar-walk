@@ -231,6 +231,9 @@ var WORLDS = {
       { cell:  3.2, salt: 67, rMin: 0.8, rMax: 1.6, count: 1, prob: 0.32, ageK: 2.8 },
     ],
     craterAmp: 1, depthK: 1, rampart: 0, rayLayers: 2,
+    // Simple-to-complex transition diameter, m: flat floors from here,
+    // central peaks and terraces soon after (Pike 1977).
+    Dtr: 15000,
     // Fresh ejecta is immature — not yet darkened by the solar wind
     // and micrometeorites — so every young crater wears a bright halo.
     halo: 0.55,
@@ -252,6 +255,7 @@ var WORLDS = {
       { cell:   50, salt: 41, rMin:   5, rMax:  18, count: 1, prob: 0.22 },
     ],
     craterAmp: 0.74, depthK: 0.60, rampart: 1, rayLayers: 0,
+    Dtr: 7000,
   },
 
   /* Phobos: a 22 km captured asteroid, saturated at every scale,
@@ -310,13 +314,19 @@ var WORLDS = {
     id: 'venus', kind: 3, seed: 19751022,
     g: 8.87, R: 6051800, Rc: -1330000,
     craters: [
-      { cell: 32768, salt: 7, rMin: 900, rMax: 12000, count: 1, prob: 0.05 },
+      // Skewed young, not old: about 85% of Venus's craters are pristine
+      // (Schaber et al. 1992), since little has touched them since.
+      { cell: 32768, salt: 7, rMin: 900, rMax: 12000, count: 1, prob: 0.05, ageK: 0.35 },
     ],
     // Venusian craters are shallow for their size — a 24 km bowl is
     // under a kilometre deep — and they end in lobate outflows,
     // fluidised by the atmosphere they punched through, which is
     // what the rampart term draws.
     craterAmp: 1, depthK: 0.18, rampart: 0.8, rayLayers: 0,
+    // Nearly every Venusian crater over ~11–15 km is complex, most with
+    // a central peak; below that they are irregular, from impactors
+    // the air broke up (Schaber et al. 1992).
+    Dtr: 11000,
   },
 
   /* Europa: a shell of ice over an ocean, and the youngest surface
@@ -337,6 +347,7 @@ var WORLDS = {
       { cell:    24, salt: 53, rMin: 0.8, rMax:    4, count: 1, prob: 0.10, ageK: 1.6 },
     ],
     craterAmp: 1, depthK: 0.85, rampart: 0, rayLayers: 1, halo: 0.35,
+    Dtr: 4500,     // 4–5 km (Moore et al. 2001; Silber et al. 2017)
   },
 
   /* Pluto, on the side that faces Charon. New Horizons saw this
@@ -357,6 +368,7 @@ var WORLDS = {
       { cell:   300, salt: 41, rMin:   20, rMax:  110, count: 1, prob: 0.06, ageK: 2.2 },
     ],
     craterAmp: 1, depthK: 0.55, rampart: 0, rayLayers: 0, halo: 0.2,
+    Dtr: 11500,    // 11–12.5 km (Robbins et al. 2021)
   },
 
   /* Charon, on Vulcan Planitia: the smooth plains that cover the
@@ -379,6 +391,7 @@ var WORLDS = {
       { cell:    40, salt: 53, rMin:    3, rMax:   15, count: 1, prob: 0.10, ageK: 2.4 },
     ],
     craterAmp: 1, depthK: 0.8, rampart: 0, rayLayers: 1, halo: 0.4,
+    Dtr: 14500,    // 13.5–16 km (Robbins et al. 2021)
   },
 };
 
@@ -467,9 +480,33 @@ function cellCraters(li, cx, cz) {
     // half filled with sand, Venusian ones are barely there at all.
     var depth = r * (0.035 + 0.365 * Math.pow(age, 1.3)) * (0.9 + 0.2 * j) * dK;
     var H = r * (0.004 + 0.068 * age) * (0.8 + 0.4 * j) * dK;
+    // Complex craters. Past the body's transition diameter the bowl
+    // collapses as it forms: shallower for its width, a flat floor, a
+    // central peak, walls slumped into terraces. Depth, rim height and
+    // floor width follow Pike's (1977) lunar power laws in Holsapple's
+    // continuous form, each joining the simple bowl exactly at the
+    // transition, so the population has no step in it; other bodies
+    // scale by their own transition. s is the diameter in transitions.
+    var s = WORLD.Dtr ? 2 * r / WORLD.Dtr : 0, cpx = null;
+    if (s > 1) {
+      depth *= Math.pow(s, -0.699);                      // d ∝ D^0.301
+      if (s > 2.15) H *= Math.pow(s / 2.15, -0.601);     // h ∝ D^0.399, from 22.8 km on the Moon
+      var jp = cellRnd(cx, cz, L.salt, k * 6 + 7);
+      cpx = {
+        ff: Math.min(0.62, 0.292 * Math.pow(s - 1, 1.249) / s),   // flat floor, as a fraction of r
+        e: 2 - 0.35 * sstep(1, 2.5, s),                           // walls steepen toward the crest
+        // A peak about a third of the depth high at Tycho's size,
+        // growing out of nothing at the transition; worn down with age.
+        hp: depth * 0.36 * sstep(1.15, 2.6, s) * (0.45 + 0.55 * age) * (0.75 + 0.5 * jp),
+        pr: 0.22 + 0.06 * jp,                                     // its base, as a fraction of r
+        nt: s > 1.7 ? Math.min(4, 1 + Math.floor((s - 1.7) * 1.4)) : 0,
+        ta: sstep(1.7, 2.4, s) * (0.25 + 0.75 * age),             // how crisp the terraces still are
+        nx: jp * 97.3, nz: j * 53.1,
+      };
+    }
     var o = 1 - age;
     out.push({
-      x: px, z: pz, r: r, depth: depth, H: H,
+      x: px, z: pz, r: r, depth: depth, H: H, cx: cpx,
       // Bowl curvature, so the parabola lands on the crest at d = 1.
       dh: depth + H,
       // How far the crest is rounded off: a knife edge when fresh,
@@ -515,7 +552,33 @@ function craterField(x, z) {
           if (d2 > reach * reach) continue;
 
           var d = Math.sqrt(d2) / c.r;
-          var hin = c.dh * d * d - c.depth;
+          var hin, X = c.cx;
+          if (X === null) {
+            hin = c.dh * d * d - c.depth;
+          } else {
+            // A complex rim slumps in arcs, so it is scalloped, not a
+            // circle. The wobble dies out before the 1.9 r cutoff.
+            var u = ox / c.r, w = oz / c.r;
+            if (d < 1.8) d *= 1 + (valueNoise(u * 2.3 + X.nx, w * 2.3 + X.nz) - 0.5) * 0.09 * (1 - sstep(1.2, 1.8, d));
+            var t = (d - X.ff) / (1 - X.ff);
+            if (t <= 0) {
+              // The floor: flat, and hummocky with slumped debris and
+              // the melt sheet, fading into the foot of the wall.
+              hin = -c.depth + c.depth * 0.05 * (valueNoise(u * 7 + X.nz, w * 7 + X.nx) - 0.5) * (1 - sstep(X.ff * 0.7, X.ff, d));
+            } else {
+              // The wall, in terraces: flat benches between steep risers,
+              // softening with age toward a plain slope.
+              if (t < 1 && X.nt > 0) {
+                var tn = t * X.nt, ti = Math.floor(tn);
+                t += ((ti + sstep(0.45, 1, tn - ti)) / X.nt - t) * X.ta;
+              }
+              hin = c.dh * Math.pow(t, X.e) - c.depth;
+            }
+            if (d < X.pr && X.hp > 0) {
+              var qp = 1 - d / X.pr;
+              hin += X.hp * Math.pow(qp, 1.4) * (0.45 + 1.1 * valueNoise(u * 9 + X.nx, w * 9 - X.nz));
+            }
+          }
           var dd = d < 0.5 ? 0.5 : d;
           var hout = c.H * (1 / (dd * dd * dd) - CUBE_0) * CUBE_K;
           var hh = hin < hout ? hin : hout;
