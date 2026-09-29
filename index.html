@@ -1414,9 +1414,11 @@ const VIEW = {
     // ground beneath it: near the horizon the Martian sky is roughly
     // as bright as the ground, which is the thing photographs of it
     // get across and descriptions of it never do. Still dark enough
-    // that a 7%-albedo moon reads as a bright dot against it.
+    // that a 7%-albedo moon reads as a bright dot against it. tau is
+    // the dust's vertical optical depth on a clear sol, which dims
+    // Phobos and Deimos on the way down.
     sky: { zenith: [0.095, 0.055, 0.034], horizon: [0.34, 0.20, 0.115],
-           aureole: [0.30, 0.335, 0.44], k: 62 },
+           aureole: [0.30, 0.335, 0.44], k: 62, tau: 0.5 },
     grey: 150, mapTint: [1.0, 0.93, 0.86], pits: 70, grain: 0.7, ripple: 0.16,
     pebbles: 600, clods: 0.8,
     // Brighter, less porous soil: skylight fills the gaps between
@@ -1657,7 +1659,7 @@ const VIEW = {
     // the sun a glow up to half as bright as the ground. Kept at the
     // faint end of what the measured haze allows.
     sky: { zenith: [0.0001, 0.0002, 0.0004], horizon: [0.0015, 0.0026, 0.0052],
-           aureole: [0.005, 0.0075, 0.014], k: 14, amt: 0.9 },
+           aureole: [0.005, 0.0075, 0.014], k: 14, amt: 0.9, tau: 0.005 },
     grey: 200, mapTint: [1.0, 0.98, 0.96], pits: 30, grain: 0.9, clods: 0.8, pebbles: 120,
     // A compromise between the two materials this ground is made of,
     // dark tholin and bright frost; the vertex colours carry which.
@@ -3734,17 +3736,60 @@ const corona = (() => {
    predicted it; Viking 1 photographed it in 1976.
 
    Brightness scales with how much lit dust is in the column, so
-   the whole dome dims and deepens as the sun goes down.          */
+   the whole dome dims and deepens as the sun goes down.
+
+   The sky is the air in front of everything beyond it, not a
+   backdrop behind it, so the function is shared: the dome draws it
+   where nothing else is, and every companion body adds it over
+   itself (§7) through the same uniforms. On a world without a sky
+   the gain and the optical depth are zeroed, not just the dome
+   hidden, so the companions see no air there either.             */
 const skyDome = (() => {
   const uniforms = {
-    uSun: { value: new THREE.Vector3() },
+    uSun: { value: new THREE.Vector3(0, 1, 0) },   // normalized in GLSL, so never zero
     uZenith: { value: new THREE.Color() },
     uHorizon: { value: new THREE.Color() },
     uAureole: { value: new THREE.Color() },
     uK: { value: 62 },
     uAmt: { value: 0.9 },
-    uGain: { value: 1 },
+    uGain: { value: 0 },
+    uTau: { value: 0 },
   };
+  const glsl = `
+    uniform vec3 uSun, uZenith, uHorizon, uAureole;
+    uniform float uK, uAmt, uGain, uTau;
+
+    vec3 skyRadiance( vec3 D ) {
+      // The dust column is longest along the horizon, so that is
+      // where the scattered light piles up.
+      float t = pow( 1.0 - clamp( D.y, 0.0, 1.0 ), 2.6 );
+      vec3 col = mix( uZenith, uHorizon, t );
+
+      // The forward-scattering halo: on Mars narrow, strong and
+      // bluer than the sky it sits in. On Venus uK drops to ~1
+      // and uAmt to a third, which is the other extreme of the
+      // same term — thirty optical depths of multiple scattering
+      // leave the sun as a vague brightening over half the sky,
+      // and no disc at all.
+      float ca = max( dot( D, normalize( uSun ) ), 0.0 );
+      float halo = pow( ca, uK ) + 0.30 * pow( ca, 7.0 );
+      col = mix( col, uAureole, clamp( halo, 0.0, 1.0 ) * uAmt );
+
+      // Below the horizon it becomes ground haze, so no seam
+      // shows when you look down from altitude.
+      col *= 1.0 - smoothstep( 0.0, -0.12, D.y ) * 0.45;
+      return col * uGain;
+    }
+
+    // What the air lets through along D, from a body beyond it. The
+    // airmass is 1/sin(elevation) for flat layers; the constant
+    // stands in for the planet's curve, which holds it near twenty
+    // at the horizon instead of letting it run to infinity.
+    float skyTrans( vec3 D ) {
+      float mu = max( D.y, 0.0 );
+      return exp( -uTau / sqrt( mu * mu + 0.002 ) );
+    }
+  `;
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(40000, 32, 20),
     new THREE.ShaderMaterial({
@@ -3755,32 +3800,10 @@ const skyDome = (() => {
           vDir = position;
           gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
         }`,
-      fragmentShader: `
-        uniform vec3 uSun, uZenith, uHorizon, uAureole;
-        uniform float uK, uAmt, uGain;
+      fragmentShader: glsl + `
         varying vec3 vDir;
         void main() {
-          vec3 D = normalize( vDir );
-          // The dust column is longest along the horizon, so that is
-          // where the scattered light piles up.
-          float t = pow( 1.0 - clamp( D.y, 0.0, 1.0 ), 2.6 );
-          vec3 col = mix( uZenith, uHorizon, t );
-
-          // The forward-scattering halo: on Mars narrow, strong and
-          // bluer than the sky it sits in. On Venus uK drops to ~1
-          // and uAmt to a third, which is the other extreme of the
-          // same term — thirty optical depths of multiple scattering
-          // leave the sun as a vague brightening over half the sky,
-          // and no disc at all.
-          float ca = max( dot( D, normalize( uSun ) ), 0.0 );
-          float halo = pow( ca, uK ) + 0.30 * pow( ca, 7.0 );
-          col = mix( col, uAureole, clamp( halo, 0.0, 1.0 ) * uAmt );
-
-          // Below the horizon it becomes ground haze, so no seam
-          // shows when you look down from altitude.
-          col *= 1.0 - smoothstep( 0.0, -0.12, D.y ) * 0.45;
-
-          gl_FragColor = vec4( col * uGain, 1.0 );
+          gl_FragColor = vec4( skyRadiance( normalize( vDir ) ), 1.0 );
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -3790,7 +3813,7 @@ const skyDome = (() => {
   mesh.frustumCulled = false;
   mesh.visible = false;
   scene.add(mesh);
-  return { mesh, uniforms };
+  return { mesh, uniforms, glsl };
 })();
 
 /* ── Earth ──────────────────────────────────────────────────────
@@ -4841,8 +4864,11 @@ function makeCompanion(spec) {
     sunDir: { value: new THREE.Vector3() },
     cloudShift: { value: 0 },
     uBright: { value: spec.bright ?? 1 },
+    // The same objects as the dome's, not copies: the sky over the
+    // body is the sky beside it, and has to stay that way.
+    ...skyDome.uniforms,
   };
-  let decl = 'uniform sampler2D dayMap;\nuniform vec3 sunDir;\nuniform float cloudShift;\nuniform float uBright;\n';
+  let decl = 'uniform sampler2D dayMap;\nuniform vec3 sunDir;\nuniform float cloudShift;\nuniform float uBright;\n' + skyDome.glsl;
   if (spec.night) { uni.nightMap = { value: T.night }; decl += 'uniform sampler2D nightMap;\n'; }
   if (spec.ocean) { uni.specMap = { value: T.spec }; decl += 'uniform sampler2D specMap;\n'; }
   if (spec.clouds) { uni.cloudMap = { value: T.clouds }; decl += 'uniform sampler2D cloudMap;\n'; }
@@ -5000,7 +5026,14 @@ function makeCompanion(spec) {
               + vec3( ${spec.haze.map((n) => n.toFixed(3)).join(', ')} )
                 * hzPath * smoothstep( -0.25, 0.35, dot( Ng, L ) ) * ${spec.hazeK.toFixed(2)};
           ` : '') + `
-          gl_FragColor = vec4( col * uBright, 1.0 );
+          // Seen from under an atmosphere, the body is beyond all of
+          // it: its light is dimmed on the way down, and the light the
+          // air scatters toward you — which is the sky itself — lies
+          // in front of it. So it can only ever add to the sky beside
+          // it, and its night side is exactly the sky's colour, as the
+          // dark part of the Moon in a daytime sky at home is blue. On
+          // the airless worlds both terms are zero.
+          gl_FragColor = vec4( col * uBright * skyTrans( -V ) + skyRadiance( -V ), 1.0 );
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -5015,7 +5048,7 @@ function makeCompanion(spec) {
     const atmo = new THREE.Mesh(
       new THREE.SphereGeometry(spec.r * (spec.atmoR || 1.035), 64, 40),
       new THREE.ShaderMaterial({
-        uniforms: { sunDir: uni.sunDir, uBright: uni.uBright },
+        uniforms: { sunDir: uni.sunDir, uBright: uni.uBright, ...skyDome.uniforms },
         transparent: true, blending: THREE.AdditiveBlending,
         side: THREE.BackSide, depthWrite: false,
         vertexShader: `
@@ -5025,7 +5058,9 @@ function makeCompanion(spec) {
             vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
             gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
           }`,
-        fragmentShader: `
+        // Additive, so it takes only the dimming: the globe under it
+        // has already laid the sky down once.
+        fragmentShader: skyDome.glsl + `
           uniform vec3 sunDir; uniform float uBright; varying vec3 vN; varying vec3 vW;
           void main() {
             vec3 N = normalize( vN );
@@ -5035,7 +5070,7 @@ function makeCompanion(spec) {
             // with the sun on the lit limb, not against it.
             float lit = smoothstep( -0.2, 0.4, dot( N, normalize( sunDir ) ) );
             gl_FragColor = vec4( vec3( ${spec.atmo.map((n) => n.toFixed(3)).join(', ')} )
-                               * rim * lit * ${spec.atmoK.toFixed(2)} * uBright, 1.0 );
+                               * rim * lit * ${spec.atmoK.toFixed(2)} * uBright * skyTrans( -V ), 1.0 );
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }`,
@@ -6737,7 +6772,9 @@ function updateSkyColors() {
     hemiLight.intensity = world.hemi[2] * k;
   }
   const s = world.sky;
-  if (!s) return;
+  // The companions read these too, so no sky means no air over them.
+  skyDome.uniforms.uTau.value = s ? s.tau || 0 : 0;
+  if (!s) { skyDome.uniforms.uGain.value = 0; return; }
   // Sky brightness follows how much lit dust is in the column, so
   // the dome deepens and darkens as the sun drops — and the haze
   // that fades the distance is the same dust, so the fog tracks it.
