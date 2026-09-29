@@ -76,12 +76,14 @@
     <div><span class="k">ALTITUDE </span><span class="v" id="r-a">0.00 m</span></div>
     <div><span class="k">POSITION </span><span class="v" id="r-p">0 E &middot; 0 N</span></div>
     <div><span class="k">SUN ELEV </span><span class="v" id="r-s">16.0°</span></div>
+    <div id="r-pushline" hidden><span class="k">PUSH     </span><span class="v" id="r-push"></span></div>
+    <div id="r-gasline" hidden><span class="k">N₂ JETS  </span><span class="v" id="r-gas"></span></div>
     <div id="r-doseline" hidden><span class="k">DOSE     </span><span class="warn" id="r-dose">0 mSv</span> <span class="k" id="r-rate"></span></div>
     <div><span class="k">RENDER   </span><span class="v" id="r-fps">—</span></div>
     <div><span class="warn" id="r-note"></span></div>
   </div>
   <div id="keys">
-    <div><b>WASD</b> move &nbsp; <b>SHIFT</b> bound &nbsp; <b>SPACE</b> jump</div>
+    <div><b>WASD</b> walk &nbsp; <b>SHIFT</b> run &nbsp; <b>SPACE</b> hold to crouch, release to push</div>
     <div><b>R</b> rover &nbsp; <b>F</b> fly &nbsp; <b>C</b> descend (fly)</div>
     <div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>
   </div>
@@ -1528,6 +1530,12 @@ const VIEW = {
     hapke: { w: 0.25, b: 0.23, c: 0.70, B0: 1.4, h: 0.07, theta: 22, Bc0: 0.4, hc: 0.006 },
     micro: [1, 0.45], sparkle: 1.0,
     levels: L4, fly: 400, rover: true,
+    // Grip, boot sole on the ground: the ceiling on every horizontal
+    // force your legs can make. Regolith is about 0.65. Ice is slippery
+    // at home only because it is near melting and wears a film of
+    // water; at −170 °C and colder there is none, and it grips about
+    // as well as a dry rock floor, a little under soil.
+    mu: 0.65,
     dustColor: 0x6e6a64, dustDrag: 0, stampColor: 0x55514c, soil: 0x5a5550,
     // Basalt blocks weather more slowly than soil: 0.12–0.22 against ~0.10.
     rockTint: [1.03, 1.0, 0.95], rockAlb: [0.11, 0.08], rockN: 1,
@@ -1572,6 +1580,7 @@ const VIEW = {
     hapke: { w: 0.55, b: 0.25, c: 0.35, B0: 0.6, h: 0.10, theta: 16, Bc0: 0.1, hc: 0.01 },
     micro: [0.25, 0.4], sparkle: 0,
     levels: L4, fly: 400, rover: true,
+    mu: 0.65,
     // Pressing pushes the bright oxidised dust film aside: the tracks
     // of Spirit, Opportunity and Curiosity run a quarter or so darker
     // than the ground beside them, and a little less red.
@@ -1588,8 +1597,8 @@ const VIEW = {
   phobos: {
     name: 'PHOBOS', site: 'near Stickney', gTxt: '0.0057 m/s²',
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
-    fine: 'Gravity is six thousandths of Earth\'s: a hard jump would be a launch,<br>' +
-          'so you push off with a toe and drift for a minute. Mars fills 42° of<br>' +
+    fine: 'Gravity is six thousandths of Earth\'s: a full push would be a launch,<br>' +
+          'so you push gently and drift, and steer on the jets. Mars fills 42° of<br>' +
           'the sky and never moves. <b>1</b>–<b>8</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
@@ -1605,6 +1614,7 @@ const VIEW = {
     hapke: { w: 0.08, b: 0.25, c: 0.60, B0: 1.8, h: 0.055, theta: 24, Bc0: 0.5, hc: 0.005 },
     micro: [1.1, 0.9], sparkle: 0.6,
     levels: L2, fly: 150, rover: false,
+    mu: 0.6,
     dustColor: 0x4e4a45, dustDrag: 0, stampColor: 0x2e2a26, soil: 0x403c38,
     rockTint: [1.03, 0.99, 0.93], rockAlb: [0.055, 0.04], rockN: 1.35,
     landmark: 'beacon', flagColor: 0xb9bcc2,
@@ -1630,6 +1640,7 @@ const VIEW = {
     hapke: { w: 0.08, b: 0.25, c: 0.60, B0: 1.7, h: 0.06, theta: 20, Bc0: 0.5, hc: 0.005 },
     micro: [0.7, 0.8], sparkle: 0.6,
     levels: L2, fly: 120, rover: false,
+    mu: 0.6,
     dustColor: 0x4e4a45, dustDrag: 0, stampColor: 0x2e2a26, soil: 0x403c38,
     rockTint: [1.03, 0.99, 0.93], rockAlb: [0.055, 0.04], rockN: 0.6,
     landmark: 'beacon', flagColor: 0xb9bcc2,
@@ -1685,9 +1696,11 @@ const VIEW = {
     hapke: { w: 0.45, b: 0.12, c: 0.10, B0: 0, h: 0.10, theta: 12, Bc0: 0, hc: 0.01 },
     micro: [0, 0], sparkle: 0,
     levels: L3, fly: 400, rover: true, roverTop: 1.7, roverDrag: 0.34,
+    mu: 0.7,
     // Wading: you push 65 kg/m³ out of the way to move through it,
-    // and it pushes back on the square of your speed.
-    walk: [0.60, 0.42], drag: 0.095, buoy: 0.07,
+    // and it pushes back on the square of your speed — against legs
+    // that give a few hundred watts, which is what sets your pace.
+    drag: 0.095, buoy: 0.07,
     dustColor: 0x5a5652, dustDrag: 44, dustLife: 3.2, stampColor: 0x33231a, soil: 0x5a5550,
     rockTint: [1.0, 0.97, 0.93], rockAlb: [0.08, 0.07],
     rockN: 0.8, rockFlat: 0.42,
@@ -1744,6 +1757,7 @@ const VIEW = {
     // they are half as deep (the third term) as on dark regolith.
     micro: [0.25, 0.22, 0.3], sparkle: 3.0,
     levels: L4, fly: 400, rover: true,
+    mu: 0.5,
     dustColor: 0xd3d6db, dustDrag: 0, stampColor: 0xc4cad2, soil: 0xd6d8dc,
     // Blocks of ice, cleaner than the frost around them; few of them
     // come from craters, most are talus shed off steep faces.
@@ -1815,6 +1829,7 @@ const VIEW = {
     hapke: { w: 0.45, b: 0.30, c: 0.55, B0: 0.8, h: 0.06, theta: 20, Bc0: 0.3, hc: 0.006 },
     micro: [0.35, 0.3, 0.6], sparkle: 0.6,
     levels: L4, fly: 400, rover: true,
+    mu: 0.55,
     dustColor: 0x4a3024, dustDrag: 0, stampColor: 0x3a261c, soil: 0x5a3a2a,
     // Blocks of the water-ice crust, under the same tholin dust.
     rockTint: [1.35, 0.85, 0.62], rockAlb: [0.09, 0.08], rockN: 0.6, talus: 300,
@@ -1846,8 +1861,8 @@ const VIEW = {
     name: 'CHARON', site: 'Vulcan Planitia', gTxt: '0.29 m/s²',
     title: 'Charon Walk', sub: 'Vulcan Planitia · 0.029 g · surface unbounded',
     fine: 'Water ice at −220 °C under Pluto\'s dusk-dim sun. Pluto hangs 7° wide in<br>' +
-          'the east, over a mountain standing in a moat, and never moves. A jump<br>' +
-          'here lasts eighteen seconds. <b>1</b>–<b>8</b> change world.',
+          'the east, over a mountain standing in a moat, and never moves. A full<br>' +
+          'push keeps you aloft for twelve seconds. <b>1</b>–<b>8</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -1861,6 +1876,7 @@ const VIEW = {
     hapke: { w: 0.70, b: 0.25, c: 0.45, B0: 1.0, h: 0.0035, theta: 28, Bc0: 0.6, hc: 0.003 },
     micro: [0.5, 0.4, 0.4], sparkle: 1.5,
     levels: L4, fly: 400, rover: true,
+    mu: 0.5,
     dustColor: 0xa8a9ab, dustDrag: 0, stampColor: 0x94979c, soil: 0xa9aaac,
     // Blocks of ice, cleaner than the regolith, most of them shed off
     // graben walls and the massif's flanks.
@@ -6463,6 +6479,7 @@ quality.init();
    ═════════════════════════════════════════════════════════════ */
 const rover = (() => {
   const WHEEL_R = 0.41, WHEELBASE = 2.3, TRACK = 1.83;
+  const LRV_M = 480, LRV_P = 600;   // kg driven alone; W at the wheels from four 186 W motors
   const CHASSIS_H = 0.46;          // frame height above mean wheel contact
   const WHEEL_CTR = WHEEL_R - 0.035;   // centre height: the tyre sinks a touch into regolith
 
@@ -6733,11 +6750,12 @@ const rover = (() => {
   const STOP_K = 2500, STOP_C = 60;         // the bump stops: stiff, and lossy
   const RP2 = 0.9, RR2 = 0.4;               // radius of gyration², pitch and roll, m²
   const HCG = 0.55;                         // centre of mass above the contact patches
-  const MU = 0.8;                           // wire mesh in regolith, rolling and braking
-  // Sideways a wheel does better: it sits a few centimetres into the
-  // soil, and sliding it means bulldozing a wall of regolith with its
-  // side and shearing the chevrons across the ruts they cut.
-  const MU_SIDE = 1.3;
+  // Driving and braking grip is 0.6 μ of the load (below). Sideways a
+  // wheel does better: it sits a few centimetres into the soil, and
+  // sliding it means bulldozing a wall of regolith with its side and
+  // shearing the chevrons across the ruts they cut — about 1.3 of the
+  // load on lunar soil.
+  const MU_SIDE = 2.0;                      // times the world's μ
   const SUB = 1 / 240;                      // physics substep, s
   const SPRAY = 320;                        // grains thrown per wheel per metre, at speed
   const TRACK_LEAD = 0.2;                   // how far a track stamp may run ahead of the wheel
@@ -6872,6 +6890,7 @@ const rover = (() => {
     pitch: 0, roll: 0, y: 0,   // chassis attitude and height
     vy: 0, pitchRate: 0, rollRate: 0,
     air: 0,                    // seconds with no wheel on the ground
+    load: 0,                   // what the tyres carry, per kg of rover (m/s²)
     trackX: 0, trackZ: 0,        // where the last track stamp ended
     sprayAcc: 0,
   };
@@ -6882,7 +6901,7 @@ const rover = (() => {
     const a = poseFromWheels();
     state.y = a.y; state.pitch = a.pitch; state.roll = a.roll;
     state.vy = state.pitchRate = state.rollRate = 0;
-    state.air = 0;
+    state.air = 0; state.load = player.gravity;
     state.trackX = state.pos.x - Math.sin(state.yaw) * WHEELBASE / 2;
     state.trackZ = state.pos.z - Math.cos(state.yaw) * WHEELBASE / 2;
     apply();
@@ -6986,10 +7005,19 @@ const rover = (() => {
       const steerTarget = (keys.KeyA || keys.ArrowLeft ? 0.5 : 0) + (keys.KeyD || keys.ArrowRight ? -0.5 : 0);
       st.steer += (steerTarget - st.steer) * Math.min(1, dt * 6);
 
-      // Throttle. The real LRV topped out at ~17 km/h.
+      /* Driving is forces, not a speed dial. Four 0.25 hp hub motors
+         push 480 kg — rover, you, and your kit — up to the 3.6 m/s
+         their gearing allows; faster than that only downhill, which is
+         how Apollo 17 logged 18 km/h. Every force the wheels make,
+         driving, braking or turning, is capped by their grip: a
+         wire-mesh tyre pulls about 0.4 of its load on lunar soil, so
+         the LRV takes six seconds to reach full speed on the Moon and
+         the better part of a minute on Charon, and stopping takes as
+         long. Rolling through soil costs a tenth of the weight. */
       const fwd = keys.KeyW || keys.ArrowUp, rev = keys.KeyS || keys.ArrowDown;
       const pose = poseFromWheels();
-      const topF = world.roverTop || 4.8, topR = Math.min(2, topF * 0.5);
+      const vmax = world.roverTop || 3.6;
+      const cosG = 1 / Math.sqrt(1 + pose.gradeFwd * pose.gradeFwd), sinG = pose.gradeFwd * cosG;
       const g = gravity;
       // Springs scaled to the body, so it rides at its design height
       // everywhere: the torsion bars of a Venus rover are not a Moon
@@ -7024,37 +7052,43 @@ const rover = (() => {
           f = Math.max(0, f);
           F += f; tp -= f * w.z; tr += f * w.x;
         }
+        st.load = F;
 
-        // Traction: the tyres can push only as hard as they are pressed
-        // down, and at a sixth of a g that is not hard. Throttle, brake
-        // and steering all run out of grip long before the motors or the
-        // wheel angle run out — the rover carries its speed into a turn
-        // and runs wide, and it takes its time to stop.
-        const grip = MU * F;
-        st.vel += -g * pose.gradeFwd * 0.9 * (touching / 4) * h;   // rolls downhill
-        let a = 0;
-        if (parked) a = -Math.sign(st.vel) * Math.min(grip, Math.abs(st.vel) / h);
-        else {
-          if (fwd) a += 2.4;
-          if (rev) a -= st.vel > 0.1 ? 5.0 : 1.6;   // brake first, then reverse
-          a = Math.max(-grip, Math.min(grip, a));
+        // Grip is friction, so it goes with how hard the springs are
+        // pressing the tyres down — nothing at all when they are not.
+        const grip = world.mu * 0.6 * F * cosG;
+        const v = st.vel;
+        let tyre = 0;                            // what the tyres push with, per kg
+        if (touching) {
+          const drive = (u) => Math.min(grip, LRV_P / (LRV_M * Math.max(u, 0.5)));
+          if (parked) tyre = -Math.sign(v) * Math.min(grip, Math.abs(v) / h);   // brake on, nobody aboard
+          else if (fwd && v >= -0.05) { if (v < vmax) tyre = drive(v); }
+          else if (rev && v > 0.05) tyre = -grip;                  // brakes
+          else if (rev) { if (v > -1.5) tyre = -drive(-v); }
+          else if (fwd) tyre = grip;                               // braking a roll backwards
+          const rr = 0.1 * F * cosG;
+          if ((parked || (!fwd && !rev)) && Math.abs(v) < 0.05 && Math.abs(g * sinG) <= grip) {
+            st.vel = 0; tyre = g * sinG;                           // parking brake holds
+          } else if (Math.abs(v) > 1e-3) {
+            tyre -= Math.sign(v) * Math.min(rr, Math.abs(v) / h);
+          }
         }
-        st.vel += a * h;
-        if (!fwd && !rev) st.vel *= Math.max(0, 1 - 0.5 * (touching / 4) * h);
-        // Aerodynamic drag: nothing at all on four of these bodies, and
-        // the whole design problem on the fifth. Dragging a rover-sized
+        st.vel += (tyre - (touching ? g * sinG : 0)) * h;
+        // Aerodynamic drag: nothing at all on seven of these bodies, and
+        // the whole design problem on the eighth. Dragging a rover-sized
         // frontal area through 65 kg/m³ at walking pace takes about a
         // kilowatt, so a Venus rover is slow because of what it is
         // driving through, not what it is driving over — and it does
         // not coast, it stops.
         if (world.roverDrag) st.vel -= world.roverDrag * st.vel * Math.abs(st.vel) * h;
-        st.vel = Math.max(-topR, Math.min(topF, st.vel));
 
-        // Bicycle-model yaw; almost no steering authority at rest, and
-        // none beyond what the tyres can hold sideways.
+        // Bicycle-model yaw; almost no steering authority at rest, and a
+        // turn tighter than the tyres can hold just plows wide. In the
+        // air, the wheels steer nothing.
         let yawRate = st.vel / WHEELBASE * Math.tan(st.steer);
-        const side = MU_SIDE * F;
-        if (Math.abs(st.vel * yawRate) > side) yawRate = Math.sign(yawRate) * side / Math.max(0.1, Math.abs(st.vel));
+        const side = MU_SIDE * world.mu * F * cosG;
+        if (!touching) yawRate = 0;
+        else if (Math.abs(st.vel * yawRate) > side) yawRate = Math.sign(yawRate) * side / Math.max(0.1, Math.abs(st.vel));
         st.yaw += yawRate * h;
         // Local -z is forward; in world that is (-sin yaw, -cos yaw).
         st.pos.x -= Math.sin(st.yaw) * st.vel * h;
@@ -7063,16 +7097,15 @@ const rover = (() => {
         // The chassis: a rigid body on four springs. Weight against the
         // wheel loads; pitch and roll from where those loads act, plus
         // the tyres' own push at the ground, a centre of mass's height
-        // below the mass — squat under throttle, dive under the brake,
+        // below the mass — squat under power, dive under the brake,
         // lean out of a turn.
         st.vy += (F - g) * h;
-        st.pitchRate += (tp + a * HCG) / RP2 * h;
+        st.pitchRate += (tp + tyre * HCG) / RP2 * h;
         st.rollRate += (tr - st.vel * yawRate * HCG) / RR2 * h;
         st.y += st.vy * h;
         st.pitch += st.pitchRate * h;
         st.roll += st.rollRate * h;
       }
-      if (!fwd && !rev && Math.abs(st.vel) < 0.03) st.vel = 0;
       // Nothing here rolls it over; keep a bad landing from trying.
       if (Math.abs(st.pitch) > 0.9) { st.pitch = Math.sign(st.pitch) * 0.9; st.pitchRate = 0; }
       if (Math.abs(st.roll) > 0.7) { st.roll = Math.sign(st.roll) * 0.7; st.rollRate = 0; }
@@ -7131,21 +7164,66 @@ const rover = (() => {
 const G_EARTH = 9.81, EYE = 1.62;
 let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
-/* What one leg push does, per body. These are takeoff velocities,
-   not apexes: the same suited push produces roughly the same
-   launch speed whatever you are standing on, and the difference
-   in gravity does the rest.
+/* Surface gravity, per body, and the suited body that walks on it.
 
-   On the two Martian moons that stops being true, because a full
-   push there is not a jump, it is a launch — 2.6 m/s on Phobos is
-   an apex of six hundred metres and a quarter of an hour in the
-   air, and on Deimos, whose escape velocity is 5.6 m/s, it would
-   simply be the last thing you ever did on Deimos. So there you
-   push with a toe instead, and use the suit jets to come back
-   down: hold SPACE and C. That is not a game concession, it is
-   what EVA on a body this small would actually be. */
+   Nothing about moving on foot is tuned for feel. You are an 80 kg
+   person in 91 kg of suit and backpack — "the suit and backpack weigh
+   as much as he does", as the Apollo 16 journal says of John Young —
+   and everything follows from that mass, the local gravity, the grip
+   of the ground, and what a pair of legs can do:
+
+   - Pushing. Leg force falls off linearly with extension speed (the
+     force–velocity profile of jumping, Samozino et al. 2008): 36 N per
+     kilogram of body at rest, nothing left at 4 m/s. Unsuited on Earth
+     that is a 0.33 m squat jump. The suit's joints take 42% of it and
+     its knees allow only a 0.25 m crouch, which puts a maximal jump on
+     the Moon at 0.82 m — Charlie Duke's, on Apollo 16, before he fell
+     over backwards. You choose the effort: hold SPACE to sink into the
+     crouch, and let go to push. A push weaker than your weight only
+     stands you back up.
+   - Walking. Legs are pendulums, so natural speeds scale with the
+     Froude number v²/gL. Suited Apollo crews changed from walking to
+     running at Fr 0.36 (Carr & McGee 2009), and ran for long stretches
+     at 1.4 m/s, Fr 1.35. The same numbers set your pace everywhere.
+   - Grip. Horizontal force comes from friction, so no gait can speed
+     you up, slow you down or hold you on a slope harder than μ·g·cosθ.
+     On the Moon that is 1 m/s²; on Phobos it is 3 mm/s², and walking
+     there is not a thing you can do.
+   - Power. Once moving, legs deliver a few hundred watts, which is
+     what limits climbing, and wading through the air on Venus.
+
+   In the air you are a projectile: nothing you do with your legs
+   changes where you land. */
 const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
-const JUMP = { moon: 2.65, mars: 3.10, phobos: 0.117, deimos: 0.085, venus: 4.00, europa: 2.65, pluto: 2.65, charon: 2.65 };
+const SUIT = {
+  m: 171,            // kg, person and suit
+  F0: 36 * 80,       // N, leg-extension force at zero speed
+  V0: 4.0,           // m/s, extension speed where the legs stop pushing
+  k: 0.58,           // share of leg force the suit's joints leave you
+  crouch: 0.25,      // m, deepest crouch the suit allows
+  charge: 0.8,       // s, to sink into the full crouch
+  L: 0.9,            // m, leg length
+  frWalk: 0.36, frRun: 1.35,
+  pWalk: 200, pRun: 400,   // W, propulsive power held for minutes
+  lean: 0.47,        // tan 25°: how far a push can be tilted off vertical
+};
+// The Manned Maneuvering Unit, flown from the shuttle in 1984: 0.3 ft/s²
+// in any axis, and 110–130 ft/s of nitrogen on a full ground charge.
+const JET = { a: 0.091, dv: 36 };
+
+// Takeoff speed of a push at effort e from crouch depth d, under g —
+// the same integration the live push uses, for the readout.
+function pushSpeed(e, d, g) {
+  let u = 0, x = 0;
+  const h = 0.0005;
+  for (let i = 0; i < 4000 && x < d; i++) {
+    const a = e * SUIT.k * SUIT.F0 * Math.max(0, 1 - u / SUIT.V0) / SUIT.m - g;
+    if (u <= 0 && a <= 0) return 0;
+    u = Math.max(0, u + a * h);
+    x += u * h;
+  }
+  return u;
+}
 
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
@@ -7154,6 +7232,9 @@ const player = {
   gravity: G_LIST.moon,
   bob: 0,
   stride: 0,
+  crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
+  pushing: false, pushE: 0, pushU: 0,
+  gas: JET.dv,                    // m/s of Δv left in the jets
 };
 player.pos.y = terrainHeight(0, 0) + EYE;
 yawObj.rotation.y = -0.95;   // opens facing the flag, with Earth up to the right
@@ -7171,6 +7252,8 @@ const el = {
   note: document.getElementById('r-note'),
   fps: document.getElementById('r-fps'),
   doseLine: document.getElementById('r-doseline'),
+  pushLine: document.getElementById('r-pushline'), push: document.getElementById('r-push'),
+  gasLine: document.getElementById('r-gasline'), gas: document.getElementById('r-gas'),
   dose: document.getElementById('r-dose'), rate: document.getElementById('r-rate'),
 };
 // What you have soaked up since arriving, where that is worth showing.
@@ -7218,6 +7301,7 @@ function setMode(next) {
     player.onGround = false;
   }
   if (next === 'EVA') player.onGround = false;
+  player.crouch = 0; player.charge = 0; player.pushing = false;
   mode = next;
   el.mode.textContent = mode === 'EVA' ? 'EVA' : mode === 'FLY' ? 'FLIGHT' : 'ROVER LRV';
   updateKeysHelp();
@@ -7234,10 +7318,10 @@ function updateKeysHelp() {
     k.innerHTML = '<div><b>WASD</b> thrust &nbsp; <b>SPACE</b> up &nbsp; <b>C</b> down &nbsp; <b>SHIFT</b> boost</div>' +
       '<div><b>F</b> land' + (world.rover ? ' &nbsp; <b>R</b> rover' : '') + '</div>' + tail;
   } else if (world.jets) {
-    k.innerHTML = '<div><b>WASD</b> move &nbsp; <b>SPACE</b> toe-push, then suit jet up</div>' +
-      '<div><b>C</b> jet down &nbsp; <b>F</b> fly</div>' + tail;
+    k.innerHTML = '<div><b>WASD</b> jets &nbsp; <b>SPACE</b> hold, release: push off &middot; in flight: jet up</div>' +
+      '<div><b>C</b> jet down &nbsp; recharge at the beacon &nbsp; <b>F</b> fly</div>' + tail;
   } else {
-    k.innerHTML = '<div><b>WASD</b> move &nbsp; <b>SHIFT</b> bound &nbsp; <b>SPACE</b> jump</div>' +
+    k.innerHTML = '<div><b>WASD</b> walk &nbsp; <b>SHIFT</b> run &nbsp; <b>SPACE</b> hold to crouch, release to push</div>' +
       '<div><b>R</b> rover &nbsp; <b>F</b> fly</div>' + tail;
   }
 }
@@ -7356,125 +7440,173 @@ const body = (() => {
   };
 })();
 
+const _tan = new THREE.Vector3();
 function stepEVA(dt) {
-  // Traction is proportional to weight, so everything about walking
-  // scales with gravity: how fast you can get going, how fast you
-  // can stop, and how much you can steer once your boots are off
-  // the ground. g is the fraction of Earth's you have to work with.
-  const g = player.gravity / G_EARTH;
+  const p = player, v = p.vel;
+  // Weight, less what dense air holds up (Venus carries 7% of you),
+  // and falling off with height as it really does — which matters
+  // only on the moonlets, a few per cent at the top of a long drift.
+  const R = WORLD.R, yF = p.pos.y - EYE + p.crouch;
+  const gl = p.gravity * (R / (R + yF)) ** 2 * (1 - (world.buoy || 0));
+  const mu = world.mu;
 
   fwd.set(0, 0, -1).applyQuaternion(yawObj.quaternion); fwd.y = 0; fwd.normalize();
   right.set(1, 0, 0).applyQuaternion(yawObj.quaternion); right.y = 0; right.normalize();
-
-  wish.set(0, 0, 0);
-  if (keys.KeyW || keys.ArrowUp) wish.add(fwd);
-  if (keys.KeyS || keys.ArrowDown) wish.sub(fwd);
-  if (keys.KeyD || keys.ArrowRight) wish.add(right);
-  if (keys.KeyA || keys.ArrowLeft) wish.sub(right);
+  const kf = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+  const kr = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  wish.copy(fwd).multiplyScalar(kf).addScaledVector(right, kr);
   if (wish.lengthSq() > 0) wish.normalize();
+  const running = keys.ShiftLeft || keys.ShiftRight;
 
-  // Low weight means low traction: slow to start, slow to stop, and
-  // almost no steering authority once your boots leave the ground.
-  // Interpolated on gravity rather than hard-cased per body, so
-  // Mars sits properly between the Moon and Earth and Phobos sits
-  // out at the end, where there is barely any traction at all.
-  const bounding = (keys.ShiftLeft || keys.ShiftRight) && !world.jets;
-  let topSpeed, accel, damp;
-  if (world.jets) {
-    // On Phobos and Deimos you do not walk, you fly the suit. An MMU
-    // gives a suited astronaut about 0.35 m/s² in any direction, and
-    // that is sixty times the local gravity — so it works equally
-    // well on the ground and off it. Held under 3 m/s, because
-    // Deimos lets go of you at 5.6.
-    topSpeed = 3.0;
-    accel = 0.35;
-    damp = 0.25;
-    if (keys.Space && !player.onGround) player.vel.y += accel * dt;
-    if (keys.KeyC) player.vel.y -= accel * dt;
+  // The slope under you, as a gradient.
+  const e = 0.4;
+  const gx = (terrainHeight(p.pos.x + e, p.pos.z) - terrainHeight(p.pos.x - e, p.pos.z)) / (2 * e);
+  const gz = (terrainHeight(p.pos.x, p.pos.z + e) - terrainHeight(p.pos.x, p.pos.z - e)) / (2 * e);
+  const s2 = 1 + gx * gx + gz * gz, cosT = 1 / Math.sqrt(s2);
+  const vT = Math.sqrt((running ? SUIT.frRun : SUIT.frWalk) * gl * SUIT.L);
+  let tookOff = 0;
+
+  if (p.onGround) {
+    // Winding up: SPACE sinks you into the crouch, and how long you
+    // hold it is how hard you will push. Letting go pushes.
+    if (keys.Space && !p.pushing) {
+      p.charge = Math.min(1, p.charge + dt / SUIT.charge);
+      const t = p.charge * SUIT.crouch - p.crouch;
+      p.crouch += Math.max(-0.5 * dt, Math.min(0.5 * dt, t));
+    } else if (p.charge > 0 && !p.pushing) {
+      p.pushing = true; p.pushE = p.charge; p.pushU = 0; p.charge = 0;
+    } else if (!p.pushing) {
+      p.crouch = Math.max(0, p.crouch - 0.35 * dt);     // straighten up
+    }
+
+    if (p.pushing) {
+      // The push, in substeps: it lasts a few frames, and its outcome
+      // should not depend on how many. Tilting it along the direction
+      // you hold is how you jump forward — within the friction cone.
+      const n = 10, h = dt / n;
+      for (let i = 0; i < n && p.pushing; i++) {
+        const F = p.pushE * SUIT.k * SUIT.F0 * Math.max(0, 1 - p.pushU / SUIT.V0) / SUIT.m;
+        const acc = F - gl;
+        if (p.pushU <= 0 && acc <= 0) {
+          // Not enough to lift you: you just stand back up.
+          p.crouch = Math.max(0, p.crouch - 0.35 * h);
+          if (p.crouch === 0) p.pushing = false;
+          continue;
+        }
+        p.pushU = Math.max(0, p.pushU + acc * h);
+        p.crouch -= p.pushU * h;
+        const side = Math.min(mu, SUIT.lean) * F;
+        v.x += wish.x * side * h; v.z += wish.z * side * h;
+        if (p.crouch <= 0) { p.crouch = 0; p.pushing = false; tookOff = p.pushU; }
+      }
+    } else {
+      // Walking: the legs steer toward the pace the gait allows, as
+      // briskly as grip and power let them.
+      let ax = (wish.x * vT - v.x) / 0.35, az = (wish.z * vT - v.z) / 0.35;
+      const hs0 = Math.hypot(v.x, v.z);
+      if (ax * v.x + az * v.z > 0) {
+        const cap = (running ? SUIT.pRun : SUIT.pWalk) / (SUIT.m * Math.max(hs0, 0.4));
+        const am = Math.hypot(ax, az);
+        if (am > cap) { ax *= cap / am; az *= cap / am; }
+      }
+      // Gravity along the slope, and friction: what the legs ask for
+      // plus what holding the slope takes, capped at μN.
+      const kS = gl / s2, agx = -gx * kS, agz = -gz * kS;
+      let fx = ax - agx, fz = az - agz;
+      const fm = Math.hypot(fx, fz), fmax = mu * gl * cosT;
+      if (fm > fmax) { fx *= fmax / fm; fz *= fmax / fm; }
+      v.x += (agx + fx) * dt; v.z += (agz + fz) * dt;
+    }
+    // On the ground you move along it.
+    v.y = gx * v.x + gz * v.z;
+    // The eye rides on the legs: down into the crouch, up out of it.
+    p.pos.y = terrainHeight(p.pos.x, p.pos.z) + EYE - p.crouch;
+    if (tookOff > 0) {
+      v.y += tookOff;
+      p.onGround = false;
+      dust.burst(p.pos.x, p.pos.y - EYE, p.pos.z, Math.min(0.6, 0.12 + tookOff * 0.15));
+      prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
+    }
   } else {
-    topSpeed = (bounding ? 4.6 : 2.3) * (0.9 + g * 0.35);
-    accel = player.onGround ? 7 + 19 * g : 1.2 + 1.8 * g;
-    damp = player.onGround ? 4.5 + 7.5 * g : 0;
-    // On Venus gravity is not what slows you down — the air is.
-    // Pushing a suited walker through 65 kg/m³ at 2 m/s costs about
-    // 200 watts, which is a hard sustained effort for a person, so
-    // the ceiling here is power, not traction: a trudge at 1.7 m/s
-    // and a shove at 2.3. Walking on Venus would be wading.
-    if (world.walk) topSpeed *= world.walk[bounding ? 1 : 0];
+    p.charge = 0; p.pushing = false;
+    p.crouch = Math.max(0, p.crouch - 0.35 * dt);
+    v.y -= gl * dt;
   }
 
-  player.vel.x += wish.x * accel * dt;
-  player.vel.z += wish.z * accel * dt;
-
-  if (damp > 0 && wish.lengthSq() === 0) {
-    const f = Math.max(0, 1 - damp * dt);
-    player.vel.x *= f; player.vel.z *= f;
+  // The jets, on the two moonlets: thrust, not steering, and a tank
+  // that empties. Nothing slows you down but more thrust.
+  if (world.jets && p.gas > 0) {
+    let axes = 0;
+    if (kf) { v.addScaledVector(fwd, kf * JET.a * dt); axes++; }
+    if (kr) { v.addScaledVector(right, kr * JET.a * dt); axes++; }
+    if (keys.Space && !p.onGround) { v.y += JET.a * dt; axes++; }
+    if (keys.KeyC) { v.y -= JET.a * dt; axes++; if (p.onGround) v.y = Math.max(v.y, gx * v.x + gz * v.z); }
+    p.gas = Math.max(0, p.gas - axes * JET.a * dt);
   }
-  const hs = Math.hypot(player.vel.x, player.vel.z);
-  if (hs > topSpeed) { const k = topSpeed / hs; player.vel.x *= k; player.vel.z *= k; }
 
   // Fluid drag, quadratic and in three dimensions, so it shortens a
   // jump as well as a stride. ½ρC_dA/m ≈ 0.095 per metre for a
   // suited walker in supercritical CO₂; zero everywhere else in the
   // set, where the densest air on offer is Mars's 0.02 kg/m³.
   if (world.drag) {
-    const sp = player.vel.length();
-    if (sp > 0.001) player.vel.multiplyScalar(Math.max(0, 1 - world.drag * sp * dt));
+    const sp = v.length();
+    if (sp > 0.001) v.multiplyScalar(Math.max(0, 1 - world.drag * sp * dt));
   }
 
-  if (keys.Space && player.onGround) {
-    // The push scales with the body: a full leg extension on the
-    // Moon and Mars, a deliberate toe-push on the two moonlets.
-    player.vel.y = player.gravity === G_EARTH ? 4.2 : JUMP[worldId];
-    player.onGround = false;
-    dust.burst(player.pos.x, player.pos.y - EYE, player.pos.z, 0.35);
-  }
+  p.pos.addScaledVector(v, dt);
 
-  // Buoyancy. Air this dense carries some of you: a suited walker
-  // averages maybe 900 kg/m³ against the atmosphere's 65, so Venus
-  // holds up about 7% of your weight. It is the one place in the
-  // set where Archimedes gets a say in how high you jump.
-  player.vel.y -= player.gravity * (1 - (world.buoy || 0)) * dt;
-  player.pos.addScaledVector(player.vel, dt);
+  // The streamed world ends somewhere; this keeps you inside it.
+  const ceil = terrainHeight(p.pos.x, p.pos.z) + EYE + FLY_CEILING;
+  if (p.pos.y > ceil) { p.pos.y = ceil; v.y = Math.min(0, v.y); }
 
-  // Do not let anyone leave: Deimos only asks 5.6 m/s of you.
-  const ceil = terrainHeight(player.pos.x, player.pos.z) + EYE + FLY_CEILING;
-  if (player.pos.y > ceil) { player.pos.y = ceil; player.vel.y = Math.min(0, player.vel.y); }
-
-  const gh = terrainHeight(player.pos.x, player.pos.z);
-  const feet = player.pos.y - EYE;
-  if (feet <= gh) {
-    const impact = -player.vel.y;
-    if (!player.onGround) {
-      if (impact > 1.2) dust.burst(player.pos.x, gh, player.pos.z, Math.min(1.6, impact * 0.35));
-      if (impact > 0.6) prints.place(player.pos.x, player.pos.z, yawObj.rotation.y);
+  const gh = terrainHeight(p.pos.x, p.pos.z);
+  let feet = p.pos.y - EYE + p.crouch;
+  if (!p.onGround) {
+    if (feet <= gh) {
+      // Landing: the legs take it, sinking as far as they must to
+      // stop you at the force they can make.
+      const impact = -v.y;
+      if (impact > 0.9) dust.burst(p.pos.x, gh, p.pos.z, Math.min(1.6, impact * 0.35));
+      if (impact > 0.3) prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
+      p.crouch = Math.max(p.crouch, Math.min(SUIT.crouch, impact * impact / (2 * SUIT.k * SUIT.F0 / SUIT.m)));
+      p.onGround = true;
+      v.y = 0;
+      feet = gh;
     }
-    player.pos.y = gh + EYE;
-    player.vel.y = 0;
-    player.onGround = true;
-  } else if (feet > gh + 0.05) {
-    player.onGround = false;
+  } else if (feet - gh > 0.5 * gl * dt * dt + 0.002) {
+    // The ground fell away faster than gravity could follow it: over a
+    // crest at speed, you fly. That happens when v²κ > g, and on a
+    // body where g is small it happens a lot.
+    p.onGround = false;
+  } else {
+    feet = gh;
+  }
+  if (p.onGround) p.pos.y = gh + EYE - p.crouch;
+
+  // Back at the beacon the jets are recharged.
+  if (world.jets && p.onGround && p.gas < JET.dv && Math.hypot(p.pos.x - 8, p.pos.z + 11) < 3) {
+    p.gas = JET.dv; note('N₂ RECHARGED');
   }
 
+  const hs = Math.hypot(v.x, v.z);
   // A print every stride, and a head bob at the same cadence.
   let bobY = 0, bobX = 0;
-  if (player.onGround && hs > 0.25) {
-    player.stride += hs * dt;
-    if (player.stride > (bounding ? 1.5 : 0.95)) {
-      player.stride = 0;
-      prints.place(player.pos.x, player.pos.z, yawObj.rotation.y);
-      if (bounding) dust.burst(player.pos.x, gh, player.pos.z, 0.18);
+  const gE = gl / G_EARTH;
+  if (p.onGround && !p.pushing && hs > 0.08) {
+    p.stride += hs * dt;
+    if (p.stride > (running ? 1.5 : 0.95)) {
+      p.stride = 0;
+      prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
+      if (running) dust.burst(p.pos.x, gh, p.pos.z, 0.18);
     }
-    // Cadence rises and stride shortens as you get heavier.
-    player.bob += hs * dt * (2.2 + 1.2 * g);
-    const amp = Math.min(hs / topSpeed, 1) * (0.055 - 0.020 * g);
-    bobY = Math.sin(player.bob * 2) * amp;
-    bobX = Math.cos(player.bob) * amp * 0.6;
+    p.bob += hs * dt * (2.2 + 1.2 * gE);
+    const amp = Math.min(hs / Math.max(vT, 0.05), 1) * (0.055 - 0.020 * Math.min(gE, 1));
+    bobY = Math.sin(p.bob * 2) * amp;
+    bobX = Math.cos(p.bob) * amp * 0.6;
   }
 
-  yawObj.position.set(player.pos.x + bobX, player.pos.y + bobY, player.pos.z);
-  body.update(player.pos.x + bobX, player.pos.y + bobY - EYE, player.pos.z,
-              yawObj.rotation.y, player.bob, Math.min(hs / 2, 1));
+  yawObj.position.set(p.pos.x + bobX, p.pos.y + bobY, p.pos.z);
+  body.update(p.pos.x + bobX, feet + bobY, p.pos.z, yawObj.rotation.y, p.bob, Math.min(hs / 2, 1));
   hudSpeed = hs;
   return gh;
 }
@@ -7557,7 +7689,7 @@ function stepROVER(dt) {
    ═════════════════════════════════════════════════════════════ */
 const demo = (() => {
   let on = false, lastWorld = null, sunWay = 1, prior = null;
-  let gaze = 'ahead', left = 0, actAge = 0, jumpIn = 10, prevGaze = '';
+  let gaze = 'ahead', left = 0, actAge = 0, jumpIn = 10, hold = 0, prevGaze = '';
   let yawTarget = 0, pitchTarget = 0;
 
   const clearKeys = () => { for (const k in keys) keys[k] = false; };
@@ -7684,18 +7816,29 @@ const demo = (() => {
         yawTarget = yawObj.rotation.y + (Math.random() < 0.5 ? 1.0 : -1.0);
         left = Math.max(left, 20); gaze = 'ahead';
       }
-      if (world.jets) {
-        // On a moonlet you do not walk, you hover: hold station a
-        // couple of metres up with the jets.
+      if (world.jets && player.gas > 2) {
+        // On a moonlet you do not walk, you hover a couple of metres up
+        // on the jets — which only ever add velocity, so holding a slow
+        // drift means thrusting against it as well as with it.
         const alt = player.pos.y - EYE - gh;
-        keys.KeyC = alt > 2.5;
-        keys.Space = alt < 0.8 && player.vel.y < 0.02;
+        const along = player.vel.x * fx + player.vel.z * fz;
+        const side = player.vel.x * -fz + player.vel.z * fx;   // along the right hand
+        keys.KeyW = along < 0.5; keys.KeyS = along > 0.8;
+        keys.KeyD = side < -0.1; keys.KeyA = side > 0.1;
+        keys.KeyC = alt > 2.5 && player.vel.y > -0.15;
+        if (player.onGround) {                    // a gentle push off: crouch briefly, let go
+          if (hold <= 0) hold = 0.15;
+          hold -= dt; keys.Space = hold > 0;
+        }
+        else keys.Space = alt < 1.2 && player.vel.y < 0.05;
       } else {
+        // A hop, now and then: crouch for a moment, then push.
         jumpIn -= dt;
-        if (jumpIn <= 0 && player.onGround) {   // a hop, now and then
-          keys.Space = true;
+        if (jumpIn <= 0 && player.onGround && hold <= 0) {
+          hold = rnd(0.25, 0.7);
           jumpIn = rnd(18, 45);
         }
+        if (hold > 0) { hold -= dt; keys.Space = true; }
       }
     },
   };
@@ -7770,6 +7913,15 @@ function step(dt, t) {
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';   // the demo moves it
     if (world.dose) el.dose.textContent = doseSv < 1 ? (doseSv * 1000).toFixed(1) + ' mSv' : doseSv.toFixed(3) + ' Sv';
+    // How hard the push being wound up is, and what it will launch you at.
+    const charging = mode === 'EVA' && player.charge > 0;
+    el.pushLine.hidden = !charging;
+    if (charging) {
+      el.push.textContent = Math.round(player.charge * 100) + '% · ' +
+        pushSpeed(player.charge, player.charge * SUIT.crouch, player.gravity * (1 - (world.buoy || 0))).toFixed(2) + ' m/s';
+    }
+    el.gasLine.hidden = !world.jets;
+    if (world.jets) el.gas.textContent = player.gas.toFixed(1) + ' m/s Δv';
     el.fps.textContent = (quality.fps ? quality.fps.toFixed(0) + ' fps · ' : '') +
       Math.round(quality.scale * 100) + '% · ' + quality.label;
   }
@@ -7926,6 +8078,8 @@ function applyWorld(id) {
   player.pos.set(0, terrainHeight(0, 0) + EYE, 0);
   player.vel.set(0, 0, 0);
   player.onGround = true;
+  player.crouch = 0; player.charge = 0; player.pushing = false;
+  player.gas = JET.dv;
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
   yawObj.position.copy(player.pos);

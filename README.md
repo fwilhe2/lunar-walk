@@ -17,8 +17,8 @@ Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" 
 | Key | |
 |---|---|
 | `W A S D` | move / drive / thrust |
-| `Shift` | bounding lope (EVA) · boost (flight) |
-| `Space` | jump (EVA) · climb (flight) · suit jet up (moonlets) |
+| `Shift` | run (EVA) · boost (flight) |
+| `Space` | hold to crouch, release to push off: the longer you hold, the harder you push (EVA) · climb (flight) · suit jet up, once off the ground (moonlets) |
 | `C` | descend (flight) · suit jet down (moonlets) |
 | `R` | board / leave the rover |
 | `F` | flight mode on / off |
@@ -138,37 +138,45 @@ Rocks stream with the ground and cluster where ejecta lands — ringed thick aro
 
 The Lunar Roving Vehicle, built from primitives to its real dimensions: a tubular aluminium chassis on double wishbones; wheels with a spun-aluminium hub and a tyre of woven zinc-coated piano wire, shaped like any other tyre, with titanium chevrons over half the tread; pale fibreglass fenders; two webbing seats with the console and T-handle between them; the LCRU up front under white thermal blankets, with the umbrella high-gain dish, the helical low-gain antenna and the TV camera on their masts; the tool pallet at the back. While you drive, the commander sits in the left seat with a hand on the T-handle. The dish's weave is cut out, so light — and shadow — passes through it. The tyre's mesh is too fine to survive that at any distance, so it is painted, and opens only when you are close enough to draw its holes cleanly — then the bump stop shows through. The high-gain dish stays pointed at the relay while you drive. Bicycle-model steering with no authority at rest; each wheel follows the terrain on its own pair of wishbones, which swing about torsion bars under the chassis and keep the wheel upright; chevron wheel tracks stamped into the regolith, and rooster tails of dust off every wheel at speed, thrown from where the tread leaves the ground.
 
-It has mass. The chassis is a rigid body on four sprung, damped wheels with bump stops, with its own inertia in pitch and roll, and the springs are scaled to the body's gravity so it rides at the same height everywhere — what changes is how slowly it all happens. At a sixth of a g the suspension swings slow and deep, and a rover coming over a crater rim at speed keeps rising after the ground has stopped: it flies, pitches over in the air, and comes down on its bump stops in a ring of dust, as the Apollo 16 Grand Prix footage shows. Traction is friction on the wheel loads, so throttle, brake and steering all run out of grip long before the motors do: it squats when it pulls away, carries its speed wide into a turn, leans out of it against its anti-roll bars, and takes its time to stop. Sideways the tyres hold better than they pull, since a wheel sunk into the soil has to bulldoze regolith to slide. Nothing works in the air. It rolls downhill if you park it badly under way; left parked, its brake holds it, and one you bailed out of mid-jump still comes down.
+It drives on forces. Four 0.25 hp hub motors push 480 kg — rover, you and your kit — up to the 3.6 m/s their gearing allows, and only downhill any faster, which is how Apollo 17 logged 18 km/h. Every force the tyres make driving or braking is capped by their grip, about 0.4 of the load on lunar soil: nine seconds to full speed on the Moon, most of a minute on Charon. Sideways they hold better than they pull, since a wheel sunk into the soil has to bulldoze regolith to slide, but a turn tighter than even that just plows wide. Rolling through soil costs a tenth of the weight. The parking brake holds wherever grip allows, and a rover you bailed out of mid-jump still comes down.
+
+It has mass. The chassis is a rigid body on four sprung, damped wheels with bump stops, with its own inertia in pitch and roll, and the springs are scaled to the body's gravity so it rides at the same height everywhere — what changes is how slowly it all happens. At a sixth of a g the suspension swings slow and deep, and a rover coming over a crater rim at speed keeps rising after the ground has stopped: it flies, steering nothing, pitches over in the air, and comes down on its bump stops in a ring of dust, as the Apollo 16 Grand Prix footage shows. Grip follows the actual wheel loads, so it squats when it pulls away, dives under the brake, and leans out of a turn against its anti-roll bars.
 
 It is available on the Moon, Mars, Europa, Pluto, Charon and Venus, though on Venus it crawls: dragging a rover-sized frontal area through 65 kg/m³ at walking pace takes about a kilowatt, so it tops out at 1.7 m/s and does not coast — it stops. On Phobos and Deimos pressing `R` tells you why not: a wheel needs weight on it to make traction, and at six thousandths of a g there is none to be had — spin a wheel there and you lift the rover, not the regolith.
 
 ## Physics
 
-Gravity is each body's real value. The jump is a takeoff velocity, not a fixed height: the same suited push gives roughly the same launch speed whatever you are standing on, and the difference in gravity does the rest.
+Gravity is each body's real value, and nothing about moving on foot is tuned for feel. You are an 80 kg person in 91 kg of suit and backpack — the Apollo 16 journal says of John Young that "the suit and backpack weigh as much as he does" — and everything follows from that mass, the local gravity, the grip of the ground and what a pair of legs can do.
 
-| | takeoff | apex | hang time |
-|---|---|---|---|
-| Moon | 2.65 m/s | 2.15 m | 3.27 s |
-| Mars | 3.10 m/s | 1.27 m | 1.67 s |
-| Venus | 4.00 m/s | 0.85 m | 0.86 s |
-| Europa | 2.65 m/s | 2.67 m | 4.03 s |
-| Pluto | 2.65 m/s | 5.66 m | 8.55 s |
-| Charon | 2.65 m/s | 12.2 m | 18.4 s |
-| Earth (`G`) | 4.20 m/s | 0.86 m | 0.85 s |
-| Phobos | 0.117 m/s | 1.20 m | 41.1 s |
-| Deimos | 0.085 m/s | 1.20 m | 56.7 s |
+- **The push.** Leg force falls off linearly with extension speed, the force–velocity profile of jumping (Samozino et al. 2008): 36 N per kilogram of body at rest, nothing left at 4 m/s. Unsuited on Earth that is a 0.33 m squat jump. The suit's joints take 42% of the force and its knees allow only a 0.25 m crouch, which calibrates a maximal lunar jump to **0.82 m, Charlie Duke's on Apollo 16**, just before he fell over backwards; John Young's casual jump salute was 0.42 m. You choose the effort: hold `Space` to sink into the crouch — the readout shows the effort and the takeoff speed it will give — and let go to push. Hold a direction and the push tilts that way, within the friction cone, which is how you jump forward. A push weaker than your weight only stands you back up.
+- **The pace.** Legs are pendulums, so natural speeds scale with the Froude number v²/gL. Suited Apollo crews changed from walking to running at Fr 0.36 (Carr & McGee 2009), and J-mission crews ran for long stretches at 1.4 m/s, Fr 1.35. The same two numbers set your walk and your run (`Shift`) everywhere.
+- **The grip.** Every horizontal force comes from friction, so nothing speeds you up, slows you down or holds you on a slope harder than μ·g·cosθ — about 1 m/s² on the Moon. On ground steeper than the friction angle, around 33°, you slide. Ice at these temperatures has no film of melt on it and grips nearly as well as soil.
+- **The power.** Once moving, legs deliver a few hundred watts, which is what limits climbing, and what sets your pace on Venus.
+- **In the air you are a projectile.** Nothing you do changes where you land, and you leave the ground by yourself wherever it curves away faster than gravity can follow, where v²κ > g. On a light body at a run, that is every hump. Landing sinks you into the knees as far as the legs need to stop you.
 
-On the two Martian moons that model stops working, because a full leg push there is not a jump, it is a launch: 2.65 m/s on Phobos is an apex of six hundred metres and a quarter of an hour in the air, and on Deimos, whose escape velocity is 5.6 m/s, it would simply be the last thing you ever did on Deimos. So there you push with a toe — the table's 1.2 m — and use the suit jets to get around and to come back down. An MMU gives a suited astronaut about 0.35 m/s² in any direction, which is sixty times the local gravity, so it works equally well on the ground and off it. That is not a game concession; it is what EVA on a body this small would actually be.
+| | full push | apex | hang time | walk | run |
+|---|---|---|---|---|---|
+| Moon | 1.63 m/s | 0.82 m | 2.0 s | 0.72 m/s | 1.40 m/s |
+| Mars | 1.36 m/s | 0.25 m | 0.73 s | 1.10 m/s | 2.13 m/s |
+| Venus | 0.52 m/s | 0.02 m | 0.13 s | 1.63 m/s | 2.9 m/s (power) |
+| Europa | 1.67 m/s | 1.06 m | 2.5 s | 0.65 m/s | 1.26 m/s |
+| Pluto | 1.75 m/s | 2.48 m | 5.7 s | 0.45 m/s | 0.87 m/s |
+| Charon | 1.79 m/s | 5.6 m | 12.4 s | 0.31 m/s | 0.59 m/s |
+| Earth (`G`) | — | — | — | 1.78 m/s | 3.45 m/s |
+| Phobos | 1.82 m/s | 290 m | 11 min | — | — |
+| Deimos | 1.82 m/s | 550 m | 20 min | — | — |
 
-**On Pluto you weigh a sixteenth of what you do at home** — an 80 kg astronaut weighs what a 5 kg bag does — and under half of what you would on the Moon. The same push that clears two metres there puts you nearly six metres up and keeps you in the air for eight and a half seconds, and with a third of the Moon's traction, starting, stopping and turning all take a long time. Nothing here is slippery the way ice is at home: at 40 K there is no liquid film on anything.
+**In the suit on Earth you cannot leave the ground at all.** 171 kg weighs 1,678 N, and the legs, through the suit, make 1,670.
 
-**On Charon you weigh three hundredths of what you do at home**, which is less than half again of Pluto: an 80 kg astronaut weighs what a 2.3 kg bag does. The same push puts you twelve metres up and keeps you in the air for eighteen seconds, long enough to look around on the way. It is still nowhere near a launch: escape velocity is 590 m/s, so unlike on the Martian moons you jump with your legs and come back down by yourself.
+**On Phobos and Deimos you cannot walk.** Grip there is three and two millimetres per second squared: starting, stopping or turning on foot takes minutes. A full push is not a jump but a launch — ten minutes in the air on Phobos — so you push with a fraction of the effort, and move with the suit's jets. They are the Manned Maneuvering Unit's, as flown from the shuttle in 1984: 0.09 m/s² along each axis, and 36 m/s of Δv in a full nitrogen charge, shown in the readout. They only ever add velocity, so stopping takes as much gas as starting, and when the tank is empty you coast. The beacon at the landing site recharges them. Deimos lets go of you at 5.6 m/s, and the tank holds six times that.
+
+**On Pluto you weigh a sixteenth of what you do at home** — an 80 kg astronaut weighs what a 5 kg bag does — and under half of what you would on the Moon. A full push clears two and a half metres and keeps you in the air for six seconds, and with a third of the Moon's grip, starting, stopping and turning all take a long time.
+
+**On Charon you weigh three hundredths of what you do at home**, which is less than half again of Pluto: an 80 kg astronaut weighs what a 2.3 kg bag does. A full push puts you nearly six metres up for twelve seconds, but walking is a shuffle at 0.3 m/s, and a run a lope at 0.6. It is still nowhere near a launch: escape velocity is 590 m/s.
 
 **On Europa the physics is easy and the radiation is not.** The ground is ice at −170 °C, as hard as rock and not slippery — ice is slippery on Earth because it is near its melting point — and the gravity a little under the Moon's, so you lope. But Europa orbits inside Jupiter's radiation belts, and the commonly quoted surface dose is 5.4 Sv a day, against 1.4 mSv on the Moon and 0.64 on Mars; four to five sieverts at once kills half the people who receive it. So there the readout keeps count of your dose from the moment you arrive. Tara Regio is on the leading hemisphere, which is spared some of the electrons the trailing one takes, so here that figure is if anything an overestimate.
 
-Traction is proportional to weight, so acceleration, braking and mid-flight steering all scale with gravity — sluggish on the Moon, crisper on Mars, absent on the moonlets. Press `G` to feel any of them against Earth.
-
-**On Venus gravity is not the problem.** At 0.904 g your weight is nearly what it is at home; what stops you is that 92 bar of CO₂ at 464 °C is not air but a fluid at 65 kg/m³, a twentieth the density of water. Walking there is wading. Pushing a suited walker through it at 2 m/s costs about 200 watts, which is a hard sustained effort for a person, so the ceiling is power rather than traction: a trudge at 1.7 m/s and a shove at 2.3. The drag is quadratic and three-dimensional, so it shortens a jump as well as a stride, and Archimedes gets a say too — that much fluid holds up about 7% of your weight.
+**On Venus gravity is not the problem.** At 0.904 g your weight is nearly what it is at home; what stops you is that 92 bar of CO₂ at 464 °C is not air but a fluid at 65 kg/m³, a twentieth the density of water. Walking there is wading. Pushing a suited walker through it at 2 m/s costs about 130 watts, and the drag climbs as the cube of speed, so the ceiling on a run is power rather than traction: at 400 W it stalls at 2.9 m/s. The drag is quadratic and three-dimensional, so it shortens a jump as well as a stride, and Archimedes gets a say too — that much fluid holds up about 7% of your weight.
 
 Landing throws dust. In vacuum it flies in clean parabolas and drops, with no billowing, because there is no air to suspend it. Every grain in a plume has its own size and albedo — a haze of fines, most of them smaller than a pixel and drawn only as faint as the share of a pixel they cover, with clods in it — and each is lit as a small rough sphere — shaded across its face when it is big enough to show one, at its phase angle when it is not — and shadowed by the ground and by the rover, rocks and walker it flies past. The fines also scatter forward, as sixty-micron grains do — the same physics as the lunar horizon glow — so a plume thrown up at a low sun shines against the ground looking down-sun, lights up again looking into the sun while its clods hang dark in it, and goes dark where it passes through a shadow. Mars is one exception: six millibars is not much, but it is not nothing, so fine grains feel drag and the plume lags, spreads and hangs, while the clods drop out of it. Venus is the other, four orders of magnitude further along — a 50 µm grain of basalt settles through that fluid at about 20 cm/s, so kicking the soil there throws nothing anywhere. It stands up in a slow cloud around your boots and takes the best part of a minute to come back down. Boot prints and wheel tracks stay where you put them, lie on the ground's own grain rather than over it, and press the pebbles under them into the soil.
 
