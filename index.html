@@ -3459,7 +3459,7 @@ const rockSystem = (() => {
           mesh.setMatrixAt(i, list[i * 3]);
           const a = list[i * 3 + 1], r = list[i * 3 + 2];
           mesh.instanceColor.setXYZ(i, a * tint[0], a * tint[1], a * tint[2]);
-          if (r.size < PRESS_MAX) small.push({ mesh, i, x: r.x, z: r.z, size: r.size, pressed: false });
+          if (r.size < PRESS_MAX) small.push({ mesh, i, pts: proto.pts, x: r.x, z: r.z, pressed: false });
         }
         mesh.castShadow = C.shadow;
         mesh.receiveShadow = C.receive;
@@ -3471,11 +3471,13 @@ const rockSystem = (() => {
     return group;
   }
 
-  /* Pressing a stone: halve its height about its own centre and push
-     it down by most of what it stood proud by, which leaves its crown
-     flush with the soil — the way pebbles show in the floor of every
-     Apollo boot print, pressed in rather than pushed aside. */
-  const pm = new THREE.Matrix4(), squash = new THREE.Matrix4().makeScale(1, 0.5, 1);
+  /* Pressing a stone: flatten it to a third of its height and set its
+     crown 3 mm above the print floor, measured on the stone's own
+     posed geometry and on the drawn mesh (mk.ground, from §8), so it
+     shows as a flush cap that casts next to no shadow — the way
+     pebbles show in the floor of every Apollo boot print, pressed in
+     rather than pushed aside. */
+  const pm = new THREE.Matrix4(), squash = new THREE.Matrix4().makeScale(1, 0.35, 1);
   function pressGroup(group, mk, x0, z0) {
     if (mk.x + mk.r < x0 || mk.x - mk.r > x0 + SIZE || mk.z + mk.r < z0 || mk.z - mk.r > z0 + SIZE) return;
     for (const st of group.userData.small) {
@@ -3483,9 +3485,14 @@ const rockSystem = (() => {
       const dx = st.x - mk.x, dz = st.z - mk.z;
       if (Math.abs(dx * mk.c - dz * mk.s) > mk.hw || Math.abs(dx * mk.s + dz * mk.c) > mk.hh) continue;
       st.mesh.getMatrixAt(st.i, pm);
-      const el = pm.elements, sy = Math.hypot(el[4], el[5], el[6]);
       pm.multiply(squash);
-      el[13] -= sy * 0.6;
+      const el = pm.elements, pts = st.pts;
+      let top = -1e9;
+      for (let i = 0; i < pts.length; i += 3) {
+        const y = el[1] * pts[i] + el[5] * pts[i + 1] + el[9] * pts[i + 2];
+        if (y > top) top = y;
+      }
+      el[13] = mk.ground(st.x, st.z) + 0.003 - top;
       st.mesh.setMatrixAt(st.i, pm);
       st.mesh.instanceMatrix.needsUpdate = true;
       st.pressed = true;
@@ -3518,8 +3525,8 @@ const rockSystem = (() => {
     // Lay a print or track over the ground: presses the stones under
     // it now, and in any chunk built later. `key` is its ring slot, so
     // a print that is overwritten stops pressing chunks built after.
-    press(key, x, z, yaw, hw, hh) {
-      const mk = { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hh, r: Math.hypot(hw, hh) };
+    press(key, x, z, yaw, hw, hh, ground) {
+      const mk = { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hh, r: Math.hypot(hw, hh), ground };
       marks.set(key, mk);
       for (const [cell, g] of live) {
         const [cx, cz] = cell.split(':').map(Number);
@@ -5345,7 +5352,7 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
   // drop applied per vertex as the worker applies it.
   const vh = new Map();
   const vtx = (i, j, s) => {
-    const k = i + ',' + j;
+    const k = i + ',' + j + ',' + s;
     let y = vh.get(k);
     if (y === undefined) {
       const x = i * s, z = j * s;
@@ -5381,7 +5388,11 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
     }
     posAttr.needsUpdate = true;
     norAttr.needsUpdate = true;
-    rockSystem.press(sysId + ':' + cursor, px, pz, yaw, w * sole[0] / 2, h * sole[1] / 2);
+    // The stones under the sole are pressed to the same drawn surface.
+    // Kept by the rock system for chunks it builds later, so the
+    // lookup must not depend on this print's vertex cache.
+    rockSystem.press(sysId + ':' + cursor, px, pz, yaw, w * sole[0] / 2, h * sole[1] / 2,
+                     (x, z) => { vh.clear(); return meshHeight(x, z, s); });
     cursor = (cursor + 1) % maxCount;
   };
   stamp.material = material;
