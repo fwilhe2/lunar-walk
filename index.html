@@ -1572,7 +1572,10 @@ const VIEW = {
     hapke: { w: 0.55, b: 0.25, c: 0.35, B0: 0.6, h: 0.10, theta: 16, Bc0: 0.1, hc: 0.01 },
     micro: [0.25, 0.4], sparkle: 0,
     levels: L4, fly: 400, rover: true,
-    dustColor: 0xc08a5e, dustDrag: 0.55, stampColor: 0x6d4a33, soil: 0xa07c61,
+    // Pressing pushes the bright oxidised dust film aside: the tracks
+    // of Spirit, Opportunity and Curiosity run a quarter or so darker
+    // than the ground beside them, and a little less red.
+    dustColor: 0xc08a5e, dustDrag: 0.55, stampColor: 0x8f6c52, soil: 0xa07c61,
     // Dark basalt under a film of the bright dust.
     rockTint: [1.0, 0.86, 0.74], rockAlb: [0.12, 0.13], rockN: 0.85,
     landmark: 'flag', flagColor: 0xd8dce2,
@@ -5607,6 +5610,7 @@ const PRINT_U = {
    from the same lattice, the same diagonal and the same curvature
    drop the chunk was built with (§5). */
 const PRINT_GX = 5, PRINT_GY = 7;
+const TRACK_L = 0.62;   // length of one wheel-track stamp
 
 // Height of the drawn mesh at (x, z): the chunk lattice of spacing s,
 // split along the b–c diagonal as gridIndex() splits it. vtx(i, j, s)
@@ -5763,10 +5767,12 @@ const prints = (() => {
   };
 })();
 
-/* Chevron wheel tracks, stamped in pairs behind the rover. */
+/* Chevron wheel tracks, stamped in pairs behind the rover's front
+   wheels, end to end: the band runs the full length of the stamp, so
+   one stamp takes over where the last left off (§11 lays them). */
 const tracks = (() => {
   const stamp = makeStampSystem(500,
-    (x) => { x.beginPath(); x.roundRect(18, 2, 28, 60, 6); x.fill(); },
+    (x) => { x.fillRect(18, 0, 28, 64); },
     (x) => {
       for (let i = 0; i < 9; i++) {   // chevron tread
         x.beginPath();
@@ -5774,7 +5780,7 @@ const tracks = (() => {
         x.lineTo(45, 6.4 + i * 7); x.lineTo(32, 10.4 + i * 7); x.lineTo(19, 6.4 + i * 7);
         x.closePath(); x.fill();
       }
-    }, 0.26, 0.62, [28 / 64, 60 / 64]);
+    }, 0.26, TRACK_L, [28 / 64, 1]);
   return {
     place(x0, z0, yaw, half) {   // half = track gauge / 2
       const ox = Math.cos(yaw) * half, oz = -Math.sin(yaw) * half;
@@ -6734,6 +6740,7 @@ const rover = (() => {
   const MU_SIDE = 1.3;
   const SUB = 1 / 240;                      // physics substep, s
   const SPRAY = 320;                        // grains thrown per wheel per metre, at speed
+  const TRACK_LEAD = 0.2;                   // how far a track stamp may run ahead of the wheel
 
   /* Where a wheel stands. A single height under the hub gets two things
      wrong. terrainHeight() is the true surface, but what you see is the
@@ -6864,7 +6871,8 @@ const rover = (() => {
     pitch: 0, roll: 0, y: 0,   // chassis attitude and height
     vy: 0, pitchRate: 0, rollRate: 0,
     air: 0,                    // seconds with no wheel on the ground
-    trackAcc: 0, sprayAcc: 0,
+    trackX: 0, trackZ: 0,        // where the last track stamp ended
+    sprayAcc: 0,
   };
   const euler = new THREE.Euler(), _q = new THREE.Quaternion();
 
@@ -6874,6 +6882,8 @@ const rover = (() => {
     state.y = a.y; state.pitch = a.pitch; state.roll = a.roll;
     state.vy = state.pitchRate = state.rollRate = 0;
     state.air = 0;
+    state.trackX = state.pos.x - Math.sin(state.yaw) * WHEELBASE / 2;
+    state.trackZ = state.pos.z - Math.cos(state.yaw) * WHEELBASE / 2;
     apply();
   }
 
@@ -7085,11 +7095,18 @@ const rover = (() => {
         w.land = 0;
       }
 
-      // Tracks, and rooster tails off every wheel.
-      st.trackAcc += Math.abs(st.vel) * dt;
-      if (st.trackAcc > 0.72 && Math.abs(st.vel) > 0.3 && st.air === 0) {
-        st.trackAcc = 0;
-        tracks.place(st.pos.x, st.pos.z, st.yaw, TRACK / 2);
+      // Tracks, laid under the front wheels (the rear ones run in
+      // them) stamp against stamp along the path actually driven. A
+      // stamp goes down once the wheel is within LEAD of its far end,
+      // so the band starts right under the tyre, not a stamp behind.
+      const ax = st.pos.x - Math.sin(st.yaw) * WHEELBASE / 2, az = st.pos.z - Math.cos(st.yaw) * WHEELBASE / 2;
+      let tx = ax - st.trackX, tz = az - st.trackZ, td = Math.hypot(tx, tz);
+      if (st.air > 0 || td > 5) { st.trackX = ax; st.trackZ = az; td = 0; }   // took off, or was moved
+      while (td >= TRACK_L - TRACK_LEAD) {
+        tx /= td; tz /= td;
+        tracks.place(st.trackX + tx * TRACK_L / 2, st.trackZ + tz * TRACK_L / 2, Math.atan2(-tx, -tz), TRACK / 2);
+        st.trackX += tx * TRACK_L; st.trackZ += tz * TRACK_L;
+        tx = ax - st.trackX; tz = az - st.trackZ; td = Math.hypot(tx, tz);
       }
       if (Math.abs(st.vel) > 1.2 && st.air === 0) {
         const dist = Math.abs(st.vel) * dt;
