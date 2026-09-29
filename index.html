@@ -5401,7 +5401,61 @@ const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
   type: THREE.HalfFloatType, samples: 4,
 });
 const composer = new EffectComposer(renderer, rt);
-composer.addPass(new RenderPass(scene, camera));
+
+/* ── Depth in two ranges ────────────────────────────────────────
+   The view runs from a boot 5 cm under the eye to a horizon 90 km
+   off, and one 24-bit depth buffer cannot hold that: precision
+   falls with the square of distance, to ~20 m at 4 km and ~120 m at
+   10 km. That is coarser than the few metres each coarse terrain
+   level sinks under the finer one (§5), so where levels overlap on
+   distant slopes the winner was decided by rounding, and changed
+   with every step you took — ridges shimmered as you moved.
+
+   So the scene is drawn twice into the same target: first
+   everything past DEPTH_SPLIT with the near plane pushed out to
+   it, then the depth is cleared and everything nearer is drawn
+   with the real near plane and the far plane pulled in. Each range
+   gets the whole buffer — millimetres at a kilometre, a metre at
+   the far edge — and near precision is what it always was. The
+   ranges overlap by 2% so no seam can open between them; nothing
+   drawn additively lives out there to be counted twice. Frustum
+   culling does the sorting, so each chunk is drawn about once.
+
+   The sun's shadow maps do not depend on the main camera, so they
+   are rendered for the first range only. This is used instead of a
+   logarithmic depth buffer, which would need every ShaderMaterial
+   patched, would break the prints' polygonOffset, and would cost
+   early-z under the ground shader on exactly the GPUs §10b is for. */
+const DEPTH_SPLIT = 400;
+class SplitRenderPass extends RenderPass {
+  render(renderer, writeBuffer, readBuffer) {
+    const cam = this.camera, near = cam.near, far = cam.far;
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
+
+    cam.near = DEPTH_SPLIT * 0.98;
+    cam.updateProjectionMatrix();
+    super.render(renderer, writeBuffer, readBuffer);
+
+    cam.near = near;
+    cam.far = DEPTH_SPLIT;
+    cam.updateProjectionMatrix();
+    renderer.setRenderTarget(this.renderToScreen ? null : readBuffer);
+    renderer.clearDepth();
+    // A colour background makes three clear on every render call,
+    // whatever autoClear says — it would wipe the far range.
+    const bg = this.scene.background;
+    this.scene.background = null;
+    this.clear = false;
+    super.render(renderer, writeBuffer, readBuffer);
+    this.clear = true;
+    this.scene.background = bg;
+
+    cam.far = far;
+    cam.updateProjectionMatrix();
+  }
+}
+composer.addPass(new SplitRenderPass(scene, camera));
 
 const eyePass = (() => {
   const meterRT = new THREE.WebGLRenderTarget(128, 64, {
