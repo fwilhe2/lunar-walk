@@ -5607,6 +5607,21 @@ const PRINT_U = {
    from the same lattice, the same diagonal and the same curvature
    drop the chunk was built with (§5). */
 const PRINT_GX = 5, PRINT_GY = 7;
+
+// Height of the drawn mesh at (x, z): the chunk lattice of spacing s,
+// split along the b–c diagonal as gridIndex() splits it. vtx(i, j, s)
+// gives the height of lattice corner (i, j) — the caller decides how
+// it is cached and whether the curvature drop goes in. The one copy
+// of the triangulation outside the worker: prints and the rover's
+// wheels both stand on it (§8, §11).
+function meshHeight(x, z, s, vtx) {
+  const gx = x / s, gz = z / s, i = Math.floor(gx), j = Math.floor(gz);
+  const fx = gx - i, fz = gz - j;
+  const hb = vtx(i + 1, j, s), hc = vtx(i, j + 1, s);
+  if (fx + fz <= 1) { const ha = vtx(i, j, s); return ha + fx * (hb - ha) + fz * (hc - ha); }
+  const hd = vtx(i + 1, j + 1, s);
+  return hd + (1 - fx) * (hc - hd) + (1 - fz) * (hb - hd);
+}
 function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
   const S = 128;
   const draw = (blur, fn) => {
@@ -5683,9 +5698,8 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
 
   const sysId = stampSystems.length;
   let cursor = 0;
-  // Height of the drawn mesh at (x, z): the chunk lattice of spacing
-  // s, split along the b–c diagonal as gridIndex() splits it, with the
-  // drop applied per vertex as the worker applies it.
+  // Lattice corners for meshHeight(), with the drop applied per vertex
+  // as the worker applies it; cleared per print.
   const vh = new Map();
   const vtx = (i, j, s) => {
     const k = i + ',' + j + ',' + s;
@@ -5695,14 +5709,6 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
       vh.set(k, y = terrainHeight(x, z) - dropAt(x, z));
     }
     return y;
-  };
-  const meshHeight = (x, z, s) => {
-    const gx = x / s, gz = z / s, i = Math.floor(gx), j = Math.floor(gz);
-    const fx = gx - i, fz = gz - j;
-    const hb = vtx(i + 1, j, s), hc = vtx(i, j + 1, s);
-    if (fx + fz <= 1) { const ha = vtx(i, j, s); return ha + fx * (hb - ha) + fz * (hc - ha); }
-    const hd = vtx(i + 1, j + 1, s);
-    return hd + (1 - fx) * (hc - hd) + (1 - fz) * (hb - hd);
   };
 
   const stamp = (px, pz, yaw) => {
@@ -5718,7 +5724,7 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
         const lx = (i / (PRINT_GX - 1) - 0.5) * w;
         const x = px + lx * c - ly * sn, z = pz - lx * sn - ly * c;
         const v = (cursor * NV + j * PRINT_GX + i) * 3;
-        pos[v] = x; pos[v + 1] = meshHeight(x, z, s) + 0.002; pos[v + 2] = z;
+        pos[v] = x; pos[v + 1] = meshHeight(x, z, s, vtx) + 0.002; pos[v + 2] = z;
         nor[v] = n.x; nor[v + 1] = n.y; nor[v + 2] = n.z;
       }
     }
@@ -5728,7 +5734,7 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
     // Kept by the rock system for chunks it builds later, so the
     // lookup must not depend on this print's vertex cache.
     rockSystem.press(sysId + ':' + cursor, px, pz, yaw, w * sole[0] / 2, h * sole[1] / 2,
-                     (x, z) => { vh.clear(); return meshHeight(x, z, s); });
+                     (x, z) => { vh.clear(); return meshHeight(x, z, s, vtx); });
     cursor = (cursor + 1) % maxCount;
   };
   stamp.material = material;
@@ -6609,6 +6615,41 @@ const rover = (() => {
   const HCG = 0.55;                         // centre of mass above the contact patches
   const MU = 0.8;                           // wire mesh in regolith
   const SUB = 1 / 240;                      // physics substep, s
+
+  /* Where a wheel stands. A single height under the hub gets two things
+     wrong. terrainHeight() is the true surface, but what you see is the
+     chunk mesh built from it, a lattice a metre or two apart with no
+     room for a crater a metre across — so the wheel dropped into holes
+     that are not drawn. And an 82 cm tyre does not follow a point: it
+     bridges anything much narrower than itself and rests on the rims.
+     So each wheel is a circle let down onto the drawn mesh (the same
+     reconstruction the prints stand on, §8): seven points along and
+     across the contact patch, each asking how high the tyre's bottom
+     must be to clear it, and the highest wins. */
+  const GC = 512;                           // lattice corners, direct-mapped on integer keys
+  const gcI = new Int32Array(GC), gcJ = new Int32Array(GC), gcS = new Int8Array(GC), gcY = new Float64Array(GC);
+  // Raw heights, without the curvature drop: the rover lives in raw
+  // heights like everything physical, and near you the drop is
+  // micrometres. So nothing cached here ever goes stale.
+  const gvtx = (i, j, s) => {
+    const k = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ s) & (GC - 1);
+    if (gcS[k] === s && gcI[k] === i && gcJ[k] === j) return gcY[k];
+    gcI[k] = i; gcJ[k] = j; gcS[k] = s;
+    return (gcY[k] = terrainHeight(i * s, j * s));
+  };
+  // [along, across, how far that point of the circle sits above its bottom]
+  const FOOT = [[0, 0], [-0.3, 0], [-0.15, 0], [0.15, 0], [0.3, 0], [0, -0.1], [0, 0.1]]
+    .map(([d, l]) => [d, l, WHEEL_R - Math.sqrt(WHEEL_R * WHEEL_R - d * d)]);
+  // Where the bottom of a tyre heading (fx, fz) comes to rest at (x, z),
+  // on ground drawn with lattice step s.
+  function wheelGround(x, z, fx, fz, s) {
+    let h = -Infinity;
+    for (const [d, l, up] of FOOT) {
+      const g = meshHeight(x + fx * d - fz * l, z + fz * d + fx * l, s, gvtx) - up;
+      if (g > h) h = g;
+    }
+    return h;
+  }
   const wheels = [];
   for (const [wx, wz, front] of [[-TRACK / 2, -WHEELBASE / 2, 1], [TRACK / 2, -WHEELBASE / 2, 1],
                                  [-TRACK / 2, WHEELBASE / 2, 0], [TRACK / 2, WHEELBASE / 2, 0]]) {
@@ -6649,7 +6690,7 @@ const rover = (() => {
     });
     for (const dz of [-0.24, 0.24]) tube(side * ARM_PX, 0.03, wz + dz, side * ARM_PX, REST_Y - ARM_DY, wz + dz, 0.014, aluDull);
     group.add(wg);
-    wheels.push({ g: wg, steer, spin, arms, front, side, x: wx, z: wz, swing: 0, s: 0, contact: true, land: 0 });
+    wheels.push({ g: wg, steer, spin, arms, front, side, x: wx, z: wz, swing: 0, s: 0, contact: true, land: 0, step: 1 });
   }
 
   /* Merge by material. Built above as some hundred and fifty meshes —
@@ -6720,9 +6761,10 @@ const rover = (() => {
   function poseFromWheels() {
     const c = Math.cos(state.yaw), s = Math.sin(state.yaw);
     // Local +z is aft; local x right. World heading of local -z:
-    const hx = (lx, lz) => terrainHeight(
+    const step = chunkStreamer.stepAt(state.pos.x, state.pos.z);
+    const hx = (lx, lz) => wheelGround(
       state.pos.x + lx * c + lz * s,
-      state.pos.z - lx * s + lz * c
+      state.pos.z - lx * s + lz * c, -s, -c, step
     );
     const hFL = hx(-TRACK / 2, -WHEELBASE / 2), hFR = hx(TRACK / 2, -WHEELBASE / 2);
     const hRL = hx(-TRACK / 2, WHEELBASE / 2),  hRR = hx(TRACK / 2, WHEELBASE / 2);
@@ -6742,9 +6784,11 @@ const rover = (() => {
     // Per-wheel suspension: put each wheel's contact patch on its own
     // ground by swinging its wishbones, as far as they will swing.
     const sMax = Math.sin(ARM_MAX);
+    const fx = -Math.sin(state.yaw), fz = -Math.cos(state.yaw);
     for (const w of wheels) {
       _wv.set(w.x, 0, w.z).applyQuaternion(group.quaternion);
-      const hW = terrainHeight(state.pos.x + _wv.x, state.pos.z + _wv.z);
+      w.step = chunkStreamer.stepAt(state.pos.x + _wv.x, state.pos.z + _wv.z);
+      const hW = wheelGround(state.pos.x + _wv.x, state.pos.z + _wv.z, fx, fz, w.step);
       const ly = hW + WHEEL_CTR - state.y - _wv.y;
       w.s = ly - REST_Y;
       w.swing = Math.asin(Math.max(-sMax, Math.min(sMax, w.s / ARM_L)));
@@ -6821,9 +6865,11 @@ const rover = (() => {
         euler.set(st.pitch, st.yaw, st.roll, 'YXZ');
         _q.setFromEuler(euler);
         let F = 0, tp = 0, tr = 0, touching = 0;
+        const fx = -Math.sin(st.yaw), fz = -Math.cos(st.yaw);
         for (const w of wheels) {
           _wv.set(w.x, 0, w.z).applyQuaternion(_q);
-          const sNow = terrainHeight(st.pos.x + _wv.x, st.pos.z + _wv.z) + WHEEL_CTR - st.y - _wv.y - REST_Y;
+          const sNow = wheelGround(st.pos.x + _wv.x, st.pos.z + _wv.z, fx, fz, w.step)
+                     + WHEEL_CTR - st.y - _wv.y - REST_Y;
           const sd = (sNow - w.s) / h;
           w.s = sNow;
           const on = sNow > -TRAVEL;
