@@ -5927,9 +5927,9 @@ const quality = (() => {
     if (light.shadow.map) { light.shadow.map.dispose(); light.shadow.map = null; }
   };
 
-  function set(next) {
+  function set(next, remember = true) {
     id = next; T = TIERS[id];
-    try { localStorage.setItem(KEY, id); } catch (e) { /* no storage */ }
+    try { if (remember) localStorage.setItem(KEY, id); } catch (e) { /* no storage */ }
     // Anti-aliasing: MSAA on the scene target, or FXAA at the end.
     for (const r of [composer.renderTarget1, composer.renderTarget2]) {
       if (r.samples !== T.msaa) { r.samples = T.msaa; r.dispose(); }
@@ -5974,9 +5974,10 @@ const quality = (() => {
     get label() { return T.name; },
     auto: true,               // the resolution governor; off only for measuring
     init() { set(detect()); },
-    set,
+    set,                      // set(id, false) does not overwrite the remembered tier
     cycle() { set(ORDER[(ORDER.indexOf(id) + 1) % ORDER.length]); return T.name; },
     resize() { resolution(); },
+    fullScale() { if (scale !== 1) { scale = 1; resolution(); restart(); } },
     // Once per frame, before anything is drawn: it may resize the canvas.
     tick() {
       // Only ever a request; three clears it once the map is drawn.
@@ -6783,7 +6784,7 @@ function stepROVER(dt) {
    slowly, because on an airless world the shadows are the scenery.
    ═════════════════════════════════════════════════════════════ */
 const demo = (() => {
-  let on = false, lastWorld = null, sunWay = 1;
+  let on = false, lastWorld = null, sunWay = 1, prior = null;
   let gaze = 'ahead', left = 0, actAge = 0, jumpIn = 10, prevGaze = '';
   let yawTarget = 0, pitchTarget = 0;
 
@@ -6840,6 +6841,12 @@ const demo = (() => {
       if (on) return;
       on = true;
       lastWorld = null;
+      // Always the best picture, whatever was chosen and however the
+      // frame rate looks: no governor, and nothing written to storage.
+      prior = { id: quality.id, auto: quality.auto };
+      quality.auto = false;
+      if (quality.id !== 'high') quality.set('high', false);
+      quality.fullScale();
       hud.classList.add('demo');
       overlay.classList.add('hidden');
     },
@@ -6847,6 +6854,11 @@ const demo = (() => {
       if (!on) return;
       on = false;
       clearKeys();
+      if (prior) {
+        quality.auto = prior.auto;
+        if (quality.id !== prior.id) quality.set(prior.id, false);
+        prior = null;
+      }
       hud.classList.remove('demo');
       if (!locked) overlay.classList.remove('hidden');
     },
