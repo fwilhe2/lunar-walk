@@ -8,7 +8,25 @@
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: #000; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
+  /* Touch: a stick where the left thumb lands, buttons under the right. */
+  #touch { position: fixed; inset: 0; pointer-events: none; font: 11px ui-monospace, Menlo, monospace; letter-spacing: .1em; }
+  #touch[hidden] { display: none; }
+  #touch button { position: absolute; pointer-events: auto; touch-action: none; background: rgba(20,22,26,.45);
+                  border: 1px solid rgba(200,205,212,.35); color: #d8dce2; border-radius: 50%; width: 64px; height: 64px;
+                  font: inherit; user-select: none; -webkit-user-select: none; }
+  #touch button.on { background: rgba(232,176,75,.35); }
+  #t-jump { right: 24px; bottom: 96px; width: 84px !important; height: 84px !important; }
+  #t-down { right: 120px; bottom: 36px; }
+  #t-zoom { right: 24px; bottom: 196px; }
+  #t-rover { right: 120px; bottom: 124px; }
+  #t-fly { right: 196px; bottom: 36px; }
+  #t-menu { left: 16px; top: 16px; width: 44px !important; height: 44px !important; }
+  #t-stick { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%;
+             border: 1px solid rgba(200,205,212,.3); background: rgba(20,22,26,.25); }
+  #t-stick[hidden] { display: none; }
+  #t-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+            background: rgba(216,220,226,.35); }
 
   #hud, #overlay, #boot {
     position: fixed; inset: 0;
@@ -92,6 +110,16 @@
     <div><b>R</b> rover &nbsp; <b>F</b> fly &nbsp; <b>C</b> descend (fly)</div>
     <div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>ESC</b> release</div>
   </div>
+</div>
+
+<div id="touch" hidden>
+  <div id="t-stick" hidden><div id="t-knob"></div></div>
+  <button id="t-jump">JUMP</button>
+  <button id="t-down">DOWN</button>
+  <button id="t-rover">ROVER</button>
+  <button id="t-fly">FLY</button>
+  <button id="t-zoom">ZOOM</button>
+  <button id="t-menu">≡</button>
 </div>
 
 <div id="overlay" hidden>
@@ -7637,10 +7665,11 @@ const rover = (() => {
     /* One frame of driving, or of standing parked (parked: the brake
        is on and nobody is steering, but the chassis still settles,
        and a rover left in the air still comes down). */
-    step(dt, keys, gravity, parked = false) {
+    step(dt, ctl, gravity, parked = false) {
       const st = state;
-      // Steering: rate-limited toward the held direction.
-      const steerTarget = (keys.KeyA || keys.ArrowLeft ? 0.5 : 0) + (keys.KeyD || keys.ArrowRight ? -0.5 : 0);
+      // Steering: rate-limited toward the held direction. ctl: throttle
+      // and steer, −1 to 1 — keys give the ends, a stick anything between.
+      const steerTarget = -0.5 * ctl.steer;
       st.steer += (steerTarget - st.steer) * Math.min(1, dt * 6);
 
       /* Driving is forces, not a speed dial. Four 0.25 hp hub motors
@@ -7652,7 +7681,7 @@ const rover = (() => {
          the LRV takes six seconds to reach full speed on the Moon and
          the better part of a minute on Charon, and stopping takes as
          long. Rolling through soil costs a tenth of the weight. */
-      const fwd = keys.KeyW || keys.ArrowUp, rev = keys.KeyS || keys.ArrowDown;
+      const fwd = ctl.throttle > 0.05, rev = ctl.throttle < -0.05, thr = Math.min(1, Math.abs(ctl.throttle));
       const pose = poseFromWheels();
       const vmax = world.roverTop || 3.6;
       const cosG = 1 / Math.sqrt(1 + pose.gradeFwd * pose.gradeFwd), sinG = pose.gradeFwd * cosG;
@@ -7700,10 +7729,10 @@ const rover = (() => {
         if (touching) {
           const drive = (u) => Math.min(grip, LRV_P / (LRV_M * Math.max(u, 0.5)));
           if (parked) tyre = -Math.sign(v) * Math.min(grip, Math.abs(v) / h);   // brake on, nobody aboard
-          else if (fwd && v >= -0.05) { if (v < vmax) tyre = drive(v); }
-          else if (rev && v > 0.05) tyre = -grip;                  // brakes
-          else if (rev) { if (v > -1.5) tyre = -drive(-v); }
-          else if (fwd) tyre = grip;                               // braking a roll backwards
+          else if (fwd && v >= -0.05) { if (v < vmax) tyre = drive(v) * thr; }
+          else if (rev && v > 0.05) tyre = -grip * thr;            // brakes
+          else if (rev) { if (v > -1.5) tyre = -drive(-v) * thr; }
+          else if (fwd) tyre = grip * thr;                         // braking a roll backwards
           const rr = 0.1 * F * cosG;
           if ((parked || (!fwd && !rev)) && Math.abs(v) < 0.05 && Math.abs(g * sinG) <= grip) {
             st.vel = 0; tyre = g * sinG;                           // parking brake holds
@@ -8177,49 +8206,68 @@ function setGravity(g) {
 }
 
 addEventListener('keydown', (e) => {
+  if (e.code === 'Space') e.preventDefault();
+  // Held keys repeat only where that means something: sweeping the sun.
+  if (e.repeat && e.code !== 'BracketLeft' && e.code !== 'BracketRight') { keys[e.code] = true; return; }
   sound.unlock();
-  if (e.code === 'KeyM') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
   // Any key is the demo's cue to hand back the controls — except the
   // one that started it.
-  if (e.code === 'Digit0') { demo.toggle(); return; }
-  if (demo.on) demo.stop();
-
+  if (e.code !== 'Digit0' && demo.on) demo.stop();
   keys[e.code] = true;
-  if (e.code === 'Space') e.preventDefault();
-  if (e.code === 'KeyQ') note('QUALITY ' + quality.cycle());
+  press(e.code);
+});
+addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+// What a key does once, when it goes down. The gamepad and the touch
+// controls press the same codes.
+function press(code) {
+  if (code === 'Digit0') { demo.toggle(); return; }
+  if (code === 'KeyM') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
+  if (code === 'KeyQ') note('QUALITY ' + quality.cycle());
   // At full resolution: the governor may have lowered it, and a resize
   // has to happen before a frame is drawn, not after (§10b).
-  if (e.code === 'KeyP') { quality.fullScale(); photoPending = true; }
-  if (e.code === 'KeyH') hud.classList.toggle('clean');
-  if (e.code === 'KeyL') {
+  if (code === 'KeyP') { quality.fullScale(); photoPending = true; }
+  if (code === 'KeyH') hud.classList.toggle('clean');
+  if (code === 'KeyL') {
     lastHash = viewHash();
     try { history.replaceState(null, '', '#' + lastHash); } catch (err) { /* no address bar */ }
     const url = location.href.split('#')[0] + '#' + lastHash;
     if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => note('LINK COPIED'), () => note(url));
     else note(url);
   }
-  if (e.code === 'KeyG') {
+  if (code === 'KeyG') {
     setGravity(player.gravity === G_LIST[worldId] ? G_EARTH : G_LIST[worldId]);
   }
-  if (e.code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
-  if (e.code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].indexOf(e.code);
+  if (code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
+  if (code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
+  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].indexOf(code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
-  if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+  if (code === 'BracketLeft' || code === 'BracketRight') {
     // Below the horizon only where there is something to light the night.
-    sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), world.night ? -1.35 : 0.045, 1.35);
+    sunElev = THREE.MathUtils.clamp(sunElev + (code === 'BracketRight' ? 0.035 : -0.035), world.night ? -1.35 : 0.045, 1.35);
     updateSunDir();
     updateSkyColors();
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';
   }
-});
-addEventListener('keyup', (e) => { keys[e.code] = false; });
+  // Previous and next world, for the pad's D-pad.
+  if (code === 'WorldPrev' || code === 'WorldNext') {
+    const i = WORLD_IDS.indexOf(worldId), n = WORLD_IDS.length;
+    applyWorld(WORLD_IDS[(i + (code === 'WorldNext' ? 1 : n - 1)) % n]);
+  }
+}
 
 const overlay = document.getElementById('overlay');
 const hud = document.getElementById('hud');
 let locked = false;
 
-overlay.addEventListener('click', () => { sound.unlock(); renderer.domElement.requestPointerLock(); });
+overlay.addEventListener('click', () => {
+  sound.unlock();
+  if (lastPointer === 'touch') { touchUI.start(); return; }
+  renderer.domElement.requestPointerLock();
+});
+// Which kind of pointer tapped last: a finger gets touch controls.
+let lastPointer = 'mouse';
+addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; }, true);
 // Clicking the running demo takes it over.
 renderer.domElement.addEventListener('click', () => {
   if (!demo.on) return;
@@ -8266,7 +8314,7 @@ renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2) zoomHeld = true; });
 addEventListener('mouseup', (e) => { if (e.button === 2) zoomHeld = false; });
 function stepZoom(dt) {
-  const target = zoomHeld || keys.KeyZ ? 1 : 0;
+  const target = zoomHeld || keys.KeyZ || input.zoom ? 1 : 0;
   if (zoomT === target) return;
   zoomT += (target - zoomT) * Math.min(1, dt * 8);
   if (Math.abs(target - zoomT) < 0.002) zoomT = target;
@@ -8472,6 +8520,148 @@ const body = (() => {
 })();
 
 const _tan = new THREE.Vector3();
+/* ── Input ──────────────────────────────────────────────────────
+   Keys, a gamepad and the touch controls all come down to one set of
+   controls, read once a frame. They are analog where the hardware
+   is: a stick half over walks at half pace, drives at half throttle,
+   and fires the jets at half thrust, and the right trigger's depth
+   is how hard you mean to push — squeeze it and let go to jump. The
+   demo still just presses keys, so it drives the same way a person
+   does.
+
+   Pad (standard mapping): left stick moves, right stick looks, LB
+   runs or boosts, A is SPACE and B is C, the right trigger crouches
+   and pushes, Y the rover, X flight, RB the long lens, the D-pad the
+   sun and the world, Start the demo, Back the sound. */
+const input = { fwd: 0, side: 0, run: false, jump: false, pushCap: 1, down: false, lookX: 0, lookY: 0, zoom: false };
+const touch = { on: false, fwd: 0, side: 0, lookX: 0, lookY: 0, jump: false, down: false, zoom: false };
+const padPrev = [];
+const PAD_PRESS = { 0: null, 2: 'KeyF', 3: 'KeyR', 8: 'KeyM', 9: 'Digit0', 11: 'KeyP', 12: 'BracketRight', 13: 'BracketLeft', 14: 'WorldPrev', 15: 'WorldNext' };
+const dead = (v, d) => (Math.abs(v) < d ? 0 : Math.sign(v) * (Math.abs(v) - d) / (1 - d));
+function readInput(dt) {
+  const k = keys;
+  let fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+  let side = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+  let run = !!(k.ShiftLeft || k.ShiftRight), jump = !!k.Space, down = !!k.KeyC, cap = 1, lx = 0, ly = 0, zoom = false;
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const gp of pads) {
+    if (!gp || !gp.connected || gp.mapping !== 'standard') continue;
+    const b = (i) => gp.buttons[i] && gp.buttons[i].pressed;
+    // A round dead zone on each stick, then the rest rescaled to full.
+    const m = Math.hypot(gp.axes[0], gp.axes[1]), mk = dead(m, 0.15) / (m || 1);
+    const r = Math.hypot(gp.axes[2], gp.axes[3]), rk = dead(r, 0.12) / (r || 1);
+    const pf = -gp.axes[1] * mk, ps = gp.axes[0] * mk;
+    const trig = gp.buttons[7] ? gp.buttons[7].value : 0;
+    let any = Math.abs(pf) + Math.abs(ps) + r * rk + trig > 0;
+    if (Math.abs(pf) > Math.abs(fwd)) fwd = pf;
+    if (Math.abs(ps) > Math.abs(side)) side = ps;
+    lx += gp.axes[2] * rk; ly += gp.axes[3] * rk;
+    if (b(4)) run = true;
+    if (b(0)) jump = true;
+    if (b(1)) down = true;
+    if (b(5)) zoom = true;
+    if (trig > 0.05) { jump = true; cap = Math.min(cap, trig); }
+    // Buttons that do something once, on the way down.
+    const prev = padPrev[gp.index] || (padPrev[gp.index] = []);
+    for (let i = 0; i < gp.buttons.length; i++) {
+      const now = b(i);
+      if (now && !prev[i]) {
+        any = true;
+        sound.unlock();
+        if (PAD_PRESS[i]) { if (PAD_PRESS[i] !== 'Digit0' && demo.on) demo.stop(); press(PAD_PRESS[i]); }
+      }
+      prev[i] = now;
+    }
+    if (any && demo.on && !b(9)) demo.stop();
+  }
+  if (touch.on) {
+    if (Math.abs(touch.fwd) > Math.abs(fwd)) fwd = touch.fwd;
+    if (Math.abs(touch.side) > Math.abs(side)) side = touch.side;
+    lx += touch.lookX; ly += touch.lookY;
+    jump = jump || touch.jump; down = down || touch.down; zoom = zoom || touch.zoom;
+  }
+  input.fwd = THREE.MathUtils.clamp(fwd, -1, 1); input.side = THREE.MathUtils.clamp(side, -1, 1);
+  input.run = run; input.jump = jump; input.down = down; input.pushCap = cap; input.zoom = zoom;
+  input.lookX = lx; input.lookY = ly;
+  // Look by rate from the right stick, slower through the long lens.
+  if (lx || ly) {
+    const kf = camera.fov / FOV0;
+    yawObj.rotation.y -= lx * 2.4 * kf * dt;
+    const lo = mode === 'ROVER' ? -1.25 : -Math.PI / 2 + 0.02, hi = mode === 'ROVER' ? 0.35 : Math.PI / 2 - 0.02;
+    pitchObj.rotation.x = THREE.MathUtils.clamp(pitchObj.rotation.x - ly * 1.8 * kf * dt, lo, hi);
+  }
+}
+
+/* ── Touch ──────────────────────────────────────────────────────
+   There is no pointer lock on a phone or a tablet, so a tap on the
+   opening screen starts touch controls instead: the left thumb puts
+   a stick down wherever it lands, dragging anywhere else looks round,
+   and buttons down the right do what SPACE, C, R, F and Z do. The
+   menu button brings the opening screen back. */
+const touchUI = (() => {
+  const root = document.getElementById('touch');
+  const stick = document.getElementById('t-stick'), knob = document.getElementById('t-knob');
+  const R = 55;
+  // Capture throws for a pointer the browser no longer counts as down.
+  const capture = (t, e) => { try { t.setPointerCapture(e.pointerId); } catch (err) { /* already up */ } };
+  let stickId = null, sx = 0, sy = 0, lookId = null, lx = 0, ly = 0;
+  const hold = (id, key) => {
+    const b = document.getElementById(id);
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); capture(b, e); touch[key] = true; b.classList.add('on'); });
+    const up = () => { touch[key] = false; b.classList.remove('on'); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+  };
+  hold('t-jump', 'jump'); hold('t-down', 'down'); hold('t-zoom', 'zoom');
+  const tap = (id, code) => document.getElementById(id).addEventListener('pointerdown', (e) => { e.preventDefault(); press(code); });
+  tap('t-rover', 'KeyR'); tap('t-fly', 'KeyF');
+  document.getElementById('t-menu').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    touch.on = false; root.hidden = true;
+    overlay.classList.remove('hidden');
+  });
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', (e) => {
+    if (!touch.on || e.pointerType !== 'touch') return;
+    if (e.clientX < innerWidth * 0.4 && stickId === null) {
+      stickId = e.pointerId; sx = e.clientX; sy = e.clientY;
+      stick.style.left = sx + 'px'; stick.style.top = sy + 'px'; stick.hidden = false;
+      knob.style.transform = '';
+    } else if (lookId === null) {
+      lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
+    }
+    capture(cv, e);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (e.pointerId === stickId) {
+      let dx = e.clientX - sx, dy = e.clientY - sy;
+      const d = Math.hypot(dx, dy);
+      if (d > R) { dx *= R / d; dy *= R / d; }
+      knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      touch.side = dead(dx / R, 0.12); touch.fwd = dead(-dy / R, 0.12);
+    } else if (e.pointerId === lookId) {
+      const k = 0.005 * camera.fov / FOV0;
+      yawObj.rotation.y -= (e.clientX - lx) * k;
+      const lo = mode === 'ROVER' ? -1.25 : -Math.PI / 2 + 0.02, hi = mode === 'ROVER' ? 0.35 : Math.PI / 2 - 0.02;
+      pitchObj.rotation.x = THREE.MathUtils.clamp(pitchObj.rotation.x - (e.clientY - ly) * k, lo, hi);
+      lx = e.clientX; ly = e.clientY;
+    }
+  });
+  const end = (e) => {
+    if (e.pointerId === stickId) { stickId = null; stick.hidden = true; touch.fwd = touch.side = 0; }
+    if (e.pointerId === lookId) lookId = null;
+  };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  return {
+    start() {
+      touch.on = true; root.hidden = false;
+      everStarted = true;
+      if (demo.on) demo.stop();
+      overlay.classList.add('hidden');
+      sound.unlock();
+    },
+  };
+})();
+
 const _hitN = new THREE.Vector3();
 function stepEVA(dt) {
   const p = player, v = p.vel;
@@ -8484,11 +8674,12 @@ function stepEVA(dt) {
 
   fwd.set(0, 0, -1).applyQuaternion(yawObj.quaternion); fwd.y = 0; fwd.normalize();
   right.set(1, 0, 0).applyQuaternion(yawObj.quaternion); right.y = 0; right.normalize();
-  const kf = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
-  const kr = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  const kf = input.fwd, kr = input.side;
+  // Keys held together make a diagonal of full length; a stick held
+  // part-way makes a part-length wish, and so a slower pace.
   wish.copy(fwd).multiplyScalar(kf).addScaledVector(right, kr);
-  if (wish.lengthSq() > 0) wish.normalize();
-  const running = keys.ShiftLeft || keys.ShiftRight;
+  if (wish.lengthSq() > 1) wish.normalize();
+  const running = input.run;
 
   // The slope under you, as a gradient.
   const e = 0.4;
@@ -8501,8 +8692,9 @@ function stepEVA(dt) {
   if (p.onGround) {
     // Winding up: SPACE sinks you into the crouch, and how long you
     // hold it is how hard you will push. Letting go pushes.
-    if (keys.Space && !p.pushing) {
-      p.charge = Math.min(1, p.charge + dt / SUIT.charge);
+    if (input.jump && !p.pushing) {
+      // A trigger part-way down caps the effort; SPACE does not.
+      p.charge = Math.min(input.pushCap, p.charge + dt / SUIT.charge);
       const t = p.charge * SUIT.crouch - p.crouch;
       p.crouch += Math.max(-0.5 * dt, Math.min(0.5 * dt, t));
     } else if (p.charge > 0 && !p.pushing) {
@@ -8570,10 +8762,10 @@ function stepEVA(dt) {
   // that empties. Nothing slows you down but more thrust.
   if (world.jets && p.gas > 0) {
     let axes = 0;
-    if (kf) { v.addScaledVector(fwd, kf * JET.a * dt); axes++; }
-    if (kr) { v.addScaledVector(right, kr * JET.a * dt); axes++; }
-    if (keys.Space && !p.onGround) { v.y += JET.a * dt; axes++; }
-    if (keys.KeyC) { v.y -= JET.a * dt; axes++; if (p.onGround) v.y = Math.max(v.y, gx * v.x + gz * v.z); }
+    if (kf) { v.addScaledVector(fwd, kf * JET.a * dt); axes += Math.abs(kf); }
+    if (kr) { v.addScaledVector(right, kr * JET.a * dt); axes += Math.abs(kr); }
+    if (input.jump && !p.onGround) { v.y += JET.a * dt; axes++; }
+    if (input.down) { v.y -= JET.a * dt; axes++; if (p.onGround) v.y = Math.max(v.y, gx * v.x + gz * v.z); }
     p.gas = Math.max(0, p.gas - axes * JET.a * dt);
   }
 
@@ -8658,15 +8850,12 @@ function stepFLY(dt) {
   right.set(1, 0, 0).applyQuaternion(yawObj.quaternion); right.y = 0; right.normalize();
 
   wish.set(0, 0, 0);
-  if (keys.KeyW || keys.ArrowUp) wish.add(fwd);
-  if (keys.KeyS || keys.ArrowDown) wish.sub(fwd);
-  if (keys.KeyD || keys.ArrowRight) wish.add(right);
-  if (keys.KeyA || keys.ArrowLeft) wish.sub(right);
-  if (keys.Space) wish.y += 1;
-  if (keys.KeyC) wish.y -= 1;
-  if (wish.lengthSq() > 0) wish.normalize();
+  wish.addScaledVector(fwd, input.fwd).addScaledVector(right, input.side);
+  if (input.jump) wish.y += 1;
+  if (input.down) wish.y -= 1;
+  if (wish.lengthSq() > 1) wish.normalize();
 
-  const boost = keys.ShiftLeft || keys.ShiftRight;
+  const boost = input.run;
   const accel = boost ? 90 : 26;
   const maxV = boost ? 120 : 24;
 
@@ -8691,7 +8880,7 @@ function stepFLY(dt) {
 
 function stepROVER(dt) {
   body.hide();
-  rover.step(dt, keys, player.gravity);
+  rover.step(dt, { throttle: input.fwd, steer: input.side }, player.gravity);
   const s = rover.state;
   // Into the lander at speed: stopped dead, with a knock.
   if (lander.push(s.pos, 1.7, s.y - 0.5, _hitN)) {
@@ -8914,13 +9103,11 @@ function stepSound(dt) {
     const vRun = Math.sqrt(SUIT.frRun * player.gravity * SUIT.L);
     work = Math.min(1, 0.85 * hudSpeed / Math.max(vRun, 0.2) + (player.charge > 0 || player.pushing ? 0.35 : 0));
     if (world.jets && player.gas > 0) {
-      jets = (keys.KeyW || keys.KeyS || keys.ArrowUp || keys.ArrowDown ? 1 : 0) +
-             (keys.KeyA || keys.KeyD || keys.ArrowLeft || keys.ArrowRight ? 1 : 0) +
-             (keys.Space && !player.onGround ? 1 : 0) + (keys.KeyC ? 1 : 0);
+      jets = Math.abs(input.fwd) + Math.abs(input.side) + (input.jump && !player.onGround ? 1 : 0) + (input.down ? 1 : 0);
     }
   } else if (mode === 'ROVER') {
     const st = rover.state;
-    const drive = keys.KeyW || keys.KeyS || keys.ArrowUp || keys.ArrowDown ? 1 : 0;
+    const drive = Math.abs(input.fwd);
     rv = { v: st.vel, drive };
     work = 0.1;
     // st.air counts seconds with no wheel down; a real flight, not a
@@ -8931,9 +9118,10 @@ function stepSound(dt) {
   sound.update(dt, work, jets, rv);
 }
 
-const NO_KEYS = Object.freeze({});
+const NO_KEYS = Object.freeze({ throttle: 0, steer: 0 });
 function step(dt, t) {
   demo.update(dt);
+  readInput(dt);
   const gh = mode === 'EVA' ? stepEVA(dt) : mode === 'FLY' ? stepFLY(dt) : stepROVER(dt);
   // A parked rover, brake on, still settles on its springs — and one
   // you bailed out of mid-jump still comes down.

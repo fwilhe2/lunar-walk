@@ -235,17 +235,17 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 **As found:** the stripes in the aerial shot were mostly the transverse dunes (72 m apart, dark slip faces), not the ridges. Both now use two phase trains blended in patches for forks, extra meander octaves, and amplitude that varies along the crest. Mars costs +8% per query.
 
-## 11. Gamepad and touch
+## 11. Gamepad and touch ✅
 
 **Substeps**
-- [ ] An input layer: `input.move` (analog x and y), `input.look`, `input.push` (0–1), and buttons. The keyboard and the demo write into it, so the demo's "presses the same keys" keeps holding.
-- [ ] `stepEVA`, `stepFLY` and `stepROVER` read analog values: walking speed follows stick deflection within the Froude limits, and the rover gets analog throttle and steering.
-- [ ] Gamepad polling in `step()`:
+- [x] An input layer: `input.move` (analog x and y), `input.look`, `input.push` (0–1), and buttons. The keyboard and the demo write into it, so the demo's "presses the same keys" keeps holding.
+- [x] `stepEVA`, `stepFLY` and `stepROVER` read analog values: walking speed follows stick deflection within the Froude limits, and the rover gets analog throttle and steering.
+- [x] Gamepad polling in `step()`:
   - left stick moves, right stick looks;
   - right trigger is push effort (charge follows the trigger, release pushes);
   - bumpers climb and descend in flight;
   - face buttons for `R`, `F` and world change.
-- [ ] Touch: two virtual sticks and buttons, without pointer lock.
+- [x] Touch: two virtual sticks and buttons, without pointer lock.
 
 **Verify.** Stub `navigator.getGamepads` in a probe driver and check the push apex against `pushSpeed()`.
 
