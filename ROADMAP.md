@@ -138,25 +138,25 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 **As built:** the night key keeps the sun's intensity times the planet's phase, and the eye's key drops to a quarter. The first try dimmed the key to a tenth and let the eye open, and on Phobos that magnified the HDR target's dithering into green/magenta speckle. Stars get a per-world night factor rather than U, because their gain was never physical; scaled by U, the Milky Way pinned at full opacity everywhere.
 
-## 6. Sound
+## 6. Sound ✅
 
 **Why.** There is none at all (no `AudioContext`). It can be generated in Web Audio with no asset files, and what each world sounds like follows from its physics.
 
 **Substeps**
-- [ ] Create or resume the `AudioContext` on the first click (pointer lock or demo start), to satisfy autoplay policy.
-- [ ] Give each world a propagation medium:
+- [x] Create or resume the `AudioContext` on the first click (pointer lock or demo start), to satisfy autoplay policy.
+- [x] Give each world a propagation medium:
   - **vacuum** (Moon, Phobos, Deimos, Europa, Pluto, Charon; ten microbars carries nothing): only sound conducted through the suit;
   - **Mars**: outside sounds are quiet and muffled, and low frequencies arrive a little before high ones (two speeds of sound, about 240 and 250 m/s, measured by Perseverance);
   - **Venus**: dense air, loud and carrying.
-- [ ] Add procedural sources:
-  - [ ] breathing, with rate and depth following exertion (the walking power cap near line 7078);
-  - [ ] fan and pump hum from the backpack;
-  - [ ] footfalls through the boots, keyed to stride phase and landing speed;
-  - [ ] jet hiss on the moonlets;
-  - [ ] rover hub-motor whine pitched by wheel speed, and suspension knocks from `st.load`;
-  - [ ] Quindar tones on HUD notes;
-  - [ ] wind on Mars and Venus.
-- [ ] A mute and volume key (`M`) in the key help. Decide whether demo mode starts muted.
+- [x] Add procedural sources:
+  - [x] breathing, with rate and depth following exertion (the walking power cap near line 7078);
+  - [x] fan and pump hum from the backpack;
+  - [x] footfalls through the boots, keyed to stride phase and landing speed;
+  - [x] jet hiss on the moonlets;
+  - [x] rover hub-motor whine pitched by wheel speed, and suspension knocks from `st.load`;
+  - [x] Quindar tones on HUD notes;
+  - [x] wind on Mars and Venus.
+- [x] A mute key (`M`) in the key help, remembered. Demo mode plays sound once unlocked by the click that starts it. (No volume control.)
 
 **Verify.** The probe can't listen, so a driver logs `AnalyserNode` levels per source instead: one footfall per stride, no outside sounds in vacuum.
 

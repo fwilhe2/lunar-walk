@@ -28,6 +28,7 @@ Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" 
 | `[` `]` | sun elevation — below the horizon, where something overhead lights the night |
 | `G` | toggle surface / Earth gravity |
 | `Q` | rendering quality: high · medium · low |
+| `M` | sound on / off |
 | `Esc` | release pointer |
 
 Sun elevation is the interesting one. At 5° the craters are all rim and shadow, and every shadow is a black pool that reaches across the ground; at 60° an airless surface flattens into a grey wash and you can barely read the ground — which is exactly the problem Apollo crews had judging distance near lunar noon. Turn your back to the sun at any elevation and it happens again: the shadows all hide behind whatever casts them, and the ground washes out into a featureless glare around your own shadow. On Mars it does something else entirely: the whole sky dims and deepens with it, because the sky *is* the sunlit dust.
@@ -193,6 +194,12 @@ Three quality tiers, guessed from the GPU's name the first time — Intel and ot
 The tiers trade what costs the most on a weak GPU and leave what makes it look like the Moon: Hapke photometry, terrain shadows at every range, the eye's adaptation and the shadow a rock casts are the same on all three. What low gives up is the pixel ratio above 1, MSAA (FXAA instead), bloom, soft shadow filtering, anisotropic filtering beyond 2×, the three-way blending that hides the regolith tile's repeat, a third of the terrain's vertices beyond the nearest 400 m, two thirds of the pebbles and their shadows, and half the resolution of the terrain-shadow maps. Medium and low read Hapke from a precomputed table rather than evaluating it per pixel.
 
 On top of the tier, the internal resolution floats: it is measured once a second and lowered until the frame rate reaches the tier's target — 26 fps on low — then raised again when there is room. It goes by the typical frame rather than the average, so the odd stall while new ground streams in does not make it hunt.
+
+## Sound
+
+There is none from outside, on six of the eight — nothing carries it. What you hear is what reaches you through the suit: your own breathing in the helmet, quickening as you work and slowing back over half a minute; the backpack's fans and pump; your boots striking the ground, carried up through your bones as a dead thud with the grit of the soil in it; the jets hissing through the backpack frame; the rover's hub motors and its springs bottoming out, through the seat. Apollo crews heard their rover only that way. When something comes over the loop, the Quindar tones key and unkey it, 2525 and 2475 Hz.
+
+On Mars six millibars of CO₂ does carry sound, badly — about 20 dB quieter than at home, the highs absorbed within metres — so the grit under your boots and the rover's motors reach you through the air too, faintly, and the wind is a low rumble at the edge of hearing. On Venus the air is a twentieth as dense as water, sound carries loud and far, and a breeze of a metre a second, pushing 32 pascals against you where a Martian gale pushes one, is a roar. Everything is synthesised; nothing is fetched. `M` turns it off.
 
 ## Demo mode
 
