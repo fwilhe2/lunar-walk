@@ -254,7 +254,7 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 ## 12. New worlds
 
 **Candidates**
-- **Io**: Jupiter about 19° across overhead, active plumes, sulphur colours.
+- **Io** ✅: Jupiter about 19° across overhead, active plumes, sulphur colours.
 - **Mercury** ✅: sun about 1.4° across at 6.7× the Moon's flux, hollows, lobate scarps. It could be a variant of the lunar kernel.
 - **Enceladus or Mimas** with Saturn and its rings.
 
@@ -270,3 +270,5 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 ---
 
 **Mercury, as built:** kind 7, keys renumbered so it is `1`. Intercrater plains with smooth-plains patches and wrinkle ridges; lobate scarps in 70 km lanes, a 1.4 km face 7 km east of the site; hollows decided per cell at the cell's centre (in craters of the classes flagged `hol`, inside a province field) and cached, so a hollow is a pure function of its cell; a clumped class of close secondaries. Venus and Earth hang as two stars. About 1.2× the Moon's cost per height query, after caching the hollow cells and the scarp lane's hashes (1.4× before). The opening screen's world buttons are now a two-row grid.
+
+**Io, as built:** kind 8, no craters. Plains with layered benches and lava flows, one patera per 56 km cell (black floor, red or white fallout halo) and one tilted-block mountain per 110 km cell, each kept inside its cell. The site near Kanehekili Fluctus has Jupiter 19.5° across over a 7 km mountain, with the three other Galileans in Io's own frame. Two plumes (a new sky object) stand over the horizon, scattering forward. Night is Jupiter-lit, the dose is 36 Sv a day, and the tone mapping is ACES for the yellow. Keys now run along the number row: `1`–`9`, then `-` (and `=` next).

@@ -468,6 +468,17 @@ var WORLDS = {
     Dtr: 7000,
     halo: 0.5,
   },
+
+  /* Io: no craters at all. Four hundred volcanoes resurface it at about
+     a centimetre a year, which buries a crater of any size faster than
+     impacts can make them, and not one has ever been seen on it. See
+     hIo(). */
+  io: {
+    id: 'io', kind: 8, seed: 19790309,
+    g: 1.796, R: 1821600,
+    craters: [],
+    craterAmp: 1, depthK: 1, rampart: 0, halo: 0,
+  },
 };
 
 var WORLD = WORLDS.moon;      // active row; setWorld() swaps it
@@ -1700,6 +1711,165 @@ function hMercury(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Io ─────────────────────────────────────────────────────────
+   The most volcanic body in the solar system, heated from inside by
+   the tide Jupiter raises in it twice every 42 hours, and resurfaced
+   so fast that nothing an impact made survives. What you walk on:
+
+   - plains of sulphur and frozen sulphur dioxide, fallen from plumes
+     and condensed from the thin air, flat for tens of kilometres and
+     layered, the layers ending in scarps where the SO₂ frost that holds
+     them has sapped out from underneath (Moore et al. 2001);
+   - paterae, the volcanic craters: flat-floored, steep-walled pits a
+     few to a few tens of kilometres across and hundreds of metres deep,
+     their floors dark with fresh lava — Loki's is a lava lake 200 km
+     across that overturns every year or so — and no rims to speak of,
+     because they are collapses, not cones;
+   - mountains, which are not volcanoes at all: blocks of crust a few
+     to seventeen kilometres high thrust up and tilted where the crust,
+     loaded by all the lava piling on it, fails in compression
+     (Schenk & Bulmer 1998). Each stands alone, with one side a scarp
+     and the other a long ramp, landslide aprons round its foot;
+   - lava flows, long and lobed, in fields around the vents.
+
+   One patera to a cell and one mountain to a much bigger one, each
+   kept inside its cell, so only the cell a point is in need be asked.
+   IO_OX/IO_OZ put the landing site on the plains with a mountain 7 km
+   high on the skyline and Jupiter over it. */
+var IO_PCELL = 56000, IO_MCELL = 110000;
+var IO_OX = 679107, IO_OZ = -917795;
+// The paterae have their own shift, to put one — red-ringed, 15 km
+// across — a few kilometres north of the site without crowding the
+// mountain.
+var IO_PX = 85221, IO_PZ = -124998;
+
+// A patera: its depth below the plain at (x, z), and in IO_PAT how
+// much of its dark floor is there, for the colour pass.
+var IO_PAT = 0, IO_PH = 0, IO_PK = 0;
+function ioPatera(x, z) {
+  IO_PAT = 0; IO_PH = 0;
+  var ix = Math.floor(x / IO_PCELL), iz = Math.floor(z / IO_PCELL);
+  if (cellRnd(ix, iz, 43, 0) > 0.5) return 0;
+  // Centre in the middle 40% of the cell, and the widest the outline
+  // can reach — radius, wobble and wall — under the 30% left: nothing
+  // crosses into a neighbour.
+  var r = 3000 + Math.pow(cellRnd(ix, iz, 43, 1), 1.4) * 9500;
+  var ox = x - (ix + 0.3 + cellRnd(ix, iz, 43, 2) * 0.4) * IO_PCELL;
+  var oz = z - (iz + 0.3 + cellRnd(ix, iz, 43, 3) * 0.4) * IO_PCELL;
+  var d2 = ox * ox + oz * oz;
+  // The patera itself reaches under 1.3 r; its halo of fallout, which
+  // is only colour, to 2.3 r or 15 km, whichever is less: still inside
+  // the cell.
+  var R = r * 2.3 < 15000 ? r * 2.3 : 15000;
+  if (d2 > R * R) return 0;
+  var D = 250 + cellRnd(ix, iz, 43, 4) * 650;
+  // Scalloped: the wall has slumped back in arcs, a few kilometres each.
+  var q = Math.sqrt(d2) / (r * (1 + (valueNoise(x * 0.00028 + ix * 7.1, z * 0.00028 - iz * 3.3) - 0.5) * 0.36));
+  var w = D * 1.5 / r;                                    // wall width, ~35°
+  // For the colour pass: how much of the vent's halo of fallout lies
+  // here, and what it threw out — red sulphur, or white SO₂ frost.
+  IO_PH = sstep(R, r * 1.05, Math.sqrt(d2)); IO_PH *= IO_PH * (q < 1 ? sstep(0.8, 1, q) : 1);
+  IO_PK = cellRnd(ix, iz, 43, 5);
+  if (q > 1 + w) return 0;
+  var h = -D * (1 - sstep(1, 1 + w, q));
+  if (q < 1) {
+    // The floor is lava: flat, crusted, with pressure ridges and the
+    // odd low island of older floor.
+    h += (valueNoise(x * 0.004, z * 0.004) - 0.5) * 8 + (valueNoise(x * 0.03 + 5, z * 0.03) - 0.5) * 1.5;
+    IO_PAT = (1 - sstep(0.9, 1.0, q)) * (0.55 + 0.45 * sstep(0.3, 0.6, valueNoise(x * 0.0006 + ix, z * 0.0006 - iz)));
+  }
+  return h;
+}
+
+// A mountain: a tilted block, one edge a scarp and the other a ramp.
+// Real ones are bigger than anything here — six kilometres high and
+// 150 long on average (Schenk et al. 2001) — which from the ground is
+// a wall along a whole quarter of the horizon; these are the smaller
+// ones, a few kilometres high and up to forty long, so a whole one
+// fits on the skyline.
+var IO_MT = 0;
+function ioMountain(x, z) {
+  IO_MT = 0;
+  var ix = Math.floor(x / IO_MCELL), iz = Math.floor(z / IO_MCELL);
+  if (cellRnd(ix, iz, 47, 0) > 0.45) return 0;
+  var a = 11000 + cellRnd(ix, iz, 47, 1) * 9000;             // half-length, ≤ 20 km
+  var ox = x - (ix + 0.35 + cellRnd(ix, iz, 47, 2) * 0.3) * IO_MCELL;
+  var oz = z - (iz + 0.35 + cellRnd(ix, iz, 47, 3) * 0.3) * IO_MCELL;
+  // Footprint, apron and wobble together stay under 1.55 a = 31 km,
+  // inside the 38.5 km the centre leaves.
+  if (ox * ox + oz * oz > a * a * 2.4) return 0;
+  var th = cellRnd(ix, iz, 47, 4) * 3.1416, c = Math.cos(th), s = Math.sin(th);
+  var b = a * (0.45 + cellRnd(ix, iz, 47, 5) * 0.4);
+  var u = (ox * c + oz * s) / a, v = (oz * c - ox * s) / b;
+  // A blocky outline — a superellipse — with a ragged edge.
+  var au = u < 0 ? -u : u, av = v < 0 ? -v : v;
+  var qm = Math.pow(Math.pow(au, 2.6) + Math.pow(av, 2.6), 1 / 2.6)
+         * (1 + (valueNoise(x * 0.00022 + ix * 5.3, z * 0.00022 - iz * 1.7) - 0.5) * 0.24);
+  if (qm > 1.2) return 0;
+  var H = 2500 + cellRnd(ix, iz, 47, 6) * 5000;
+  // Tilted across the block: highest along one long edge, which is the
+  // scarp, at 40° or so; the far edge a ramp down to the plain.
+  var tilt = cellRnd(ix, iz, 47, 7) < 0.5 ? v : -v;
+  var up = sstep(-0.5, 0.5, tilt);
+  var fw = 0.8 + (Math.min(0.35, H * 1.2 / b) - 0.8) * up;
+  var top = H * (0.35 + 0.65 * up) * (0.9 + 0.1 * (1 - au * au));
+  var env = sstep(1, 1 - fw, qm);
+  var m = top * env;
+  // Ridges and gullies, cut deepest down the flanks, and grooves
+  // across the top at a kilometre or two.
+  var fl = env * (1 - env) * 4;
+  m += H * 0.12 * ridged(x * 0.00024 + ix * 3.3, z * 0.00024 - iz * 5.1, 4) * (env * 0.4 + fl);
+  m += H * 0.06 * (ridged(x * 0.0007 - 2.2, z * 0.0007 + 4.4, 3) - 0.35) * (env * 0.5 + fl);
+  m += 40 * (ridged(x * 0.004 + 1, z * 0.004 - 7, 2) - 0.3) * env;
+  // Landslide aprons: lobes of debris spread out past the foot, widest
+  // under the scarp.
+  var ap = (qm - 1) / 0.2;
+  if (ap > -0.3) m += H * 0.05 * up * (1 - sstep(-0.3, 1, ap)) * sstep(0.35, 0.65, valueNoise(x * 0.0005 + 9, z * 0.0005 - 4));
+  IO_MT = env;
+  return m;
+}
+
+// Lava flow fields: long lobes, a few metres to tens thick, run out
+// over the plains in the fields around the vents. Shared with the
+// colour pass, which draws the young ones dark.
+function ioFlows(x, z) {
+  var fk = sstep(0.45, 0.65, valueNoise(x * 0.00004 - 2, z * 0.00004 + 6));
+  if (fk <= 0) return 0;
+  // Warped, so the lobes wander and bulge instead of following the
+  // noise lattice, and stretched along the way they flowed.
+  var wx = x + (valueNoise(x * 0.00015, z * 0.00015) - 0.5) * 7000;
+  var wz = z + (valueNoise(x * 0.00015 + 7.3, z * 0.00015 - 3.1) - 0.5) * 7000;
+  return sstep(0.57, 0.6, fbm(wx * 0.00026 + 3.1, wz * 0.00016 - 1.7, 3)) * fk;
+}
+
+function hIo(x0, z0) {
+  var x = x0 + IO_OX, z = z0 + IO_OZ;
+  var nx = x * 0.00005, nz = z * 0.00005;
+  // Plains: flat over tens of kilometres, a few hundred metres of
+  // swell at the longest wavelengths.
+  var h = (fbm(nx, nz, 4) - 0.5) * 420;
+  h += (fbm(x * 0.0005 + 5, z * 0.0005 - 3, 3) - 0.5) * 30;
+  // Layered plains, ending in scarps where their frost sapped out: a
+  // bench or two, a couple of hundred metres each.
+  var lk = sstep(0.5, 0.62, fbm(x * 0.000045 - 4.4, z * 0.000045 + 8.8, 2));
+  if (lk > 0.004) {
+    var t = fbm(x * 0.00018 + 2.2, z * 0.00018 - 6.6, 3) * lk * 2.6;
+    var ti = Math.floor(t);
+    h += (ti + sstep(0.8, 1, t - ti)) * 190;
+  }
+  // Hummocks and low scarps at the kilometre scale: old flows, sapped
+  // frost, fallout drifted into swales.
+  h += (ridged(x * 0.0011 + 4.4, z * 0.0011 - 2.2, 3) - 0.35) * 22;
+  h += ioFlows(x, z) * 14;
+  h += ioPatera(x0 + IO_PX, z0 + IO_PZ);
+  h += ioMountain(x, z);
+  // Frost and fallout at the metre scale, with little else to rough it.
+  h += (fbm(x * 0.006 - 3, z * 0.006 + 1, 3) - 0.5) * 4;
+  h += (fbm(x * 0.04, z * 0.04, 2) - 0.5) * 0.7;
+  h += (fbm(x * 0.15 + 3, z * 0.15, 2) - 0.5) * 0.2;
+  return h;
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -1707,7 +1877,7 @@ function terrainHeight(x, z) {
   return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z)
        : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z)
        : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z)
-       : WK === 7 ? hMercury(x, z) : hSmall(x, z);
+       : WK === 7 ? hMercury(x, z) : WK === 8 ? hIo(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -1901,6 +2071,48 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     var blue = lrm * 0.05 + cl * 0.04 + hb * 0.10 - pl * 0.035;
     out[0] = v * (1.012 - blue * 0.6); out[1] = v; out[2] = v * (0.965 + blue);
 
+  } else if (WK === 8) {
+    // Io is the most colourful body in the solar system, and nearly all
+    // of it is sulphur in one form or another: cream and pale yellow
+    // over most of the plains, frozen SO₂ lying white across whole
+    // regions, orange and red where short-chain sulphur has fallen
+    // fresh from a plume and not yet reverted to yellow, rings of it
+    // round the vents that throw it. Against that the silicate lava is
+    // black — the paterae floors, the young flows — and the mountains,
+    // which stand above most of the fallout, show tan and brown rock on
+    // their steep sides. Albedo is high: a normal reflectance of about
+    // 0.6 over the plains.
+    var ox = x + IO_OX, oz = z + IO_OZ;
+    var f1 = fbm(ox * 0.000025 + 4.1, oz * 0.000025 - 2.2, 3), f2 = fbm(ox * 0.00012 - 3.3, oz * 0.00012 + 7.7, 3);
+    var n3 = valueNoise(ox * 0.02, oz * 0.02);
+    var frost = sstep(0.5, 0.66, f1 * 0.65 + f2 * 0.35);
+    var red = sstep(0.58, 0.72, fbm(ox * 0.00006 - 9, oz * 0.00006 + 3, 3) * 0.75 + f2 * 0.25);
+    var f3 = fbm(ox * 0.0009 + 1.1, oz * 0.0009 - 5.5, 3);
+    frost = frost * 0.7 + sstep(0.56, 0.7, f3) * 0.45;
+    v = 0.93 + (f2 - 0.5) * 0.2 + (f3 - 0.5) * 0.14 + (n3 - 0.5) * 0.08;
+    var cr = 1.0, cg = 0.92, cb = 0.46;                       // sulphur plains
+    cr += (0.95 - cr) * frost; cg += (0.95 - cg) * frost; cb += (0.91 - cb) * frost;
+    cr += (0.92 - cr) * red * 0.7; cg += (0.60 - cg) * red * 0.7; cb += (0.36 - cb) * red * 0.7;
+    ioPatera(x + IO_PX, z + IO_PZ);
+    // The vent's own ring of fallout: red, or white, fading outward.
+    if (IO_PH > 0) {
+      var hr = IO_PH * (0.55 + 0.45 * valueNoise(ox * 0.0009, oz * 0.0009));
+      if (IO_PK < 0.45) { cr += (0.90 - cr) * hr; cg += (0.50 - cg) * hr; cb += (0.30 - cb) * hr; }
+      else if (IO_PK < 0.75) { cr += (0.96 - cr) * hr; cg += (0.96 - cg) * hr; cb += (0.93 - cb) * hr; }
+      else { cr += (0.82 - cr) * hr * 0.7; cg += (0.86 - cg) * hr * 0.7; cb += (0.50 - cb) * hr * 0.7; }
+    }
+    // Steep ground sheds the frost and shows the rock: tan, then brown.
+    ioMountain(ox, oz);
+    var rk = sstep(0.12, 0.5, slope) * (0.4 + 0.6 * IO_MT) + IO_MT * 0.3;
+    rk = rk > 1 ? 1 : rk;
+    cr += (0.58 - cr) * rk; cg += (0.44 - cg) * rk; cb += (0.29 - cb) * rk;
+    out[0] = v * cr; out[1] = v * cg; out[2] = v * cb;
+    // Lava, black against all of it; the older flows are dusted over.
+    var fl = ioFlows(ox, oz) * (0.3 + 0.7 * sstep(0.35, 0.7, valueNoise(ox * 0.0001 + 1, oz * 0.0001)));
+    var dk = IO_PAT > fl ? IO_PAT : fl;
+    var lava = 0.10 + n3 * 0.05;
+    out[0] += (lava * 1.05 - out[0]) * dk; out[1] += (lava - out[1]) * dk; out[2] += (lava * 0.92 - out[2]) * dk;
+
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
     // has two units, a redder one over most of the body and a bluer
@@ -2024,7 +2236,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>9</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -2071,7 +2283,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a full push would be a launch,<br>' +
           'so you push gently and drift, and steer on the jets. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1</b>–<b>9</b> change world.',
+          'the sky and never moves. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -2102,7 +2314,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1</b>–<b>9</b> change world.',
+          'you want back. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -2207,7 +2419,7 @@ const VIEW = {
     title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
     fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
           'Jupiter hangs 12° wide over the chaos to the east, bands on end, and never<br>' +
-          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>9</b> change world.',
+          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: false, stars: 1,
     // Light here is kept in units ten times the Moon's — a sun of
     // 1.26 rather than 0.126 — and the stars and the eye's range are
@@ -2287,7 +2499,7 @@ const VIEW = {
     title: 'Pluto Walk', sub: 'Charon-facing hemisphere · 0.063 g · surface unbounded',
     fine: 'Noon here is dusk: the sun is a point a thousandth as bright, and the<br>' +
           'stars stay out. Charon hangs 3.7° wide in the east and never moves, over<br>' +
-          'mountains capped with methane frost. <b>1</b>–<b>9</b> change world.',
+          'mountains capped with methane frost. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2341,7 +2553,7 @@ const VIEW = {
     title: 'Charon Walk', sub: 'Vulcan Planitia · 0.029 g · surface unbounded',
     fine: 'Water ice at −220 °C under Pluto\'s dusk-dim sun. Pluto hangs 7° wide in<br>' +
           'the east, over a mountain standing in a moat, and never moves. A full<br>' +
-          'push keeps you aloft for twelve seconds. <b>1</b>–<b>9</b> change world.',
+          'push keeps you aloft for twelve seconds. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2389,7 +2601,7 @@ const VIEW = {
     title: 'Mercury Walk', sub: 'Discovery Rupes · 0.377 g · surface unbounded',
     fine: 'The sun is two and a half times as wide as from the Moon and seven times as bright;<br>' +
           'at noon the ground under it would melt lead. To the east a cliff a kilometre and a<br>' +
-          'half high crosses the horizon: the planet shrank, and broke. <b>1</b>–<b>9</b> change world.',
+          'half high crosses the horizon: the planet shrank, and broke. <b>1</b>–<b>9</b> and <b>−</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 145, sunHDR: [60, 57, 52],
     corona: 3400, coronaColor: [1.6, 1.55, 1.45],
@@ -2411,11 +2623,72 @@ const VIEW = {
     // Earth first: it is where the rover's dish looks.
     companions: ['earth-star', 'venus-star'],
   },
+
+  /* Io is at Jupiter's distance from the sun, so the light is
+     Europa's and kept in Europa's units, ten times the Moon's. The
+     ground is nearly as bright as Europa's ice — sulphur and frost at
+     a reflectance of about 0.6 — and yellow, so the shadows fill warm
+     from the bounce. Io has an atmosphere, but a nanobar of SO₂ that
+     freezes out every night does nothing to the light: the sky is
+     black.
+
+     Jupiter is 19.5° across from here and never moves, 40° up in the
+     east-north-east, over a mountain seven kilometres high. The other
+     three moons go round outside Io's orbit and behind Jupiter. Two
+     plumes are up: a Prometheus-type 90 km high over the northern
+     horizon, and far to the west a giant like Pele's, 300 km high,
+     most of it below the horizon, glowing where it stands toward the
+     sun. And the radiation: Io orbits inside the densest part of
+     Jupiter's belts, and the surface dose is about 36 Sv a day. */
+  io: {
+    name: 'IO', site: 'near Kanehekili Fluctus', gTxt: '1.80 m/s²',
+    title: 'Io Walk', sub: 'Kanehekili Fluctus · 0.183 g · surface unbounded',
+    fine: 'Sulphur and frozen SO₂ over a crust four hundred volcanoes remake so fast that not<br>' +
+          'one impact crater survives. Jupiter fills 19° of the sky; plumes stand over the horizon.<br>' +
+          'The dose is 36 Sv a day: a lethal one in three hours. <b>1</b>–<b>9</b> and <b>−</b> change world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 1.26, sunSize: 10.7, sunHDR: [60, 57, 52],
+    corona: 2000, coronaColor: [0.68, 0.66, 0.62],
+    // Bounce off bright yellow ground, much as on Europa's ice.
+    hemi: [0x181610, 0x3a3624, 8.5], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 200, mapTint: [1.0, 0.985, 0.95], pits: 20, grain: 0.7, clods: 0.7, pebbles: 70,
+    // Io's photometry (Simonelli & Veverka 1986; Domingue & Verbiscer
+    // 1997): bright grains, a modest surge, and rough — the roughest of
+    // the Galilean surfaces.
+    hapke: { w: 0.88, b: 0.30, c: 0.60, B0: 0.9, h: 0.04, theta: 30, Bc0: 0.3, hc: 0.005 },
+    micro: [0.3, 0.3, 0.45], sparkle: 1.2,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.55,
+    dustColor: 0xcfc390, dustDrag: 0, stampColor: 0xb3a36e, soil: 0xc8bb88,
+    // Silicate blocks shed off the mountains and patera walls, under a
+    // film of the sulphur that falls on everything.
+    rockTint: [1.0, 0.9, 0.72], rockAlb: [0.30, 0.2], rockN: 0.4, talus: 500,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    // ACES, as on Mars: AgX gives away the saturation in the highlights,
+    // and here that is the yellow of the sulphur.
+    exposure: 1.0, eye: [0.30, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0], tone: 'aces',
+    companions: ['jupiter-io', 'europa-io', 'ganymede-io', 'callisto-io'],
+    // Night: Jupiter, 19.5° across at albedo 0.52 — 1.5% of the sun.
+    night: { ratio: 0.0149, radius: 0.170, color: 0xfff0dc, label: 'JUPITERLIT', stars: 12 },
+    relay: 0.14,
+    dose: 36,
+    // The plumes, as bearing (°) and distance from the landing site.
+    plumes: [
+      { brg: 22, dist: 170000, H: 90000, W: 130000, shell: 0.05, column: 0.8, col: [0.78, 0.86, 1.0], gain: 0.06 },
+      { brg: 262, dist: 700000, H: 320000, W: 550000, shell: 0.08, column: 0.15, col: [0.95, 0.80, 0.65], gain: 0.008 },
+    ],
+    // Arrive facing Jupiter and the mountain under it.
+    look: [-1.2, 0.3],
+  },
 };
 
-// In order out from the sun, which is the order of keys 1–9, the
-// buttons on the opening screen and the demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'europa', 'pluto', 'charon'];
+// In order out from the sun, which is the order of the keys along the
+// number row (WORLD_KEYS), the buttons on the opening screen and the
+// demo's tour.
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'pluto', 'charon'];
+// 1–9 along the number row, then − and =: 0 is the demo.
+const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -5835,21 +6108,21 @@ function jupiterMaps() {
   return { day: t };
 }
 
-/* ── Io, Ganymede, Callisto ─────────────────────────────────────
-   The other three Galilean moons, as Europa sees them: under a
-   degree at best, so a map this coarse is already more than the
-   eye gets. Io is sulphur — yellow and cream and orange, pocked
-   with black volcanic paterae, red rings where the big plumes fall
-   back, darker reddish poles. Ganymede is two terrains, old dark
-   ground and younger bright grooved ice, and frost caps. Callisto
-   is the darkest, oldest surface of the four, spattered with the
-   bright ice of its craters. */
+/* ── The Galilean moons, from each other ────────────────────────
+   As Europa and Io see the others: under a degree at best, so a map
+   this coarse is already more than the eye gets. Io is sulphur —
+   yellow and cream and orange, pocked with black volcanic paterae,
+   red rings where the big plumes fall back, darker reddish poles.
+   Europa is bright ice under reddish-brown lineae. Ganymede is two
+   terrains, old dark ground and younger bright grooved ice, and frost
+   caps. Callisto is the darkest, oldest surface of the four,
+   spattered with the bright ice of its craters. */
 function galileanMaps(kind) {
   const W = 512, H = 256;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
   const img = x.createImageData(W, H);
-  let s = kind === 'io' ? 1979 : kind === 'ganymede' ? 1610 : 4242;
+  let s = kind === 'io' ? 1979 : kind === 'ganymede' ? 1610 : kind === 'europa' ? 1996 : 4242;
   const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   const spots = Array.from({ length: kind === 'callisto' ? 260 : 90 }, () =>
     [rnd() * W, Math.acos(1 - 2 * rnd()) / Math.PI * H, 0.8 + Math.pow(rnd(), 3) * 7, rnd()]);
@@ -5864,6 +6137,14 @@ function galileanMaps(kind) {
         r += (150 - r) * pole; g += (112 - g) * pole; b += (82 - b) * pole;
         const frost = Math.max(0, n2 - 0.6) * 2;
         r += (236 - r) * frost; g += (232 - g) * frost; b += (216 - b) * frost;
+      } else if (kind === 'europa') {
+        // Bright ice, crossed by reddish-brown lineae, with chaos in
+        // browner patches: from Io it is the brightest of the three.
+        let v = 222 + (n1 - 0.5) * 30;
+        const lin = Math.max(0, 1 - Math.abs(Math.sin(xx * 0.09 + n1 * 9) * Math.sin(y * 0.13 - n2 * 7)) * 12) * 0.5;
+        const chaos = THREE.MathUtils.smoothstep(n2, 0.62, 0.72) * 0.6;
+        const k = Math.max(lin, chaos);
+        r = v + (150 - v) * k; g = v * 0.97 + (110 - v * 0.97) * k; b = v * 0.93 + (80 - v * 0.93) * k;
       } else if (kind === 'ganymede') {
         const bright = THREE.MathUtils.smoothstep(n1, 0.47, 0.53);
         r = 112 + bright * 64 + n2 * 20; g = 102 + bright * 62 + n2 * 18; b = 92 + bright * 64 + n2 * 16;
@@ -5880,6 +6161,9 @@ function galileanMaps(kind) {
           // Black patera, and around the biggest a red plume ring.
           if (d < 1) { const k = (1 - d) * 0.9; r += (40 - r) * k; g += (34 - g) * k; b += (28 - b) * k; }
           if (sr > 4 && sk > 0.6) { const k = Math.max(0, 1 - Math.abs(d - 1.9) / 0.35) * 0.6; r += (200 - r) * k; g += (96 - g) * k; b += (60 - b) * k; }
+        } else if (kind === 'europa') {
+          // Almost no craters: a handful, young and bright.
+          if (d < 0.5 && sk > 0.85) { const k = (1 - d / 0.5) * 0.4; r += (240 - r) * k; g += (240 - g) * k; b += (244 - b) * k; }
         } else if (d < 1.2) {
           // Fresh craters: bright ice, rayed on Callisto.
           const k = (1 - d / 1.2) * (kind === 'callisto' ? 0.8 : 0.6);
@@ -6073,7 +6357,7 @@ const TEXGEN = {
   earth: earthMaps, mars: marsMaps,
   phobos: () => moonletMaps('phobos'), deimos: () => moonletMaps('deimos'),
   jupiter: jupiterMaps, io: () => galileanMaps('io'), charon: charonMaps, pluto: plutoMaps, venus: venusMaps,
-  ganymede: () => galileanMaps('ganymede'), callisto: () => galileanMaps('callisto'),
+  ganymede: () => galileanMaps('ganymede'), callisto: () => galileanMaps('callisto'), europa: () => galileanMaps('europa'),
 };
 
 /* Where a locked companion hangs, and how it is turned, as seen from
@@ -6105,6 +6389,16 @@ function siteFrame(bDeg, lDeg) {
 const JOV = (() => {
   const F = siteFrame(-10, -75);
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 671100 };
+})();
+
+/* The same frame from Io, 18°S, 48° west of the point beneath
+   Jupiter, near Kanehekili Fluctus. Io is locked too, and 421,700 km
+   out, so Jupiter is 19.5° across — thirty-nine full Moons — standing
+   40° above the east-north-east horizon, and the other three moons all
+   circle outside Io's own orbit. */
+const IOJ = (() => {
+  const F = siteFrame(-18, -48);
+  return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 421700 };
 })();
 
 /* Charon's place in Pluto's sky, from 5°S, 60° west of the point
@@ -6275,6 +6569,33 @@ const COMPANIONS = {
      brightness per unit of disc is the physical one — sunlight at 0.72
      and 1 AU, a third and a seventh of Mercury's, on albedos of 0.75
      and 0.3 — which makes Venus the brighter star. */
+  /* Jupiter from Io: 19.5° across, thirty-nine full Moons, at true
+     size, 40° up in the east-north-east. Everything else as from
+     Europa — the same sunlight on the same clouds, so the same
+     brightness — only twice as wide and nearer upright. */
+  'jupiter-io': {
+    tex: 'jupiter', r: COMPANION_DIST * Math.sin(9.75 * DEG), dir: IOJ.J, pole: IOJ.Z, oblate: 0.9351, spin: 0.012,
+    gain: 1.0, bright: 0.5, limb: 0.85,
+    atmo: [0.50, 0.55, 0.70], atmoK: 0.10, atmoR: 1.006,
+  },
+  /* The other three from Io, all outside its orbit, so none ever
+     crosses Jupiter's face from here, but each goes behind it. Europa
+     is the largest in Io's sky, 0.72° at its nearest — larger than our
+     Moon. The rates are their true synodic rates about Io, compressed
+     by the same factor as from Europa. */
+  'europa-io': {
+    tex: 'europa', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 671100, R: 1560.8, rate: -0.0105, phase: 0.6, frame: IOJ },
+  },
+  'ganymede-io': {
+    tex: 'ganymede', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 1070400, R: 2634.1, rate: -0.0158, phase: 2.2, frame: IOJ },
+  },
+  'callisto-io': {
+    tex: 'callisto', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 1882700, R: 2410.3, rate: -0.0187, phase: 4.1, frame: IOJ },
+  },
+
   'earth-star': {
     tex: 'earth', r: 8, dir: [0.80, 0.35, 0.10], gain: 1.0, bright: 0.16, clouds: true,
   },
@@ -6533,16 +6854,17 @@ function makeCompanion(spec) {
   group.userData.sync = () => {
     uni.sunDir.value.copy(SUN_DIR).multiplyScalar(60000).sub(pos).normalize();
   };
-  // A moon of Jupiter seen from Europa: both orbits in one plane, so
-  // its offset from Europa is a vector in X, Y, and its distance sets
-  // its size. Nearer than Europa's own orbit it may cross in front of
-  // Jupiter, so it is drawn in front of it; further, behind.
-  const kp = spec.kepler, kv = new THREE.Vector3();
+  // A moon of Jupiter seen from another (Europa, or Io — kepler.frame):
+  // both orbits in one plane, so its offset from the observer's moon is
+  // a vector in X, Y, and its distance sets its size. Nearer than the
+  // observer's own orbit it may cross in front of Jupiter, so it is
+  // drawn in front of it; further, behind.
+  const kp = spec.kepler, kv = new THREE.Vector3(), KF = kp && kp.frame || JOV;
   const tickKepler = (t) => {
     const ph = kp.phase + t * kp.rate;
-    const rx = kp.a * Math.cos(ph) - JOV.aE, ry = kp.a * Math.sin(ph), d = Math.hypot(rx, ry);
-    const D = d < JOV.aE ? 4600 : 7800;
-    kv.set(rx * JOV.X[0] + ry * JOV.Y[0], rx * JOV.X[1] + ry * JOV.Y[1], rx * JOV.X[2] + ry * JOV.Y[2]);
+    const rx = kp.a * Math.cos(ph) - KF.aE, ry = kp.a * Math.sin(ph), d = Math.hypot(rx, ry);
+    const D = d < KF.aE ? 4600 : 7800;
+    kv.set(rx * KF.X[0] + ry * KF.Y[0], rx * KF.X[1] + ry * KF.Y[1], rx * KF.X[2] + ry * KF.Y[2]);
     pos.copy(kv).multiplyScalar(D / d);
     group.scale.setScalar(D * kp.R / d);
   };
@@ -6585,6 +6907,115 @@ function setCompanions(ids) {
   });
   relayAim(COMPANION_AIM);
 }
+
+/* ── Plumes ─────────────────────────────────────────────────────
+   Io's volcanoes throw sulphur and SO₂ straight up out of an airless
+   world, so nothing slows the spray: every grain flies a clean
+   parabola and falls back in a ring, and together they build an
+   umbrella — Prometheus's stands 80–100 km high and twice that
+   across, Pele's 300 km. The grains pile up where their paths bend
+   over, so the canopy is a thin bright shell over a faint interior,
+   brightest at its limbs, where you look along it; filaments run
+   through it, and a column of gas and dust feeds it up the middle.
+   The grains are small, so they scatter forward: a plume toward the
+   sun blazes, and one with the sun behind you is barely there.
+
+   Each is a far-off place on the surface, hundreds of kilometres out,
+   well beyond the streamed ground — so it is drawn as a flat sheet
+   standing past the end of it, turned to face you, scaled to its true
+   size at its true distance and dropped by the planet's curve there:
+   Io's horizon swallows the foot of a plume 200 km off and the lower
+   hundred kilometres of one 700 km off. The ground, drawn in front,
+   hides whatever the curve does not. */
+const plumes = (() => {
+  const PROXY = 80000;
+  const group = new THREE.Group();
+  scene.add(group);
+  let live = [];
+  const geo = new THREE.PlaneGeometry(2, 1).translate(0, 0.5, 0);
+  const vs = `
+    varying vec2 vUv; varying vec3 vW;
+    void main() {
+      vUv = uv;
+      vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
+      gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
+    }`;
+  const fs = `
+    uniform vec3 uSun, uCol;
+    uniform float uGain, uShell, uColumn, uSeed;
+    varying vec2 vUv; varying vec3 vW;
+    void main() {
+      // Plume coordinates: X across, in canopy radii; Z up, in heights.
+      float X = vUv.x * 2.0 - 1.0, Z = vUv.y;
+      // The column of the canopy along the line of sight, in closed
+      // form: the grains crowd into a thin paraboloid shell (the
+      // envelope of every path, Z = 1 − r²), which the sight line cuts
+      // where Y² = s, and crosses at a grazing angle — so brightest at
+      // the limb — near s = 0. Under it a faint fill, and the feeding
+      // column up the axis.
+      float s2 = 1.0 - X * X - Z;
+      float shell = 0.886 * uShell / sqrt( 4.0 * max( s2, 0.0 ) + 2.0 * uShell ) * exp( - min( s2, 0.0 ) * min( s2, 0.0 ) / ( uShell * uShell ) );
+      float fill = 0.24 * sqrt( max( s2, 0.0 ) ) * ( 1.0 - Z );
+      float column = 0.097 * exp( - X * X / 0.003 ) * ( 1.0 - Z ) * uColumn;
+      float sum = ( shell * 2.0 + fill + column ) * 1.4;
+      // Filaments: rays of denser spray fanning out from the vent,
+      // uneven in strength and spacing.
+      float a = atan( X, Z + 0.15 ) * 9.0 + uSeed;
+      float fa = floor( a ), fr = fract( a );
+      float h0 = fract( sin( fa * 12.9898 + uSeed ) * 43758.5 ), h1 = fract( sin( ( fa + 1.0 ) * 12.9898 + uSeed ) * 43758.5 );
+      float ray = mix( h0, h1, fr * fr * ( 3.0 - 2.0 * fr ) );
+      sum *= 0.6 + 0.5 * ray;
+      // Soft at the sheet's own edges.
+      sum *= smoothstep( 1.0, 0.94, abs( X ) ) * smoothstep( 1.0, 0.9, Z );
+      // Forward scattering, Henyey–Greenstein with g = 0.6.
+      float c = dot( normalize( vW - cameraPosition ), normalize( uSun ) );
+      float hg = 0.16 / pow( 1.36 - 1.2 * c, 1.5 );
+      gl_FragColor = vec4( uCol * sum * ( 0.12 + hg ) * uGain, 1.0 );
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+  const _v = new THREE.Vector3();
+  return {
+    // specs: [{ brg (°), dist (m), H (m), W (canopy radius, m), shell, column, col, gain }]
+    set(specs) {
+      for (const p of live) { group.remove(p.mesh); p.mesh.material.dispose(); }
+      live = (specs || []).map((sp, i) => {
+        const b = sp.brg * DEG;
+        const mat = new THREE.ShaderMaterial({
+          uniforms: {
+            uSun: { value: new THREE.Vector3() }, uCol: { value: new THREE.Vector3(...sp.col) },
+            uGain: { value: sp.gain }, uShell: { value: sp.shell }, uColumn: { value: sp.column },
+            uSeed: { value: i * 2.7 + 1.3 },
+          },
+          vertexShader: vs, fragmentShader: fs,
+          transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.frustumCulled = false;
+        mesh.renderOrder = -1;
+        group.add(mesh);
+        return { mesh, x: Math.sin(b) * sp.dist, z: -Math.cos(b) * sp.dist, H: sp.H, W: sp.W, gain: sp.gain };
+      });
+    },
+    // Once a frame, from the camera. `lit` is how much of the plume the
+    // sun still reaches, and `units` the key's (a plume is sunlit even
+    // when you stand in the night).
+    update(cam, groundY, lit, units) {
+      for (const p of live) {
+        const dx = p.x - cam.x, dz = p.z - cam.z, D = Math.hypot(dx, dz), k = PROXY / D;
+        // The plume's foot, sunk by the curve of the planet between.
+        const foot = Math.atan2(-(D * D) / (2 * WORLD.R) - (cam.y - groundY), D);
+        p.mesh.position.set(cam.x + dx * k, cam.y + PROXY * Math.tan(foot), cam.z + dz * k);
+        p.mesh.scale.set(p.W * k, p.H * k, 1);
+        p.mesh.rotation.set(0, Math.atan2(-dx, -dz), 0);
+        const u = p.mesh.material.uniforms;
+        u.uSun.value.copy(SUN_DIR);
+        u.uGain.value = p.gain * lit * units;
+      }
+    },
+    get on() { return live.length > 0; },
+  };
+})();
 
 /* ═════════════════════════════════════════════════════════════
    8. FOOTPRINTS & WHEEL TRACKS
@@ -8400,7 +8831,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { mercury: 3.70, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { mercury: 3.70, io: 1.796, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
@@ -8518,7 +8949,7 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
-  const tail = '<div><b>1</b>–<b>9</b> mercury &middot; venus &middot; moon &middot; mars &middot; phobos &middot; deimos &middot; europa &middot; pluto &middot; charon &nbsp; <b>0</b> demo</div>' +
+  const tail = '<div><b>1</b>–<b>9</b> <b>−</b> ' + WORLD_IDS.join(' &middot; ') + ' &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>M</b> sound &nbsp; <b>ESC</b> release</div>' +
     '<div><b>Z</b> / right button zoom &nbsp; <b>P</b> photo &nbsp; <b>H</b> hide HUD &nbsp; <b>L</b> copy link</div>';
   if (mode === 'ROVER') {
@@ -8579,7 +9010,7 @@ function press(code) {
   }
   if (code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(code);
+  const pick = WORLD_KEYS.indexOf(code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (code === 'BracketLeft' || code === 'BracketRight') {
     // Below the horizon only where there is something to light the night.
@@ -9498,6 +9929,8 @@ function step(dt, t) {
     cg.userData.sync();
   }
   relayAim(COMPANION_AIM);
+  // A tall plume's top stays in sunlight well after sunset below it.
+  if (plumes.on) plumes.update(_camWorld, SITE_H, THREE.MathUtils.smoothstep(sunElev, -0.25, 0.0), KEY.U);
 
   dust.update(dt, player.gravity, world.dustDrag);
   dust.light();
@@ -9541,6 +9974,7 @@ function step(dt, t) {
    ═════════════════════════════════════════════════════════════ */
 const boot = document.getElementById('boot');
 let initialized = false;
+let SITE_H = 0;                   // ground at the landing site
 
 /* ── The key light ──────────────────────────────────────────────
    By day it is the sun, fading out across its own disc as it sets.
@@ -9708,6 +10142,7 @@ function applyWorld(id) {
   scene.fog = world.fog ? new THREE.FogExp2(0x000000, world.fog.density) : null;
   updateSkyColors();
   setCompanions(world.companions);
+  plumes.set(world.plumes);
 
   // ── ground
   const rego = regolithFor(id);
@@ -9764,7 +10199,8 @@ function applyWorld(id) {
   // ── you
   FLY_CEILING = world.fly;
   mode = 'EVA';
-  player.pos.set(0, terrainHeight(0, 0) + EYE, 0);
+  SITE_H = terrainHeight(0, 0);
+  player.pos.set(0, SITE_H + EYE, 0);
   player.vel.set(0, 0, 0);
   player.onGround = true;
   player.crouch = 0; player.charge = 0; player.pushing = false;
