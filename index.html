@@ -223,17 +223,23 @@ var WORLDS = {
        a kilometre; most of what they make is old and subdued, and
        only a few are fresh. */
     craters: [
-      { cell: 2560, salt:  7, rMin: 230, rMax: 620, count: 1, prob: 0.38, ageK: 1.3 },  // basins
-      { cell:  640, salt: 11, rMin:  60, rMax: 230, count: 2, prob: 0.55, ageK: 1.6 },
-      { cell:  160, salt: 23, rMin:  16, rMax:  60, count: 2, prob: 0.80, ageK: 2.0 },
-      { cell:   40, salt: 37, rMin:   4, rMax:  16, count: 2, prob: 0.62, ageK: 2.4 },
-      { cell:    8, salt: 53, rMin: 1.6, rMax:   4, count: 1, prob: 0.40, ageK: 2.6 },
+      // The big ones, 5 to 30 km across: rare — a mare surface this age
+      // has one crater over 10 km in every hundred-kilometre square or so
+      // — but past 15 km complex, and what a long traverse or the view
+      // from the flight ceiling finds on the horizon.
+      { cell: 40960, salt: 35, rMin: 2500, rMax: 15000, count: 1, prob: 0.40, ageK: 1.0, rays: 1 },
+      { cell: 2560, salt:  7, rMin: 230, rMax: 620, count: 1, prob: 0.38, ageK: 1.3, rays: 1 },  // basins
+      { cell:  640, salt: 11, rMin:  60, rMax: 230, count: 2, prob: 0.55, ageK: 1.6, rocks: 1, rays: 1 },
+      { cell:  160, salt: 23, rMin:  16, rMax:  60, count: 2, prob: 0.80, ageK: 2.0, rocks: 1 },
+      { cell:   40, salt: 37, rMin:   4, rMax:  16, count: 2, prob: 0.62, ageK: 2.4, rocks: 1 },
+      { cell:    8, salt: 53, rMin: 1.6, rMax:   4, count: 1, prob: 0.40, ageK: 2.6, rocks: 1 },
       { cell:  3.2, salt: 67, rMin: 0.8, rMax: 1.6, count: 1, prob: 0.32, ageK: 2.8 },
     ],
-    craterAmp: 1, depthK: 1, rampart: 0, rayLayers: 2,
-    // Simple-to-complex transition diameter, m: flat floors from here,
-    // central peaks and terraces soon after (Pike 1977).
-    Dtr: 15000,
+    craterAmp: 1, depthK: 1, rampart: 0,
+    // Simple-to-complex transition diameter, m: where Pike's (1977)
+    // depth fits break. Flat floors are fully developed by 20 km,
+    // central peaks and terraces soon after.
+    Dtr: 11000,
     // Fresh ejecta is immature — not yet darkened by the solar wind
     // and micrometeorites — so every young crater wears a bright halo.
     halo: 0.55,
@@ -249,12 +255,12 @@ var WORLDS = {
     id: 'mars', kind: 1, seed: 19750820,
     g: 3.72, R: 3389500,
     craters: [
-      { cell: 3200, salt:  5, rMin: 300, rMax: 780, count: 1, prob: 0.30 },
-      { cell:  800, salt: 13, rMin:  70, rMax: 300, count: 1, prob: 0.42 },
-      { cell:  200, salt: 29, rMin:  18, rMax:  72, count: 1, prob: 0.50 },
-      { cell:   50, salt: 41, rMin:   5, rMax:  18, count: 1, prob: 0.22 },
+      { cell: 3200, salt:  5, rMin: 300, rMax: 780, count: 1, prob: 0.30, streak: 1 },
+      { cell:  800, salt: 13, rMin:  70, rMax: 300, count: 1, prob: 0.42, rocks: 1, streak: 1 },
+      { cell:  200, salt: 29, rMin:  18, rMax:  72, count: 1, prob: 0.50, rocks: 1 },
+      { cell:   50, salt: 41, rMin:   5, rMax:  18, count: 1, prob: 0.22, rocks: 1 },
     ],
-    craterAmp: 0.74, depthK: 0.60, rampart: 1, rayLayers: 0,
+    craterAmp: 0.74, depthK: 0.60, rampart: 1,
     Dtr: 7000,
   },
 
@@ -267,13 +273,13 @@ var WORLDS = {
     g: 0.0057, R: 11100,
     craters: [
       { cell: 5120, salt:  3, rMin: 400, rMax: 1300, count: 1, prob: 0.55 },
-      { cell: 1280, salt: 17, rMin: 110, rMax:  400, count: 2, prob: 0.70 },
-      { cell:  320, salt: 31, rMin:  30, rMax:  110, count: 2, prob: 0.90 },
-      { cell:   80, salt: 43, rMin:   8, rMax:   30, count: 1, prob: 0.80 },
-      { cell:   20, salt: 59, rMin: 1.8, rMax:    8, count: 1, prob: 0.35 },
+      { cell: 1280, salt: 17, rMin: 110, rMax:  400, count: 2, prob: 0.70, rocks: 1 },
+      { cell:  320, salt: 31, rMin:  30, rMax:  110, count: 2, prob: 0.90, rocks: 1 },
+      { cell:   80, salt: 43, rMin:   8, rMax:   30, count: 1, prob: 0.80, rocks: 1 },
+      { cell:   20, salt: 59, rMin: 1.8, rMax:    8, count: 1, prob: 0.35, rocks: 1 },
       { cell:    6, salt: 61, rMin: 0.6, rMax:  2.4, count: 1, prob: 0.20 },
     ],
-    craterAmp: 1, depthK: 1.05, rampart: 0, rayLayers: 0,
+    craterAmp: 1, depthK: 1.05, rampart: 0,
     relief: 130, groove: 17, fine: 1, albedoK: 1, halo: 0.30,
   },
 
@@ -285,12 +291,12 @@ var WORLDS = {
     g: 0.003, R: 6200,
     craters: [
       { cell: 5120, salt:  3, rMin: 300, rMax: 900, count: 1, prob: 0.40 },
-      { cell: 1280, salt: 17, rMin:  90, rMax: 300, count: 1, prob: 0.60 },
-      { cell:  320, salt: 31, rMin:  25, rMax:  90, count: 2, prob: 0.85 },
-      { cell:   80, salt: 43, rMin:   7, rMax:  25, count: 1, prob: 0.70 },
-      { cell:   20, salt: 59, rMin: 1.6, rMax:   7, count: 1, prob: 0.28 },
+      { cell: 1280, salt: 17, rMin:  90, rMax: 300, count: 1, prob: 0.60, rocks: 1 },
+      { cell:  320, salt: 31, rMin:  25, rMax:  90, count: 2, prob: 0.85, rocks: 1 },
+      { cell:   80, salt: 43, rMin:   7, rMax:  25, count: 1, prob: 0.70, rocks: 1 },
+      { cell:   20, salt: 59, rMin: 1.6, rMax:   7, count: 1, prob: 0.28, rocks: 1 },
     ],
-    craterAmp: 0.66, depthK: 0.80, rampart: 0, rayLayers: 0,
+    craterAmp: 0.66, depthK: 0.80, rampart: 0,
     relief: 78, groove: 0, fine: 0.62, albedoK: 0.96, halo: 0.22,
   },
 
@@ -322,7 +328,7 @@ var WORLDS = {
     // under a kilometre deep — and they end in lobate outflows,
     // fluidised by the atmosphere they punched through, which is
     // what the rampart term draws.
-    craterAmp: 1, depthK: 0.18, rampart: 0.8, rayLayers: 0,
+    craterAmp: 1, depthK: 0.18, rampart: 0.8,
     // Nearly every Venusian crater over ~11–15 km is complex, most with
     // a central peak; below that they are irregular, from impactors
     // the air broke up (Schaber et al. 1992).
@@ -340,13 +346,13 @@ var WORLDS = {
     id: 'europa', kind: 4, seed: 16100108,
     g: 1.315, R: 1560800,
     craters: [
-      { cell: 20480, salt:  7, rMin: 500, rMax: 2400, count: 1, prob: 0.22, ageK: 1.0 },
-      { cell:  5120, salt: 13, rMin: 110, rMax:  500, count: 1, prob: 0.16, ageK: 1.2 },
-      { cell:  1280, salt: 29, rMin:  25, rMax:  110, count: 1, prob: 0.10, ageK: 1.4 },
-      { cell:   160, salt: 41, rMin:   4, rMax:   22, count: 2, prob: 0.85, ageK: 1.1, clump: 5200 },
-      { cell:    24, salt: 53, rMin: 0.8, rMax:    4, count: 1, prob: 0.10, ageK: 1.6 },
+      { cell: 20480, salt:  7, rMin: 500, rMax: 2400, count: 1, prob: 0.22, ageK: 1.0, rays: 1 },
+      { cell:  5120, salt: 13, rMin: 110, rMax:  500, count: 1, prob: 0.16, ageK: 1.2, rocks: 1 },
+      { cell:  1280, salt: 29, rMin:  25, rMax:  110, count: 1, prob: 0.10, ageK: 1.4, rocks: 1 },
+      { cell:   160, salt: 41, rMin:   4, rMax:   22, count: 2, prob: 0.85, ageK: 1.1, clump: 5200, rocks: 1 },
+      { cell:    24, salt: 53, rMin: 0.8, rMax:    4, count: 1, prob: 0.10, ageK: 1.6, rocks: 1 },
     ],
-    craterAmp: 1, depthK: 0.85, rampart: 0, rayLayers: 1, halo: 0.35,
+    craterAmp: 1, depthK: 0.85, rampart: 0, halo: 0.35,
     Dtr: 4500,     // 4–5 km (Moore et al. 2001; Silber et al. 2017)
   },
 
@@ -363,11 +369,11 @@ var WORLDS = {
     g: 0.620, R: 1188300,
     craters: [
       { cell: 24000, salt:  7, rMin: 2500, rMax: 9000, count: 1, prob: 0.55, ageK: 1.5 },
-      { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.45, ageK: 1.7 },
-      { cell:  1500, salt: 29, rMin:  120, rMax:  500, count: 1, prob: 0.18, ageK: 2.0 },
-      { cell:   300, salt: 41, rMin:   20, rMax:  110, count: 1, prob: 0.06, ageK: 2.2 },
+      { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.45, ageK: 1.7, rocks: 1 },
+      { cell:  1500, salt: 29, rMin:  120, rMax:  500, count: 1, prob: 0.18, ageK: 2.0, rocks: 1 },
+      { cell:   300, salt: 41, rMin:   20, rMax:  110, count: 1, prob: 0.06, ageK: 2.2, rocks: 1 },
     ],
-    craterAmp: 1, depthK: 0.55, rampart: 0, rayLayers: 0, halo: 0.2,
+    craterAmp: 1, depthK: 0.55, rampart: 0, halo: 0.2,
     Dtr: 11500,    // 11–12.5 km (Robbins et al. 2021)
   },
 
@@ -384,13 +390,13 @@ var WORLDS = {
     id: 'charon', kind: 6, seed: 19780622,
     g: 0.288, R: 606000,
     craters: [
-      { cell: 24000, salt:  7, rMin: 2500, rMax: 9000, count: 1, prob: 0.50, ageK: 1.4 },
-      { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.50, ageK: 1.6 },
-      { cell:  1500, salt: 29, rMin:  120, rMax:  500, count: 1, prob: 0.26, ageK: 1.9 },
-      { cell:   300, salt: 41, rMin:   20, rMax:  110, count: 1, prob: 0.10, ageK: 2.2 },
-      { cell:    40, salt: 53, rMin:    3, rMax:   15, count: 1, prob: 0.10, ageK: 2.4 },
+      { cell: 24000, salt:  7, rMin: 2500, rMax: 9000, count: 1, prob: 0.50, ageK: 1.4, rays: 1 },
+      { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.50, ageK: 1.6, rocks: 1 },
+      { cell:  1500, salt: 29, rMin:  120, rMax:  500, count: 1, prob: 0.26, ageK: 1.9, rocks: 1 },
+      { cell:   300, salt: 41, rMin:   20, rMax:  110, count: 1, prob: 0.10, ageK: 2.2, rocks: 1 },
+      { cell:    40, salt: 53, rMin:    3, rMax:   15, count: 1, prob: 0.10, ageK: 2.4, rocks: 1 },
     ],
-    craterAmp: 1, depthK: 0.8, rampart: 0, rayLayers: 1, halo: 0.4,
+    craterAmp: 1, depthK: 0.8, rampart: 0, halo: 0.4,
     Dtr: 14500,    // 13.5–16 km (Robbins et al. 2021)
   },
 };
@@ -398,7 +404,17 @@ var WORLDS = {
 var WORLD = WORLDS.moon;      // active row; setWorld() swaps it
 var WK = 0;                   // WORLD.kind, hoisted for the hot path
 var CRATER_LAYERS = WORLD.craters;
-var RAY_LAYER_MAX = 2;        // only the largest classes carry ray systems
+// Which classes carry what, by flag rather than by place in the table,
+// so adding a class never quietly moves them: ray systems (rays), wind
+// streaks (streak); §6 reads rocks itself.
+function flagged(key) {
+  var out = [];
+  for (var i = 0; i < CRATER_LAYERS.length; i++) if (CRATER_LAYERS[i][key]) out.push(i);
+  return out;
+}
+// Filled here for the opening world too: setWorld() returns early for
+// the world already active, and the kernel starts on the Moon.
+var RAY_LI = flagged('rays'), STREAK_LI = flagged('streak');
 var CURVE_R = WORLD.R;        // apparent, not physical — see curveDrop()
 
 function setWorld(id) {
@@ -407,9 +423,11 @@ function setWorld(id) {
   WK = WORLD.kind;
   SEED = WORLD.seed;          // every noise field in the kernel keys off this
   CRATER_LAYERS = WORLD.craters;
-  RAY_LAYER_MAX = WORLD.rayLayers;
+  RAY_LI = flagged('rays');
+  STREAK_LI = flagged('streak');
   CURVE_R = WORLD.Rc || WORLD.R;
   craterCacheReset();
+  CF0 = craterField(0, 0);
   return WORLD;
 }
 
@@ -610,22 +628,28 @@ function craterField(x, z) {
   return h * WORLD.craterAmp;
 }
 
-/* Craters, faded out over the last few metres around the origin so
-   whichever world you are on, the landing site itself is walkable. */
+/* Craters, levelled over the last few metres around the origin so
+   whichever world you are on, the landing site itself is walkable.
+   Levelled to the crater field's own value at the site, not to zero:
+   a landing site on the ejecta of a big crater, or on saturated
+   ground, stands tens of metres off zero, and fading that away dug a
+   pit round the flag with walls steeper than anything you could walk. */
+var CF0 = 0;
 function craterAt(x, z) {
   var cf = craterField(x, z);
   var d0 = x * x + z * z;
-  if (d0 < 900) { var f0 = sstep(12, 30, Math.sqrt(d0)); cf *= f0; CR_ALB *= f0; }
+  if (d0 < 900) { var f0 = sstep(12, 30, Math.sqrt(d0)); cf = CF0 + (cf - CF0) * f0; CR_ALB *= f0; }
   return cf;
 }
+CF0 = craterField(0, 0);   // for the opening world; setWorld() redoes it
 
 /* Bright ejecta rays streaking away from fresh large impacts.
-   Only the two big classes are scanned; extent is capped below
+   Only the classes flagged rays are scanned; extent is capped below
    the cell size so the 3×3 neighbourhood still finds everything. */
 function rayBrightness(x, z) {
   var b = 0;
-  for (var li = 0; li < RAY_LAYER_MAX; li++) {
-    var L = CRATER_LAYERS[li];
+  for (var ri = 0; ri < RAY_LI.length; ri++) {
+    var li = RAY_LI[ri], L = CRATER_LAYERS[li];
     var inv = 1 / L.cell;
     var ccx = Math.floor(x * inv), ccz = Math.floor(z * inv);
     for (var dz = -1; dz <= 1; dz++) {
@@ -670,12 +694,58 @@ function hMoon(x, z) {
   // The ridged terms cost more than everything else combined, so
   // they are skipped entirely where the mask is closed.
   var hl = highlandMask(x, z);
+  // Rilles are cut into the mare, so they die out into the highlands.
+  if (hl < 0.996) h += moonRille(x, z) * (1 - hl);
   if (hl > 0.004) {
     var k = hl * hl;
     h += ridged(nx * 1.55 - 90, nz * 1.55 + 55, 5) * k * 95;
     h += ridged(nx * 6.2 + 12, nz * 6.2 - 40, 4) * k * 16;   // craggy detail on top
   }
   return h + craterAt(x, z);
+}
+
+/* Sinuous rilles: channels a kilometre or two wide and a few hundred
+   metres deep, meandering for tens of kilometres across the mare —
+   where lava flowed for long enough to melt its way down into the
+   ground beneath it. Hadley Rille, which Apollo 15 drove along the
+   rim of, is 1.2 km wide and 300 m deep. Each starts in a source
+   pit and runs on until it shallows out.
+
+   Drawn in lanes, the same trick as Charon's graben: at most one
+   channel per lane, and its meander, its walls and its source pit
+   all kept inside the lane, so a lane boundary can never seam. The
+   lanes run NNW–SSE, and RL_O puts one channel across the opening
+   view a few kilometres from the landing site. */
+var RL_LANE = 14000, RL_C = Math.cos(1.1), RL_S = Math.sin(1.1), RL_O = 10750;
+
+function moonRille(x, z) {
+  var s = x * RL_C + z * RL_S, t = z * RL_C - x * RL_S + RL_O;
+  var li = Math.floor(t / RL_LANE);
+  if (cellRnd(li, 0, 91, 0) > 0.45) return 0;
+  // A rille runs for some tens of kilometres, then the lane is empty.
+  var sq = s * 0.000016 + li * 7.31;
+  var seg = sstep(0.5, 0.6, valueNoise(sq, li * 0.53));
+  if (seg <= 0) return 0;
+  var w = 450 + cellRnd(li, 0, 91, 1) * 550;             // half-width
+  var A = 900 + cellRnd(li, 0, 91, 2) * 1500;            // meander amplitude
+  var k = 0.00045 + cellRnd(li, 0, 91, 3) * 0.0004;      // meander wavenumber, rad/m
+  var ph = s * k + valueNoise(s * 0.00003, li * 3.3) * 3;
+  var cen = (li + 0.5) * RL_LANE + A * Math.sin(ph);
+  // Distance across the channel, not across the lane: a bend running
+  // diagonally would otherwise come out narrower than the straights.
+  var sl = A * k * Math.cos(ph);
+  var dist = Math.abs(t - cen) / Math.sqrt(1 + sl * sl);
+  // The widest the source pit can make it: A + 1.3 · 1.8 · w stays
+  // under half a lane, so nothing crosses a boundary.
+  if (dist > w * 2.34) return 0;
+  // Near its upstream end — where the segment has only just begun —
+  // the channel opens into the pit it was fed from.
+  var head = seg * (1 - sstep(0.5, 0.6, valueNoise(sq - 0.048, li * 0.53)));
+  w *= (0.6 + 0.4 * seg) * (1 + 0.8 * head);
+  if (dist > w * 1.3) return 0;
+  var depth = w * (0.28 + 0.14 * cellRnd(li, 0, 91, 4)) * seg * (1 + 0.4 * head);
+  // A flat floor of rubble, and walls at the angle of repose or less.
+  return -depth * (1 - sstep(0.2, 1.0, dist / w));
 }
 
 // Highland mask alone — the worker uses it to colour anorthosite
@@ -741,8 +811,8 @@ function hMars(x, z) {
    thing about Mars from orbit. Returns how much dust is missing. */
 function windStreak(x, z) {
   var b = 0;
-  for (var li = 0; li < 2; li++) {
-    var L = CRATER_LAYERS[li];
+  for (var si = 0; si < STREAK_LI.length; si++) {
+    var li = STREAK_LI[si], L = CRATER_LAYERS[li];
     var inv = 1 / L.cell;
     var ccx = Math.floor(x * inv), ccz = Math.floor(z * inv);
     for (var dz = -1; dz <= 1; dz++) {
@@ -1539,10 +1609,10 @@ function terrainNormal(x, z, eps = 0.6) {
 // several pixels across at its range: 16 m out to 4.6 km keeps the
 // 30–100 m bowls, and their shadows, from melting into swells.
 const L4 = () => [
-  { size: 256,   ext: 4, sink: 0 },
-  { size: 1024,  ext: 4, sink: 1.5,  step: 16 },
-  { size: 4096,  ext: 3, sink: 6,    step: 64 },
-  { size: 16384, ext: 2, sink: 20,   step: 256 },
+  { size: 256,   ext: 4 },
+  { size: 1024,  ext: 4, step: 16 },
+  { size: 4096,  ext: 3, step: 64 },
+  { size: 16384, ext: 2, step: 256 },
 ];
 // A 22 km moon hides its own surface 190 m away. Reaching ±40 km
 // there would be forty thousand vertices per frame of ground that
@@ -1556,8 +1626,8 @@ const L4 = () => [
 // step in the middle distance. The saving from streaming only two
 // levels pays for it several times over.
 const L2 = () => [
-  { size: 256,  ext: 4, sink: 0 },
-  { size: 1024, ext: 3, sink: 1.5, step: 16 },
+  { size: 256,  ext: 4 },
+  { size: 1024, ext: 3, step: 16 },
 ];
 // Venus stops at ±10 km for the opposite reason to the moonlets:
 // not because the ground has fallen away, but because the air is in
@@ -1565,9 +1635,9 @@ const L2 = () => [
 // at ten kilometres, so the fourth level would be generating a ring
 // of terrain that is, to within a rounding error, the fog colour.
 const L3 = () => [
-  { size: 256,  ext: 4, sink: 0 },
-  { size: 1024, ext: 4, sink: 1.5, step: 16 },
-  { size: 4096, ext: 2, sink: 6,   step: 64 },
+  { size: 256,  ext: 4 },
+  { size: 1024, ext: 4, step: 16 },
+  { size: 4096, ext: 2, step: 64 },
 ];
 
 const VIEW = {
@@ -3024,8 +3094,9 @@ const groundMat = surfacePatch(new THREE.MeshStandardMaterial({
    skipped. One only partly covered has a hole cut in it wherever
    finer ground is already built (holeIndex), with a wall hung
    round the cut; left whole, it would run on under the fine mesh
-   and show through every crater floor deeper than its sink. Coarse
-   levels are still sunk a little, for the seams. Stale chunks are
+   and show through every crater floor it could not follow. So no
+   level overlaps another, none needs sinking under it, and the
+   seams are closed by skirts and walls from both sides. Stale chunks are
    purged only once their level has no pending builds, so motion
    never opens holes in the ground.
    With the curvature drop, ±40 km is past the horizon even from
@@ -3089,8 +3160,8 @@ const chunkStreamer = (() => {
      and a kept one, facing into the hole, from the dropped vertices
      the worker put after the grid. Without the cut, the coarse mesh
      runs on under the fine one and shows through wherever the ground
-     dips more than the level's sink below its long chords: every
-     crater floor bigger than the coarse step. Shared, like gridIndex. */
+     dips below its long chords: every crater floor bigger than the
+     coarse step. Shared, like gridIndex. */
   function holeIndex(W, m, mask) {
     const key = W + ':' + m + ':' + mask;
     let idx = indexCache.get(key);
@@ -3229,7 +3300,7 @@ const chunkStreamer = (() => {
           const n = Math.max(1, Math.round(L.size / (li === 0 ? l0Step(ring) : L.step * (LOD_COARSE ? 2 : 1))));
           const step = L.size / n;
           out.set(li + ':' + cx + ':' + cz + ':' + step, {
-            level: li, x0, z0, step, n, sink: L.sink,
+            level: li, x0, z0, step, n,
             ax: a0x, az: a0z, ring: ring + li * 10,
             // Cells per side, one per chunk of the finer level: where a
             // hole can be cut (see holeIndex).
@@ -3277,7 +3348,7 @@ const chunkStreamer = (() => {
         geo.boundingSphere = new THREE.Sphere(
           new THREE.Vector3(s.x0 + half, 0, s.z0 + half), half * 1.5 + 500);
         const mesh = new THREE.Mesh(geo, groundMat);
-        mesh.position.y = -s.sink;
+        mesh.userData.level = s.level;   // for debugging views; nothing reads it
         mesh.receiveShadow = s.level === 0;
         chunks.set(job.key, { mesh, level: s.level, x0: s.x0, z0: s.z0, W: d.W, m: d.m, mask: 0 });
         chunkGroup.add(mesh);
@@ -3789,8 +3860,9 @@ const rockSystem = (() => {
     // Ejecta blankets: rings of debris outside nearby crater rims —
     // many and large around a fresh crater, few around an old one.
     const nMul = world.rockN;
-    for (let li = 1; li <= Math.min(4, CRATER_LAYERS.length - 1); li++) {
+    for (let li = 0; li < CRATER_LAYERS.length; li++) {
       const L = CRATER_LAYERS[li];
+      if (!L.rocks) continue;
       const c0x = Math.floor((x0 - 64) / L.cell), c1x = Math.floor((x0 + SIZE + 64) / L.cell);
       const c0z = Math.floor((z0 - 64) / L.cell), c1z = Math.floor((z0 + SIZE + 64) / L.cell);
       for (let gz = c0z; gz <= c1z; gz++) {
@@ -6161,10 +6233,10 @@ const composer = new EffectComposer(renderer, rt);
    The view runs from a boot 5 cm under the eye to a horizon 90 km
    off, and one 24-bit depth buffer cannot hold that: precision
    falls with the square of distance, to ~20 m at 4 km and ~120 m at
-   10 km. That is coarser than the few metres each coarse terrain
-   level sinks under the finer one (§5), so where levels overlap on
-   distant slopes the winner was decided by rounding, and changed
-   with every step you took — ridges shimmered as you moved.
+   10 km. That is coarser than the few metres that separated the
+   terrain levels where they used to overlap (§5), and than the relief
+   of a distant slope, so which surface won was decided by rounding,
+   and changed with every step you took — ridges shimmered as you moved.
 
    So the scene is drawn twice into the same target: first
    everything past DEPTH_SPLIT with the near plane pushed out to
@@ -7824,8 +7896,11 @@ function applyWorld(id) {
     rockSystem.soil.value.set(c.r, c.g, c.b, world.air ? 0.6 : 0.5);
   }
   // Terrain shadows: everywhere there is a sun to cast them, reaching
-  // as far as the lowest sun could throw a shadow across this body.
-  terrainShadows.reset(WORLD.R < 100000 ? 3000 : 8000, world.shadows !== false);
+  // as far as the lowest sun could throw a shadow across this body —
+  // on the big ones, to the edge of the clipmaps, since the rim of a
+  // crater three kilometres deep shadows its floor from ten away. The
+  // march steps grow with range, so the extra reach is a few steps.
+  terrainShadows.reset(WORLD.R < 100000 ? 3000 : 16000, world.shadows !== false);
   TS.tsSun.value.y = Math.atan(world.sunSize / 12000);
   TS.tsSun.value.w = world.shadows === false ? 0 : 1;
   dust.material.uniforms.color.value.set(world.dustColor);

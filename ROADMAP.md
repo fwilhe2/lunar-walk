@@ -75,7 +75,7 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
   - [x] the same rim, ejecta blanket, 1.9 r cutoff and age rounding as simple craters.
 - [x] Blend simple into complex over a band around `Dtr`, so the population has no visible jump.
 - [x] Keep `CR_ALB` consistent (fresh halos). (Brightening fresh peaks and walls not done.)
-- [ ] Check that rock clustering (§6) still looks right on terraces and peaks — deferred to item 4, where the Moon gets craters big enough to show them.
+- [x] Check that rock clustering (§6) still looks right on terraces and peaks — moot: rocks cluster only on classes flagged `rocks`, and the kilometre classes carry none.
 - [x] Update README ("simple-crater morphometry").
 
 **Verify.**
@@ -84,31 +84,36 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 4. Landmarks on the Moon
+## 4. Landmarks on the Moon ✅
 
 **Why.** The Moon's largest crater class is 1.2 km across. From the 400 m flight ceiling you can see about 37 km, but nothing on the horizon is bigger than those craters, so the vista reads as uniform.
 
 **Substeps**
-- [ ] Replace positional conventions with per-class flags, **before** inserting a class. Today three things depend on array position:
+- [x] Replace positional conventions with per-class flags, **before** inserting a class. Today three things depend on array position:
   - rays scan the first `RAY_LAYER_MAX` classes;
   - rocks cluster on classes 1–4 (line 3582);
   - Mars wind streaks use classes 0–1.
 
   Flags such as `rays`, `rocks` and `streak` stop a new class from silently changing which classes carry these.
-- [ ] Add a rare large class at the top of the Moon's table: craters 10–30 km across with complex morphology from item 3, keeping `rMax * 1.9 < cell`.
-- [ ] Check in Node that the landing site doesn't sit on the wall of one of these. The Moon has no site offset (unlike `PL_OX` or `CH_OX`), so nudge with an offset or pick a different seed.
-- [ ] Add a sinuous rille, built in lanes like `charonGraben` (one channel per lane, kept inside it):
-  - [ ] a meandering centreline from noise along strike;
-  - [ ] a U-shaped section about a kilometre wide and a few hundred metres deep, like Hadley;
-  - [ ] segments that start at a source depression;
-  - [ ] gated to mare (`1 − highlandMask`);
-  - [ ] craters overprint it.
-- [ ] Optionally, talus rocks on the rille walls (the `world.talus` path Europa uses).
-- [ ] Measure µs per call in Node. The Moon's hot path is the most expensive one to break.
+- [x] Add a rare large class at the top of the Moon's table: craters 10–30 km across with complex morphology from item 3, keeping `rMax * 1.9 < cell`.
+- [x] Check in Node that the landing site doesn't sit on the wall of one of these. The Moon has no site offset (unlike `PL_OX` or `CH_OX`), so nudge with an offset or pick a different seed.
+- [x] Add a sinuous rille, built in lanes like `charonGraben` (one channel per lane, kept inside it):
+  - [x] a meandering centreline from noise along strike;
+  - [x] a U-shaped section about a kilometre wide and a few hundred metres deep, like Hadley;
+  - [x] segments that start at a source depression;
+  - [x] gated to mare (`1 − highlandMask`);
+  - [x] craters overprint it.
+- [ ] Optionally, talus rocks on the rille walls (the `world.talus` path Europa uses). (Not done.)
+- [x] Measure µs per call in Node. The Moon's hot path is the most expensive one to break.
 
 **Verify.** A probe flight shot from the landing site shows a landmark on the horizon, and the timings stay within budget.
 
 ---
+
+**Also found and fixed on the way:**
+- The spawn fade levelled crater relief to zero, which dug a pit round the landing site wherever the site stood off zero (the new crater's ejecta; saturated Phobos had 55° walls in the fade ring). It now levels to the crater field's own value at the site.
+- Every coarser terrain level was sunk under the finer one (1.5 / 6 / 20 m), and at low sun each level edge threw a line of shadow across the ground. With item 1's holes nothing overlaps, so the sinks are gone.
+- The terrain-shadow march stopped at 8 km, too short for kilometre-deep craters; it reaches 16 km (the clipmaps' edge) on the large bodies now, for a few more steps.
 
 ## 5. Night, lit by the planet overhead
 
