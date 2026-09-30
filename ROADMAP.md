@@ -115,19 +115,19 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 - Every coarser terrain level was sunk under the finer one (1.5 / 6 / 20 m), and at low sun each level edge threw a line of shadow across the ground. With item 1's holes nothing overlaps, so the sinks are gone.
 - The terrain-shadow march stopped at 8 km, too short for kilometre-deep craters; it reaches 16 km (the clipmaps' edge) on the large bodies now, for a few more steps.
 
-## 5. Night, lit by the planet overhead
+## 5. Night, lit by the planet overhead ✅
 
 **Why.** Earth never moves in the lunar sky, so its direction is as fixed as the sun's azimuth. A horizon march toward Earth can reuse §5b's height pass. That makes a lunar night lit by a nearly full Earth possible, with stars out. The same works for Mars from Phobos and Deimos, Jupiter from Europa, Charon from Pluto and Pluto from Charon.
 
 **Substeps**
-- [ ] Let `sunElev` go below the horizon (for example down to −0.3). The sun's light fades across its angular radius as it sets, and `sunDisc` and `corona` hide below the horizon.
-- [ ] Add a key direction `KEY_DIR`, separate from `SUN_DIR`: `SUN_DIR` keeps driving phases and the sky; `KEY_DIR` drives the light. When the sun is down, `sun` takes the companion's direction and planetshine intensity. `sunFar` follows it (the two must cast together), and so does `placeShadowRig`.
-- [ ] Horizon maps: set `hzU.uDir` to the key's azimuth and force one rebuild whenever the key switches. The height pass is reused. The "fixed sun azimuth" invariant becomes "fixed azimuth per key".
-- [ ] The regolith normal map's alpha is a micro-horizon baked toward `SUN_AZ`. Disable it under the planet key, or bake a second one. Micro-crater rim tests and grain shadows read the key direction.
-- [ ] Intensity: full Earth from the Moon is about 1/4000 of sunlight (README). Scale by the companion's phase. Colour it by the companion's mean colour.
-- [ ] Light units: keep absolute radiances within an order of magnitude of the Moon's (see `CLAUDE.md`). At night, switch to night units, the same trick as Pluto's ×1000 row: the key at a sun-like intensity, with stars, Milky Way and companion HDR scaled up by the same factor. Give each world a night eye range.
-- [ ] Base the airless fill (`updateSkyColors`, currently `sin(sunElev)`) on the key.
-- [ ] Update the HUD (a negative sun elevation, a "NIGHT · EARTHLIT" note) and the docs (the sun-azimuth section of `CLAUDE.md`, README "The light").
+- [x] Let `sunElev` go below the horizon (for example down to −0.3). The sun's light fades across its angular radius as it sets, and `sunDisc` and `corona` hide below the horizon.
+- [x] Add a key direction `KEY_DIR`, separate from `SUN_DIR`: `SUN_DIR` keeps driving phases and the sky; `KEY_DIR` drives the light. When the sun is down, `sun` takes the companion's direction and planetshine intensity. `sunFar` follows it (the two must cast together), and so does `placeShadowRig`.
+- [x] Horizon maps: set `hzU.uDir` to the key's azimuth and force one rebuild whenever the key switches. The height pass is reused. The "fixed sun azimuth" invariant becomes "fixed azimuth per key".
+- [x] The regolith normal map's alpha is a micro-horizon baked toward `SUN_AZ`. Disable it under the planet key, or bake a second one. Micro-crater rim tests and grain shadows read the key direction.
+- [x] Intensity: full Earth from the Moon is about 1/4000 of sunlight (README). Scale by the companion's phase. Colour it by the companion's mean colour.
+- [x] Light units: keep absolute radiances within an order of magnitude of the Moon's (see `CLAUDE.md`). At night, switch to night units, the same trick as Pluto's ×1000 row: the key at a sun-like intensity, with stars, Milky Way and companion HDR scaled up by the same factor. Give each world a night eye range.
+- [x] Base the airless fill (`updateSkyColors`, currently `sin(sunElev)`) on the key.
+- [x] Update the HUD (a negative sun elevation, a "NIGHT · EARTHLIT" note) and the docs (the sun-azimuth section of `CLAUDE.md`, README "The light").
 
 **Verify.**
 - Probe on the Moon at `sunElev = −0.2`: shadows point away from Earth, Earth is near full, stars are visible.
@@ -135,6 +135,8 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 - Repeat for each companion world.
 
 ---
+
+**As built:** the night key keeps the sun's intensity times the planet's phase, and the eye's key drops to a quarter. The first try dimmed the key to a tenth and let the eye open, and on Phobos that magnified the HDR target's dithering into green/magenta speckle. Stars get a per-world night factor rather than U, because their gain was never physical; scaled by U, the Milky Way pinned at full opacity everywhere.
 
 ## 6. Sound
 

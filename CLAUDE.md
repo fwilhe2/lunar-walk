@@ -58,6 +58,8 @@ Two things look like exceptions and are not:
 
 If the sun ever has to move in azimuth, all three need rebuilding for the new direction.
 
+**Night uses the same trick with a different fixed direction.** Below the horizon, on the bodies with a `world.night` row, the key light becomes the primary overhead (`updateKey()`): `KEY_DIR`/`KEY_XZ` replace `SUN_DIR`/`SUN_XZ` for the light, its shadow rigs, the horizon march (`hzU.uDir`), `TS.sunXZ`, `tsSun.x`/`.y` and `uSunView`, while `SUN_DIR` keeps driving phases and the sky. A locked moon's primary never moves, so the horizon maps are rebuilt once when the key switches (`terrainShadows.invalidate()`); the regolith map's baked micro-horizon points at the sun's azimuth, so grain shadows (`rgMicro.z`) are off at night. Night is drawn in its own units: the key keeps the sun's intensity times the planet's phase, the companions and haze are raised by `KEY.U` (1 / planetshine ratio), and the eye's key drops to a quarter — never dim the key and let the eye open instead, which magnifies the HDR dithering into speckle. Stars take a per-world `night.stars` factor, because their gain was never physical.
+
 ## Surface materials (§4b)
 
 Every `MeshStandardMaterial` in the scene goes through `surfacePatch(material, kind, hapke, extra)`, kinds `ground` / `print` / `rock` / `object`:

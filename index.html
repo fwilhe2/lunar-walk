@@ -1678,6 +1678,8 @@ const VIEW = {
     // the dark, which is just far enough for the brightest stars.
     exposure: 1.0, eye: [0.16, 0.5, 150], starGain: 0.0012, bloom: [0.55, 0.65, 3.0],
     companions: ['earth'],
+    // Night: full Earth, 1/4000 of the sun, 1.9° across and faintly blue.
+    night: { ratio: 2.5e-4, radius: 0.0166, color: 0xdfe7ff, label: 'EARTHLIT', stars: 120 },
   },
 
   mars: {
@@ -1750,6 +1752,8 @@ const VIEW = {
     landmark: 'beacon', flagColor: 0xb9bcc2,
     exposure: 1.0, eye: [0.13, 0.5, 150], starGain: 0.0012, bloom: [0.5, 0.65, 3.0],
     companions: ['mars-big', 'deimos-far'],
+    // Night: Mars, 42° across, geometric albedo 0.17 — 2.2% of the sun.
+    night: { ratio: 0.022, radius: 0.367, color: 0xffb483, label: 'MARSLIT', stars: 200 },
     jets: true,
   },
 
@@ -1776,6 +1780,7 @@ const VIEW = {
     landmark: 'beacon', flagColor: 0xb9bcc2,
     exposure: 1.0, eye: [0.13, 0.5, 150], starGain: 0.0012, bloom: [0.5, 0.65, 3.0],
     companions: ['mars-mid', 'phobos-far'],
+    night: { ratio: 0.0036, radius: 0.145, color: 0xffb483, label: 'MARSLIT', stars: 250 },
     jets: true,
   },
 
@@ -1898,6 +1903,8 @@ const VIEW = {
     // should read as white, not as the mid-grey the Moon's mare does.
     exposure: 1.0, eye: [0.40, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0],
     companions: ['jupiter', 'io', 'ganymede', 'callisto'],
+    // Night: Jupiter, 12.2° across at albedo 0.52 — 0.6% of the sun.
+    night: { ratio: 0.0059, radius: 0.106, color: 0xfff0dc, label: 'JUPITERLIT', stars: 20 },
     // Earth is never more than 12° from the sun from here, so that is
     // where the rover's dish looks, not at Jupiter: relay is how far
     // along the sky from the sun it points.
@@ -1966,6 +1973,8 @@ const VIEW = {
     landmark: 'flag', flagColor: 0xc9ccd2,
     exposure: 1.0, eye: [0.16, 0.5, 20], starGain: 0.03, bloom: [0.55, 0.65, 3.0],
     companions: ['charon'],
+    // Night: Charon, 3.65° across at albedo 0.4 — 0.04% of the sun.
+    night: { ratio: 4.1e-4, radius: 0.0319, color: 0xf2f2f6, label: 'CHARONLIT', stars: 30 },
     // Earth is never more than 1.7° from the sun from out here.
     relay: 0.025,
   },
@@ -2014,6 +2023,8 @@ const VIEW = {
     landmark: 'flag', flagColor: 0xc9ccd2,
     exposure: 1.0, eye: [0.30, 0.3, 20], starGain: 0.03, bloom: [0.55, 0.65, 3.0],
     companions: ['pluto'],
+    // Night: Pluto, 7.1° across at albedo 0.55 — 0.2% of the sun.
+    night: { ratio: 0.0021, radius: 0.062, color: 0xffe6cc, label: 'PLUTOLIT', stars: 25 },
     relay: 0.025,
     // Arrive facing Pluto and the massif under it, head raised enough
     // to hold both — yaw and pitch, in radians.
@@ -2272,6 +2283,16 @@ scene.add(hemiLight, ambLight);
    regolith look like regolith.
    ═════════════════════════════════════════════════════════════ */
 const SUN_XZ = new THREE.Vector2(Math.cos(SUN_AZ), Math.sin(SUN_AZ));
+
+/* The key light: the sun by day and, by night on the bodies that
+   have one, the primary hanging overhead (updateKey, §12). What
+   shades by direction reads these — the light and its shadow maps,
+   the terrain horizon maps, the micro-craters in the ground — while
+   the sun keeps SUN_DIR for phases and the sky. The regolith map's
+   baked micro-horizon points at the sun's azimuth, so it is switched
+   off under a planet. */
+const KEY_DIR = SUN_DIR.clone();
+const KEY_XZ = SUN_XZ.clone();
 
 function regolithMaps(v) {
   const S = 1024, MM = 3000 / S, N = S * S;
@@ -2628,7 +2649,7 @@ const TS = {
   tsHz0: { value: null }, tsHz1: { value: null }, tsHz2: { value: null }, tsHz3: { value: null },
   tsLv: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, 1, 0)) },   // (cx, cz, span, refY)
   tsSun: { value: new THREE.Vector4(0.28, 0.0046, 0, 0) },   // (tan elev, angular radius, on, –)
-  sunXZ: { value: SUN_XZ },
+  sunXZ: { value: KEY_XZ },
 };
 
 const GLSL_TS = `
@@ -3503,7 +3524,7 @@ const terrainShadows = (() => {
     tH0: { value: null }, tH1: { value: null }, tH2: { value: null }, tH3: { value: null },
     uHp: { value: SPANS.map(() => new THREE.Vector4()) },   // height levels (cx, cz, span, texel)
     uOut: { value: new THREE.Vector4() },                   // this level
-    uDir: { value: SUN_XZ },
+    uDir: { value: KEY_XZ },
     uTMax: { value: 8000 },
   };
   const hzMat = new THREE.ShaderMaterial({
@@ -3621,6 +3642,9 @@ const terrainShadows = (() => {
       alloc();
       seq = -1; dirty = true; forceNow = true;
     },
+    // The key light moved in azimuth — sunset or sunrise under a
+    // planet: every horizon is stale, so redo them all in one frame.
+    invalidate() { seq = -1; dirty = true; forceNow = true; },
     /* Call every frame. `now` forces the whole pass into this frame —
        used once, when a world has finished loading, so the first frame
        anyone sees already has its shadows. */
@@ -5802,6 +5826,9 @@ function makeCompanion(spec) {
   const axis = spec.orbit ? new THREE.Vector3(...spec.orbit.axis).normalize() : null;
 
   group.userData.pos = pos;
+  // Its own light, scaled by the night units (updateKey).
+  group.userData.bright = uni.uBright;
+  group.userData.bright0 = uni.uBright.value;
   // The sun sits far enough away that the parallax between it and
   // the observer matters: that offset is what sets the phase.
   group.userData.sync = () => {
@@ -7203,7 +7230,8 @@ addEventListener('keydown', (e) => {
   const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].indexOf(e.code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
-    sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), 0.045, 1.35);
+    // Below the horizon only where there is something to light the night.
+    sunElev = THREE.MathUtils.clamp(sunElev + (e.code === 'BracketRight' ? 0.035 : -0.035), world.night ? -1.35 : 0.045, 1.35);
     updateSunDir();
     updateSkyColors();
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';
@@ -7700,15 +7728,15 @@ const _rx = new THREE.Vector3(), _ry = new THREE.Vector3(), _rt = new THREE.Vect
 function placeShadowRig(light, x, y, z) {
   const c = light.shadow.camera;
   const texel = (c.right - c.left) / light.shadow.mapSize.x;
-  // The light camera's own axes: it looks down -SUN_DIR with +y up.
-  _rx.set(0, 1, 0).cross(SUN_DIR).normalize();
-  _ry.copy(SUN_DIR).cross(_rx);
+  // The light camera's own axes: it looks down -KEY_DIR with +y up.
+  _rx.set(0, 1, 0).cross(KEY_DIR).normalize();
+  _ry.copy(KEY_DIR).cross(_rx);
   _rt.set(x, y, z);
   const ex = _rt.dot(_rx), ey = _rt.dot(_ry);
   _rt.addScaledVector(_rx, Math.round(ex / texel) * texel - ex)
      .addScaledVector(_ry, Math.round(ey / texel) * texel - ey);
   light.target.position.copy(_rt);
-  light.position.copy(_rt).addScaledVector(SUN_DIR, light.userData.dist);
+  light.position.copy(_rt).addScaledVector(KEY_DIR, light.userData.dist);
 }
 
 function step(dt, t) {
@@ -7725,7 +7753,7 @@ function step(dt, t) {
   placeShadowRig(sun, focus.x, gh, focus.z);
   placeShadowRig(sunFar, focus.x, gh, focus.z);
   terrainShadows.update(focus.x, focus.z, gh, false);
-  TS.tsSun.value.x = Math.tan(sunElev);
+  TS.tsSun.value.x = KEY.tan;
   camera.getWorldPosition(_camWorld);
   sunDisc.position.copy(_camWorld).addScaledVector(SUN_DIR, 12000);
   corona.position.copy(_camWorld).addScaledVector(SUN_DIR, 12500);
@@ -7735,7 +7763,7 @@ function step(dt, t) {
 
   // Sun direction in view space, for the glass sparkle and for
   // withdrawing painted grain shadows toward zero phase.
-  uSunView.value.copy(SUN_DIR).transformDirection(camera.matrixWorldInverse);
+  uSunView.value.copy(KEY_DIR).transformDirection(camera.matrixWorldInverse);
 
   // Everything overhead rides with the camera: parallax-free,
   // because the nearest of them is six thousand kilometres away.
@@ -7787,12 +7815,85 @@ function step(dt, t) {
 const boot = document.getElementById('boot');
 let initialized = false;
 
+/* ── The key light ──────────────────────────────────────────────
+   By day it is the sun, fading out across its own disc as it sets.
+   By night, on the bodies with a primary overhead, it is that
+   primary's reflected sunlight: full Earth from the Moon is about
+   1/4000 of the sun, Mars from Phobos 2%, Jupiter from Europa 0.6%,
+   Pluto from Charon 0.2%, Charon from Pluto 0.04% — geometric albedo
+   times the square of the sine of the angular radius, times the
+   phase. A locked moon's primary never moves, so the terrain horizon
+   maps are marched toward it once, at sunset, and hold all night; and
+   it is a disc, not a point, so its shadows are soft — from Phobos,
+   where Mars is 42° across, barely shadows at all.
+
+   A four-thousandth of the day's light would put the ground far
+   below what the renderer resolves cleanly — the eye opening up to it
+   magnifies the ±½/255 dithering in the HDR target into coloured
+   speckle (the light-units note in CLAUDE.md). So night is drawn in
+   units of its own: the key keeps the sun's intensity, times the
+   phase, and what the sun lights directly — the companions, the haze —
+   is raised by U, the inverse of the planetshine ratio, so everything
+   keeps its true brightness relative to the ground. The eye's key is
+   lowered instead, so night reads as night with the exposure going
+   down, not up; and it is snapped to the new units when they change.
+   Stars are the exception: their gain was set for visibility with the
+   eye wide open by day, not physically, so each body gives its own
+   night factor for them, a faint Milky Way under a full Earth and a
+   strong one under Charon, whose nights are thirty times darker. */
+const KEY = { night: false, tan: 0.29, rad: 0.0046, elev: 0.28, scale: 1, U: 1, stars: 1 };
+const _keyC = new THREE.Vector3();
+function updateKey() {
+  const n = world.night, pri = liveCompanions[0];
+  const rSun = Math.atan(world.sunSize / 12000);
+  const wasNight = KEY.night, kx = KEY_XZ.x, kz = KEY_XZ.y;
+  KEY.night = !!(n && pri && sunElev < -rSun);
+  if (!KEY.night) {
+    KEY_DIR.copy(SUN_DIR); KEY_XZ.copy(SUN_XZ);
+    KEY.elev = sunElev; KEY.tan = Math.tan(sunElev); KEY.rad = rSun;
+    // The share of the disc still over a level horizon.
+    KEY.scale = THREE.MathUtils.smoothstep(sunElev, -rSun, rSun);
+    KEY.U = 1;
+    sun.color.set(world.sunColor);
+  } else {
+    const C = _keyC.copy(pri.userData.pos).normalize();
+    KEY_DIR.copy(C);
+    KEY_XZ.set(C.x, C.z).normalize();
+    KEY.elev = Math.asin(C.y); KEY.tan = C.y / Math.max(1e-4, Math.hypot(C.x, C.z)); KEY.rad = n.radius;
+    // A Lambert sphere lit by the sun, seen from phase angle a.
+    const a = Math.acos(THREE.MathUtils.clamp(-SUN_DIR.dot(C), -1, 1));
+    const phase = (Math.sin(a) + (Math.PI - a) * Math.cos(a)) / Math.PI;
+    KEY.U = 1 / n.ratio;
+    KEY.scale = n.ratio * phase * KEY.U;
+    sun.color.set(n.color);
+  }
+  KEY.stars = KEY.night ? n.stars : 1;
+  eyePass.uniforms.uKey.value = world.eye[0] * (KEY.night ? 0.25 : 1);
+  sun.intensity = world.sunPower * KEY.scale;
+  TS.tsSun.value.y = KEY.rad;
+  sunDisc.visible = corona.visible = !world.noSun && sunElev > -rSun * 1.5;
+  // Everything that shines by its own light, in the key's units.
+  starPoints.material.uniforms.uGain.value = (world.starGain || 1) * KEY.stars;
+  milkyWayMesh.material.opacity = Math.min(1, 0.34 * (world.starGain || 1) * KEY.stars);
+  for (const g of liveCompanions) g.userData.bright.value = g.userData.bright0 * KEY.U;
+  // Glints are the key's light, like the ground's.
+  uSparkle.value = world.sparkle * KEY.scale;
+  GROUND_U.rgMicro.value.z = KEY.night ? 0 : (world.micro[2] ?? 0.6);
+  if (KEY.night !== wasNight) {
+    eyePass.uniforms.uReset.value = 1;
+    if (initialized && !loading) note(KEY.night ? 'NIGHT · ' + n.label : 'SUNRISE');
+  }
+  if (KEY_XZ.x !== kx || KEY_XZ.y !== kz) terrainShadows.invalidate();
+}
+
 function updateSkyColors() {
-  // In vacuum the fill is bounce light off sunlit ground, so it rises
-  // and falls with how much of the ground the sun is lighting.
+  updateKey();
+  // In vacuum the fill is bounce light off lit ground, so it rises
+  // and falls with how much of the ground the key light is lighting.
   if (!world.air) {
-    const k = THREE.MathUtils.clamp(Math.sin(sunElev) / Math.sin(16 * DEG), 0.15, 3.2);
-    hemiLight.intensity = world.hemi[2] * k;
+    const k = THREE.MathUtils.clamp(Math.sin(KEY.elev) / Math.sin(16 * DEG), 0.15, 3.2);
+    hemiLight.intensity = world.hemi[2] * k * KEY.scale;
+    ambLight.intensity = world.amb[1] * KEY.scale;
   }
   const s = world.sky;
   // The companions read these too, so no sky means no air over them.
@@ -7801,7 +7902,10 @@ function updateSkyColors() {
   // Sky brightness follows how much lit dust is in the column, so
   // the dome deepens and darkens as the sun drops — and the haze
   // that fades the distance is the same dust, so the fog tracks it.
-  const gain = 0.30 + 0.70 * Math.sin(sunElev);
+  // Pluto's haze stands 200 km up and stays sunlit after sunset — a
+  // twilight glow, in night units far brighter than the ground — and
+  // fades out over the first nine degrees of night.
+  const gain = Math.max(0, 0.30 + 0.70 * Math.sin(sunElev)) * THREE.MathUtils.smoothstep(sunElev, -0.15, 0) * KEY.U;
   const lin = THREE.LinearSRGBColorSpace;
   skyDome.uniforms.uGain.value = gain;
   skyDome.uniforms.uK.value = s.k;
@@ -7829,6 +7933,8 @@ function applyWorld(id) {
   worldId = id;
   world = VIEW[id];
   setWorld(id);                    // the kernel: heights, craters, colour
+  // Only a body with something to light its night keeps the sun down.
+  if (!world.night && sunElev < 0.045) { sunElev = 0.045; updateSunDir(); }
   // You always arrive at the origin, whose anchor cell centre is
   // this. Set before anything is placed on the ground.
   curveAX = 128; curveAZ = 128;
@@ -7901,7 +8007,6 @@ function applyWorld(id) {
   // crater three kilometres deep shadows its floor from ten away. The
   // march steps grow with range, so the extra reach is a few steps.
   terrainShadows.reset(WORLD.R < 100000 ? 3000 : 16000, world.shadows !== false);
-  TS.tsSun.value.y = Math.atan(world.sunSize / 12000);
   TS.tsSun.value.w = world.shadows === false ? 0 : 1;
   dust.material.uniforms.color.value.set(world.dustColor);
   // Pressed soil against undisturbed soil, as an albedo ratio.
@@ -7915,6 +8020,10 @@ function applyWorld(id) {
     if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
     else if (m) m.needsUpdate = true;
   });
+
+  // The key light last: it overrides the sun, sparkle and grain
+  // shadows set above whenever it is night.
+  updateSkyColors();
 
   // ── contents
   chunkStreamer.setWorld(id);
