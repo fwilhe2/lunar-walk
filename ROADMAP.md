@@ -219,19 +219,21 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 10. Mars wind ridges
+## 10. Mars wind ridges ✅
 
 **Why.** The transverse aeolian ridges are a strict triangle wave (`abs(fract − 0.5) − 0.25`, in `hMars`), and from the air they read as a ploughed field. Real ones branch, vary their spacing and gather in the lows. The shot was on low, where 8 m steps also alias the 26 m wavelength.
 
 **Substeps**
-- [ ] A sharp-crested profile with broad, flat troughs.
-- [ ] Spacing and amplitude that drift slowly, a stronger meander, and Y-junctions (blend two phase fields with slightly different wavenumbers in patches).
-- [ ] More of them in lows and crater floors, fewer on high flat ground.
-- [ ] Time it in Node. This term runs on every Mars query.
+- [x] A sharp-crested profile with broad, flat troughs.
+- [x] Spacing and amplitude that drift slowly, a stronger meander, and Y-junctions (blend two phase fields with slightly different wavenumbers in patches).
+- [x] More of them in lows and crater floors, fewer on high flat ground.
+- [x] Time it in Node. This term runs on every Mars query.
 
 **Verify.** Probe flight shots over Mars on high and on low.
 
 ---
+
+**As found:** the stripes in the aerial shot were mostly the transverse dunes (72 m apart, dark slip faces), not the ridges. Both now use two phase trains blended in patches for forks, extra meander octaves, and amplitude that varies along the crest. Mars costs +8% per query.
 
 ## 11. Gamepad and touch
 

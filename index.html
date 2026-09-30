@@ -772,6 +772,13 @@ var WIND_A = 0.9271, WIND_C = Math.cos(WIND_A), WIND_S = Math.sin(WIND_A);
 // Where sand has collected deep enough to build dunes. Shared with
 // the colour pass, because the sand is a different rock from the
 // dust it sits on and has to be shaded differently.
+// Across one dune: a long stoss slope, then the slip face at the angle
+// of repose. u counts dunes; its fraction is the place in one.
+function duneProfile(u) {
+  var f = u - Math.floor(u);
+  return f < 0.78 ? smoothT(f / 0.78) : 1 - (f - 0.78) / 0.22;
+}
+
 function duneMask(x, z) {
   return sstep(0.46, 0.66, fbm(x * 0.00042 + 12.1, z * 0.00042 - 5.4, 3));
 }
@@ -779,7 +786,8 @@ function duneMask(x, z) {
 function hMars(x, z) {
   var nx = x * 0.0016, nz = z * 0.0016;
 
-  var h = (fbm(nx, nz, 5) - 0.5) * 46;                         // regional slopes
+  var reg = fbm(nx, nz, 5);
+  var h = (reg - 0.5) * 46;                                    // regional slopes
   h += (fbm(nx * 5.1 + 21, nz * 5.1 - 8, 4) - 0.5) * 6.0;      // hummocky plains
   h += (fbm(nx * 19 - 4, nz * 19 + 9, 3) - 0.5) * 1.3;         // metre relief
 
@@ -797,18 +805,44 @@ function hMars(x, z) {
   // Transverse dunes: crests across the wind, a long gentle stoss
   // slope and a slip face standing at the angle of repose. Crests
   // meander because the wind is not a ruler.
+  // Real dune fields are not combed straight either: crests bend,
+  // split where two trains of dunes meet out of step, and rise and
+  // fall along their length. Two trains at 72 and 84 m share one
+  // meander and are blended in patches, so a slip face forks where
+  // they drift apart.
   var dk = duneMask(x, z);
   if (dk > 0.004) {
-    var u = (x * WIND_C + z * WIND_S) / 72 + valueNoise(x * 0.0026, z * 0.0026) * 1.7;
-    var f = u - Math.floor(u);
-    var prof = f < 0.78 ? smoothT(f / 0.78) : 1 - (f - 0.78) / 0.22;
-    h += (prof - 0.45) * dk * 7.5;
+    var sw = x * WIND_C + z * WIND_S;
+    var dm = valueNoise(x * 0.0026, z * 0.0026) * 1.7 + valueNoise(x * 0.0071 + 4, z * 0.0071 - 9) * 0.45;
+    var p1 = duneProfile(sw / 72 + dm), p2 = duneProfile(sw / 84 + dm * 1.12 + 0.41);
+    var dq = sstep(0.3, 0.7, valueNoise(x * 0.0021 - 11, z * 0.0021 + 5));
+    var da = 0.55 + 0.45 * valueNoise(x * 0.0052 + 13, z * 0.0052 + 2);
+    h += (p1 + (p2 - p1) * dq - 0.45) * dk * 7.5 * da;
   }
 
   // Transverse aeolian ridges: the metre-high, tens-of-metres-apart
-  // ripples that cover most of the planet between the dune fields.
-  var v = (x * WIND_C + z * WIND_S) / 26 + valueNoise(x * 0.004 + 50, z * 0.004) * 2.2;
-  h += (Math.abs(v - Math.floor(v) - 0.5) - 0.25) * 1.1 * (1 - dk * 0.6);
+  // ridges that cover most of the planet between the dune fields.
+  // Unlike dunes they are symmetric, and sharp-crested over broad flat
+  // troughs, about a fifteenth as tall as they are apart. They are not
+  // a ploughed field: they wander, fork and die out. Two sets at
+  // slightly different spacings share one meander and are blended in
+  // patches, so wherever they drift out of step a ridge forks in two;
+  // and they gather in the lows, where the sand that builds them
+  // collects.
+  var s = x * WIND_C + z * WIND_S;
+  var mea = valueNoise(x * 0.004 + 50, z * 0.004) * 2.2 + valueNoise(x * 0.011 - 7, z * 0.011 + 3) * 0.8 +
+            valueNoise(x * 0.023 + 2, z * 0.023 - 5) * 0.35;
+  var tq = sstep(0.3, 0.7, valueNoise(x * 0.008 + 9, z * 0.008 - 4));
+  // Along a crest the ridge grows and dies out every hundred metres or so.
+  var ta = 1.25 * (0.35 + 0.65 * valueNoise(x * 0.0016 - 3, z * 0.0016 + 7)) * sstep(0.15, 0.6, valueNoise(x * 0.011 + 31, z * 0.011 - 17))
+         * (1 - sstep(0.45, 0.62, reg)) * (1 - dk * 0.6);
+  if (ta > 0.002) {
+    var v1 = s / 26 + mea, v2 = s / 30 + mea * 1.15 + 0.37;
+    // Distance from the crest, 0 on it and 1 mid-trough; squared, the
+    // profile has a sharp crest and a flat floor, and a mean of 1/3.
+    var q1 = 1 - Math.abs(v1 - Math.floor(v1) - 0.5) * 2, q2 = 1 - Math.abs(v2 - Math.floor(v2) - 0.5) * 2;
+    h += ((q1 * q1) + (q2 * q2 - q1 * q1) * tq - 1 / 3) * ta;
+  }
 
   return h + craterAt(x, z);
 }
