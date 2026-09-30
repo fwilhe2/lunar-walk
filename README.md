@@ -29,6 +29,9 @@ Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" 
 | `G` | toggle surface / Earth gravity |
 | `Q` | rendering quality: high · medium · low |
 | `M` | sound on / off |
+| `Z` · right button | hold for a long lens — 15°, about a 250 mm Hasselblad lens |
+| `P` | save the frame as a PNG |
+| `H` | hide the HUD |
 | `Esc` | release pointer |
 
 Sun elevation is the interesting one. At 5° the craters are all rim and shadow, and every shadow is a black pool that reaches across the ground; at 60° an airless surface flattens into a grey wash and you can barely read the ground — which is exactly the problem Apollo crews had judging distance near lunar noon. Turn your back to the sun at any elevation and it happens again: the shadows all hide behind whatever casts them, and the ground washes out into a featureless glare around your own shadow. On Mars it does something else entirely: the whole sky dims and deepens with it, because the sky *is* the sunlit dust.

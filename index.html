@@ -57,6 +57,8 @@
   /* Demo: no crosshair, no key list, no readout, no tag — a
      screensaver has nothing to read, only to look past. */
   #hud.demo #crosshair, #hud.demo #keys, #hud.demo #readout { display: none; }
+  /* H: the same clean frame, by hand, for photographs. */
+  #hud.clean #crosshair, #hud.clean #keys, #hud.clean #readout { display: none; }
   #panel .alt { margin-top: 14px; font-size: 11px; letter-spacing: .12em;
                 text-transform: uppercase; color: #6e7681; cursor: pointer; }
   #panel .alt:hover { color: #d6dae0; }
@@ -2197,7 +2199,8 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 90000);
+const FOV0 = 72;   // vertical, degrees; the long lens (§12) narrows it
+const camera = new THREE.PerspectiveCamera(FOV0, innerWidth / innerHeight, 0.05, 90000);
 const yawObj = new THREE.Object3D();
 const pitchObj = new THREE.Object3D();
 yawObj.add(pitchObj); pitchObj.add(camera); scene.add(yawObj);
@@ -7821,7 +7824,8 @@ function setMode(next) {
 function updateKeysHelp() {
   const k = document.getElementById('keys');
   const tail = '<div><b>1</b>–<b>8</b> venus &middot; moon &middot; mars &middot; phobos &middot; deimos &middot; europa &middot; pluto &middot; charon &nbsp; <b>0</b> demo</div>' +
-    '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>M</b> sound &nbsp; <b>ESC</b> release</div>';
+    '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>M</b> sound &nbsp; <b>ESC</b> release</div>' +
+    '<div><b>Z</b> / right button zoom &nbsp; <b>P</b> photo &nbsp; <b>H</b> hide HUD</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
       '<div><b>R</b> dismount &nbsp; <b>F</b> fly</div>' + tail;
@@ -7856,6 +7860,10 @@ addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.code === 'KeyQ') note('QUALITY ' + quality.cycle());
+  // At full resolution: the governor may have lowered it, and a resize
+  // has to happen before a frame is drawn, not after (§10b).
+  if (e.code === 'KeyP') { quality.fullScale(); photoPending = true; }
+  if (e.code === 'KeyH') hud.classList.toggle('clean');
   if (e.code === 'KeyG') {
     setGravity(player.gravity === G_LIST[worldId] ? G_EARTH : G_LIST[worldId]);
   }
@@ -7896,11 +7904,55 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('mousemove', (e) => {
   if (!locked) return;
-  yawObj.rotation.y -= e.movementX * 0.0022;
+  // Slower through the long lens, so a pixel of mouse is still about
+  // a pixel of view.
+  const k = 0.0022 * camera.fov / FOV0;
+  yawObj.rotation.y -= e.movementX * k;
   const lo = mode === 'ROVER' ? -1.25 : -Math.PI / 2 + 0.02;
   const hi = mode === 'ROVER' ? 0.35 : Math.PI / 2 - 0.02;
-  pitchObj.rotation.x = THREE.MathUtils.clamp(pitchObj.rotation.x - e.movementY * 0.0022, lo, hi);
+  pitchObj.rotation.x = THREE.MathUtils.clamp(pitchObj.rotation.x - e.movementY * k, lo, hi);
 });
+
+/* ── Zoom and photographs ───────────────────────────────────────
+   Hold the right button, or Z, for a long lens: 72° eases to 15°,
+   about a 250 mm lens on the Hasselblads the Apollo crews carried,
+   which puts Earth across a third of the frame and Charon's canyons
+   in reach. Level of detail goes by distance, not by what the lens
+   magnifies, so it stops there: much narrower and the far rings'
+   facets show. Stars are points and stay points, and dust sizes
+   itself by the lens (§9). The eye meters whatever the lens is on,
+   so zoom onto a full Earth and it stops down until the clouds are
+   back.
+
+   P saves the frame as a PNG at full resolution — the canvas holds no
+   HUD, so nothing needs hiding — and H hides the HUD for looking. */
+const FOV_ZOOM = 15;
+let zoomHeld = false, zoomT = 0, photoPending = false;
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2) zoomHeld = true; });
+addEventListener('mouseup', (e) => { if (e.button === 2) zoomHeld = false; });
+function stepZoom(dt) {
+  const target = zoomHeld || keys.KeyZ ? 1 : 0;
+  if (zoomT === target) return;
+  zoomT += (target - zoomT) * Math.min(1, dt * 8);
+  if (Math.abs(target - zoomT) < 0.002) zoomT = target;
+  camera.fov = FOV0 * Math.pow(FOV_ZOOM / FOV0, zoomT);   // even in log: a steady zoom
+  camera.updateProjectionMatrix();
+}
+function takePhoto() {
+  const f = (x) => Math.round(x);
+  const name = 'surface-walk_' + worldId + '_' + f(player.pos.x) + 'E_' + f(-player.pos.z) + 'N_sun' +
+    (sunElev * 180 / Math.PI).toFixed(0) + '.png';
+  renderer.domElement.toBlob((b) => {
+    if (!b) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }, 'image/png');
+  note('PHOTO ' + name);
+}
 
 const clock = new THREE.Clock();
 const fwd = new THREE.Vector3(), right = new THREE.Vector3(), wish = new THREE.Vector3();
@@ -8380,7 +8432,7 @@ function placeShadowRig(light, x, y, z) {
 /* What the suit hears this frame: how hard you are working, as a
    share of a run at this body's pace; the jets firing; the rover's
    motors, and its springs bottoming out when it lands off a crest. */
-let roverWasAir = false;
+let roverAir = 0;
 function stepSound(dt) {
   let work = 0.05, jets = 0, rv = null;
   if (mode === 'EVA') {
@@ -8396,8 +8448,10 @@ function stepSound(dt) {
     const drive = keys.KeyW || keys.KeyS || keys.ArrowUp || keys.ArrowDown ? 1 : 0;
     rv = { v: st.vel, drive };
     work = 0.1;
-    if (roverWasAir && !st.air) sound.step(Math.min(1.2, 0.3 + Math.abs(st.vy) * 0.4));
-    roverWasAir = st.air;
+    // st.air counts seconds with no wheel down; a real flight, not a
+    // frame's skip over a bump, lands with a knock through the seat.
+    if (st.air > 0) roverAir = st.air;
+    else if (roverAir > 0) { if (roverAir > 0.12) sound.step(Math.min(1.2, 0.3 + roverAir * 1.5)); roverAir = 0; }
   }
   sound.update(dt, work, jets, rv);
 }
@@ -8772,8 +8826,11 @@ renderer.setAnimationLoop(() => {
   gradePass.uniforms.uTime.value = elapsed;
   eyePass.uniforms.uDt.value = dt;
   quality.tick();       // first: a resize after rendering blanks the frame
+  stepZoom(dt);
   step(dt, elapsed);
   composer.render();
+  // In the same task as the drawing, while the canvas still holds it.
+  if (photoPending) { photoPending = false; takePhoto(); }
 });
 
 addEventListener('resize', () => {

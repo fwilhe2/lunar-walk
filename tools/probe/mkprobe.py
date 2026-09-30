@@ -23,8 +23,8 @@ def rep(a, b):
     src = src.replace(a, b)
 
 
-rep("  composer.render();\n});",
-    "  composer.render();\n  if (window.__afterRender) window.__afterRender();\n});")
+rep("  composer.render();\n",
+    "  composer.render();\n  if (window.__afterRender) window.__afterRender();\n")
 rep("      if (!everStarted) overlay.hidden = false;",
     "      if (!window.__probeStarted) { window.__probeStarted = 1; everStarted = true; setTimeout(__probeMain, 0); }")
 

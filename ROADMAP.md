@@ -162,18 +162,18 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 7. Zoom and photo mode
+## 7. Zoom and photo mode ✅
 
 **Why.** The camera is 72° vertical (`PerspectiveCamera(72, …)`), which is 104° across at 16:9. Charon near a corner of the frame renders about 1.3× stretched, and the sky bodies are small.
 
 **Substeps**
-- [ ] Hold right mouse (or `Z`) to ease the field of view to a telephoto (around 15°). Scale look sensitivity by the FOV ratio, and ease back on release.
-- [ ] Audit what depends on the field of view. LOD is chosen by distance, so magnified far chunks look coarse: cap the zoom where LOD still holds, or bias LOD while zoomed. Also check the eye meter's centre weighting.
-- [ ] Screenshot key (`P`):
-  - [ ] hide the HUD for one frame at full resolution scale;
-  - [ ] capture right after `composer.render()` in the loop (as the probe does) with `toBlob`;
-  - [ ] download a PNG named by world, position and sun elevation.
-- [ ] A clean photo mode that reuses the demo's chrome-free view.
+- [x] Hold right mouse (or `Z`) to ease the field of view to a telephoto (around 15°). Scale look sensitivity by the FOV ratio, and ease back on release.
+- [x] Audit what depends on the field of view. Zoom is capped at 15°, where distance-chosen LOD still holds; dust already sized itself by the lens (PR #4); stars stay points; the eye meters what the lens is on.
+- [x] Screenshot key (`P`):
+  - [x] at full resolution scale (the canvas holds no HUD, so nothing needs hiding);
+  - [x] capture right after `composer.render()` in the loop (as the probe does) with `toBlob`;
+  - [x] download a PNG named by world, position and sun elevation.
+- [x] A clean photo mode that reuses the demo's chrome-free view.
 
 **Verify.** Probe zoomed onto Charon from Pluto: round at the frame centre. The screenshot works in Firefox and Chromium.
 
