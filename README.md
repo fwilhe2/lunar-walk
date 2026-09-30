@@ -32,6 +32,7 @@ Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" 
 | `Z` · right button | hold for a long lens — 15°, about a 250 mm Hasselblad lens |
 | `P` | save the frame as a PNG |
 | `H` | hide the HUD |
+| `L` | copy a link to this exact view — world, place, heading, sun |
 | `Esc` | release pointer |
 
 Sun elevation is the interesting one. At 5° the craters are all rim and shadow, and every shadow is a black pool that reaches across the ground; at 60° an airless surface flattens into a grey wash and you can barely read the ground — which is exactly the problem Apollo crews had judging distance near lunar noon. Turn your back to the sun at any elevation and it happens again: the shadows all hide behind whatever casts them, and the ground washes out into a featureless glare around your own shadow. On Mars it does something else entirely: the whole sky dims and deepens with it, because the sky *is* the sunlit dust.
@@ -205,6 +206,12 @@ On top of the tier, the internal resolution floats: it is measured once a second
 There is none from outside, on six of the eight — nothing carries it. What you hear is what reaches you through the suit: your own breathing in the helmet, quickening as you work and slowing back over half a minute; the backpack's fans and pump; your boots striking the ground, carried up through your bones as a dead thud with the grit of the soil in it; the jets hissing through the backpack frame; the rover's hub motors and its springs bottoming out, through the seat. Apollo crews heard their rover only that way. When something comes over the loop, the Quindar tones key and unkey it, 2525 and 2475 Hz.
 
 On Mars six millibars of CO₂ does carry sound, badly — about 20 dB quieter than at home, the highs absorbed within metres — so the grit under your boots and the rover's motors reach you through the air too, faintly, and the wind is a low rumble at the edge of hearing. On Venus the air is a twentieth as dense as water, sound carries loud and far, and a breeze of a metre a second, pushing 32 pascals against you where a Martian gale pushes one, is a roar. Everything is synthesised; nothing is fetched. `M` turns it off.
+
+## Finding your way
+
+There is no map, and on an unbounded surface the one fixed point is where you landed. A heading tape runs along the top of the view — north is −z, as the position readout counts it — with the flag (or the beacon) on it, the sun, and whatever hangs overhead; when the flag is behind you, its mark waits at the edge you would turn toward. The readout gives its distance and bearing. Apollo 14 walked to within a few tens of metres of Cone crater's rim and turned back without knowing: on the Moon the horizon is two and a half kilometres away, and everything on it looks the same distance off.
+
+Because every surface is a pure function of where you stand, where you stand is enough to share a view: the address bar always holds the world, the place, the heading and the sun (`#w=moon&x=…`), and `L` copies it. Anyone who opens the link stands where you stood, under the same sun. Shared positions stop at 100 km from the landing site, where the 32-bit vertex coordinates start to quantise at a centimetre.
 
 ## Demo mode
 

@@ -179,18 +179,18 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 8. Shareable views and a compass
+## 8. Shareable views and a compass ✅
 
 **Why.** Everything is deterministic, so world, position, view direction and sun elevation in a URL reproduce a view exactly. A compass helps on a surface with no edge; Apollo 14 walked to within about 20 m of Cone crater's rim without knowing it.
 
 **Substeps**
-- [ ] Encode `#w=moon&x=…&z=…&yaw=…&pitch=…&sun=…&m=eva`. Update it with `history.replaceState` about once a second, or copy it to the clipboard on a key.
-- [ ] On boot, parse it: `applyWorld(id)`, then teleport behind the loading screen until `pending() === 0`, the way `applyWorld` does. Reset rocks, prints and dust.
-- [ ] Precision: chunk vertices are Float32 world coordinates, which quantise to about 8 mm at 100 km and 6 cm at 1000 km. Clamp shared positions to ±100 km, or build a floating origin first as its own job.
-- [ ] HUD compass:
-  - [ ] a heading tape, with north = −z to match the position readout;
-  - [ ] bearing and distance to the landmark;
-  - [ ] a sun-azimuth tick.
+- [x] Encode `#w=moon&x=…&z=…&yaw=…&pitch=…&sun=…&m=eva`. Update it with `history.replaceState` about once a second, or copy it to the clipboard on a key.
+- [x] On boot, parse it: `applyWorld(id)`, then teleport behind the loading screen until `pending() === 0`, the way `applyWorld` does. Reset rocks, prints and dust.
+- [x] Precision: chunk vertices are Float32 world coordinates, which quantise to about 8 mm at 100 km and 6 cm at 1000 km. Shared positions are clamped to ±100 km. (No floating origin.)
+- [x] HUD compass:
+  - [x] a heading tape, with north = −z to match the position readout;
+  - [x] bearing and distance to the landmark;
+  - [x] a sun-azimuth tick.
 
 **Verify.** A link opened in a fresh probe profile renders the same frame.
 

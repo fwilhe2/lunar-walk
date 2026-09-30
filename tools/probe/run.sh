@@ -6,7 +6,8 @@
 # OUT_DIR gets probe.log, shots/*.jpg and a Firefox profile of its own.
 # The driver is a file defining `async function drive(probe)`; see lib.js.
 # Only the processes this script starts are ever killed, and probe.html
-# is removed on the way out.
+# is removed on the way out. PROBE_HASH (e.g. '#w=mars&x=100&z=0') opens
+# the page at a shared view.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -37,6 +38,8 @@ cleanup() {
   [ -n "$FF" ] && kill $(tree "$FF") "$FF" 2>/dev/null
   kill "$SERVER" 2>/dev/null
   rm -f "$ROOT/probe.html"
+  # A profile is ~120 MB of cache, and /tmp is often RAM: don't keep it.
+  sleep 1; [ -z "${PROBE_KEEP_PROFILE:-}" ] && rm -rf "$OUT/profile"
 }
 trap cleanup EXIT INT TERM
 sleep 1
@@ -44,7 +47,7 @@ sleep 1
 W=${SIZE%x*}; H=${SIZE#*x}
 LIBGL_ALWAYS_SOFTWARE=1 MOZ_HEADLESS=1 MOZ_HEADLESS_WIDTH=$W MOZ_HEADLESS_HEIGHT=$H \
   firefox --profile "$OUT/profile" --no-remote --new-instance \
-  "http://127.0.0.1:$PORT/probe.html" >| "$OUT/firefox.out" 2>&1 &
+  "http://127.0.0.1:$PORT/probe.html${PROBE_HASH:-}" >| "$OUT/firefox.out" 2>&1 &
 FF=$!
 
 T0=$(date +%s)

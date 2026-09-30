@@ -27,6 +27,7 @@
   #readout .v { color: #eaeaee; }
   #readout .warn { color: #e8b04b; }
 
+  #compass { position: absolute; left: 50%; top: 12px; width: 360px; height: 30px; margin-left: -180px; }
   #keys { position: absolute; right: 20px; bottom: 18px; text-align: right; color: #6a717a; text-shadow: 0 1px 3px #000; }
   #keys b { color: #99a2ac; font-weight: 600; }
 
@@ -56,9 +57,9 @@
 
   /* Demo: no crosshair, no key list, no readout, no tag — a
      screensaver has nothing to read, only to look past. */
-  #hud.demo #crosshair, #hud.demo #keys, #hud.demo #readout { display: none; }
+  #hud.demo #crosshair, #hud.demo #keys, #hud.demo #readout, #hud.demo #compass { display: none; }
   /* H: the same clean frame, by hand, for photographs. */
-  #hud.clean #crosshair, #hud.clean #keys, #hud.clean #readout { display: none; }
+  #hud.clean #crosshair, #hud.clean #keys, #hud.clean #readout, #hud.clean #compass { display: none; }
   #panel .alt { margin-top: 14px; font-size: 11px; letter-spacing: .12em;
                 text-transform: uppercase; color: #6e7681; cursor: pointer; }
   #panel .alt:hover { color: #d6dae0; }
@@ -70,6 +71,7 @@
 
 <div id="hud" hidden>
   <div id="crosshair"></div>
+  <canvas id="compass"></canvas>
   <div id="readout">
     <div><span class="k">BODY     </span><span class="warn" id="r-world">MOON</span> <span class="k" id="r-site">Mare Tranquillitatis</span></div>
     <div><span class="k">MODE     </span><span class="warn" id="r-mode">EVA</span></div>
@@ -77,6 +79,7 @@
     <div><span class="k">VELOCITY </span><span class="v" id="r-v">0.00 m/s</span></div>
     <div><span class="k">ALTITUDE </span><span class="v" id="r-a">0.00 m</span></div>
     <div><span class="k">POSITION </span><span class="v" id="r-p">0 E &middot; 0 N</span></div>
+    <div><span class="k">HEADING  </span><span class="v" id="r-hdg">000°</span> <span class="k" id="r-home"></span></div>
     <div><span class="k">SUN ELEV </span><span class="v" id="r-s">16.0°</span></div>
     <div id="r-pushline" hidden><span class="k">PUSH     </span><span class="v" id="r-push"></span></div>
     <div id="r-gasline" hidden><span class="k">N₂ JETS  </span><span class="v" id="r-gas"></span></div>
@@ -7763,6 +7766,7 @@ const el = {
   world: document.getElementById('r-world'), site: document.getElementById('r-site'),
   note: document.getElementById('r-note'),
   fps: document.getElementById('r-fps'),
+  hdg: document.getElementById('r-hdg'), home: document.getElementById('r-home'),
   doseLine: document.getElementById('r-doseline'),
   pushLine: document.getElementById('r-pushline'), push: document.getElementById('r-push'),
   gasLine: document.getElementById('r-gasline'), gas: document.getElementById('r-gas'),
@@ -7825,7 +7829,7 @@ function updateKeysHelp() {
   const k = document.getElementById('keys');
   const tail = '<div><b>1</b>–<b>8</b> venus &middot; moon &middot; mars &middot; phobos &middot; deimos &middot; europa &middot; pluto &middot; charon &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>M</b> sound &nbsp; <b>ESC</b> release</div>' +
-    '<div><b>Z</b> / right button zoom &nbsp; <b>P</b> photo &nbsp; <b>H</b> hide HUD</div>';
+    '<div><b>Z</b> / right button zoom &nbsp; <b>P</b> photo &nbsp; <b>H</b> hide HUD &nbsp; <b>L</b> copy link</div>';
   if (mode === 'ROVER') {
     k.innerHTML = '<div><b>W S</b> throttle / brake &nbsp; <b>A D</b> steer</div>' +
       '<div><b>R</b> dismount &nbsp; <b>F</b> fly</div>' + tail;
@@ -7864,6 +7868,13 @@ addEventListener('keydown', (e) => {
   // has to happen before a frame is drawn, not after (§10b).
   if (e.code === 'KeyP') { quality.fullScale(); photoPending = true; }
   if (e.code === 'KeyH') hud.classList.toggle('clean');
+  if (e.code === 'KeyL') {
+    lastHash = viewHash();
+    try { history.replaceState(null, '', '#' + lastHash); } catch (err) { /* no address bar */ }
+    const url = location.href.split('#')[0] + '#' + lastHash;
+    if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => note('LINK COPIED'), () => note(url));
+    else note(url);
+  }
   if (e.code === 'KeyG') {
     setGravity(player.gravity === G_LIST[worldId] ? G_EARTH : G_LIST[worldId]);
   }
@@ -7953,6 +7964,136 @@ function takePhoto() {
   }, 'image/png');
   note('PHOTO ' + name);
 }
+
+/* ── Compass ────────────────────────────────────────────────────
+   A heading tape along the top: 120° of it, north at −z as the
+   POSITION readout counts it, and on it the flag (or beacon), the sun
+   and whatever hangs overhead. The surface has no edge, so the flag
+   is the one fixed point on it; off the tape, its mark waits at the
+   end you would turn toward. Apollo 14 walked to within a few tens of
+   metres of Cone crater's rim and turned back, not knowing it was
+   there — the horizon on the Moon is two and a half kilometres off,
+   and everything on it looks the same distance away. */
+const HOME_X = 8, HOME_Z = -11;           // where landmark() stands the flag or beacon
+const compass = (() => {
+  const cv = document.getElementById('compass'), g = cv.getContext('2d');
+  const W = 360, H = 30, SPAN = 120;
+  const NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  let dpr = 0;
+  return {
+    // marks: [{ brg, glyph, color, pin }] — pin: hold at the edge when off the tape.
+    draw(hdg, marks) {
+      const d = Math.min(devicePixelRatio || 1, 2);
+      if (d !== dpr) { dpr = d; cv.width = W * d; cv.height = H * d; }
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, W, H);
+      const off = (b) => ((((b - hdg) % 360) + 540) % 360) - 180;
+      g.font = '10px ui-monospace, Menlo, monospace';
+      g.textAlign = 'center';
+      g.shadowColor = '#000'; g.shadowBlur = 3;
+      for (let b = 0; b < 360; b += 5) {
+        const px = W / 2 + off(b) * W / SPAN;
+        if (px < 2 || px > W - 2) continue;
+        const major = b % 45 === 0, mid = b % 15 === 0;
+        g.fillStyle = major ? 'rgba(234,234,238,.9)' : 'rgba(140,148,158,.75)';
+        g.fillRect(Math.round(px), 13, 1, major ? 7 : mid ? 5 : 3);
+        // Cardinal points by name; between them, every 30°, in tens of
+        // degrees as a runway or a heading bug reads them: 24 is 240°.
+        if (major) g.fillText(NAMES[b / 45], px, 10);
+        else if (b % 30 === 0) { g.fillStyle = 'rgba(115,123,133,.8)'; g.fillText(String(b / 10), px, 10); }
+      }
+      g.fillStyle = '#e8b04b';
+      g.fillRect(W / 2 - 1, 12, 2, 10);
+      for (const m of marks) {
+        let o = off(m.brg), glyph = m.glyph;
+        if (Math.abs(o) > SPAN / 2 - 3) {
+          if (!m.pin) continue;
+          glyph = o < 0 ? '◂' : '▸';
+          o = Math.sign(o) * (SPAN / 2 - 3);
+        }
+        g.fillStyle = m.color;
+        g.fillText(glyph, W / 2 + o * W / SPAN, 30);
+      }
+    },
+  };
+})();
+const bearing = (dx, dz) => ((Math.atan2(dx, -dz) * 180 / Math.PI) + 360) % 360;
+const _cmpMarks = [];
+function drawCompass() {
+  const hdg = ((-yawObj.rotation.y * 180 / Math.PI) % 360 + 360) % 360;
+  const f = mode === 'ROVER' ? rover.state.pos : player.pos;
+  const hx = HOME_X - f.x, hz = HOME_Z - f.z, dist = Math.hypot(hx, hz);
+  _cmpMarks.length = 0;
+  _cmpMarks.push({ brg: bearing(hx, hz), glyph: '▲', color: '#e8b04b', pin: true });
+  if (!world.noSun && sunElev > -0.02) _cmpMarks.push({ brg: bearing(SUN_DIR.x, SUN_DIR.z), glyph: '●', color: '#fff3c8' });
+  if (liveCompanions.length) { const c = liveCompanions[0].userData.pos; _cmpMarks.push({ brg: bearing(c.x, c.z), glyph: '○', color: '#b8c7e0' }); }
+  compass.draw(hdg, _cmpMarks);
+  el.hdg.textContent = String(Math.round(hdg) % 360).padStart(3, '0') + '°';
+  el.home.textContent = (world.landmark === 'beacon' ? 'BEACON ' : 'FLAG ') +
+    (dist < 1000 ? Math.round(dist) + ' m' : (dist / 1000).toFixed(dist < 10000 ? 2 : 1) + ' km') +
+    ' · ' + String(Math.round(bearing(hx, hz)) % 360).padStart(3, '0') + '°';
+}
+
+/* ── Shareable views ────────────────────────────────────────────
+   Every surface is a pure function of where you stand, so where you
+   stand, where you look and where the sun is reproduce a view
+   exactly, for anyone: the address bar keeps them (#w=moon&x=…), a
+   second after they change, and L copies the link. Opening one flies
+   you there behind the loading screen. Chunk vertices are 32-bit
+   world coordinates, which quantise to about a centimetre at 100 km,
+   so shared positions stop there. */
+const VIEW_LIM = 100000;
+let hashTimer = 0, lastHash = '';
+function viewHash() {
+  const f = mode === 'ROVER' ? rover.state.pos : player.pos;
+  const r1 = (v) => Math.round(v * 10) / 10, r3 = (v) => Math.round(v * 1000) / 1000;
+  let h = 'w=' + worldId + '&x=' + r1(f.x) + '&z=' + r1(f.z) + '&yaw=' + r3(yawObj.rotation.y) +
+    '&pitch=' + r3(pitchObj.rotation.x) + '&sun=' + r1(sunElev * 180 / Math.PI);
+  if (mode === 'FLY') h += '&h=' + r1(player.pos.y - terrainHeight(f.x, f.z));
+  return h;
+}
+function stepHash(dt) {
+  if ((hashTimer -= dt) > 0 || demo.on || loading) return;
+  hashTimer = 1;
+  const h = viewHash();
+  if (h === lastHash) return;
+  lastHash = h;
+  try { history.replaceState(null, '', '#' + h); } catch (e) { /* sandboxed: no address bar */ }
+}
+function parseView(hash) {
+  const q = new URLSearchParams(String(hash).replace(/^#/, ''));
+  const w = q.get('w');
+  if (!w || !VIEW[w]) return null;
+  const num = (k) => { const v = parseFloat(q.get(k)); return Number.isFinite(v) ? v : undefined; };
+  const lim = (v) => THREE.MathUtils.clamp(v ?? 0, -VIEW_LIM, VIEW_LIM);
+  return { w, x: lim(num('x')), z: lim(num('z')), yaw: num('yaw'), pitch: num('pitch'), sun: num('sun'), h: num('h') };
+}
+function goTo(v) {
+  if (v.w !== worldId) applyWorld(v.w);
+  if (v.sun !== undefined) {
+    sunElev = THREE.MathUtils.clamp(v.sun * Math.PI / 180, world.night ? -1.35 : 0.045, 1.35);
+    updateSunDir(); updateSkyColors();
+  }
+  setMode(v.h !== undefined ? 'FLY' : 'EVA');
+  const h = v.h !== undefined ? THREE.MathUtils.clamp(v.h, 0.6, FLY_CEILING) : EYE;
+  player.pos.set(v.x, terrainHeight(v.x, v.z) + h, v.z);
+  player.vel.set(0, 0, 0);
+  player.onGround = v.h === undefined;
+  if (v.yaw !== undefined) yawObj.rotation.y = v.yaw;
+  if (v.pitch !== undefined) pitchObj.rotation.x = THREE.MathUtils.clamp(v.pitch, -1.55, 1.55);
+  yawObj.position.copy(player.pos);
+  dust.clear();
+  // Stream the new place in behind the loading screen, as a new world does.
+  loading = true; boot.hidden = false;
+  chunkStreamer.update(v.x, v.z);
+  rockSystem.update(v.x, v.z);
+  lastHash = viewHash();
+}
+addEventListener('hashchange', () => {
+  if (location.hash.slice(1) === lastHash) return;
+  const v = parseView(location.hash);
+  if (v) goTo(v);
+});
 
 const clock = new THREE.Clock();
 const fwd = new THREE.Vector3(), right = new THREE.Vector3(), wish = new THREE.Vector3();
@@ -8499,6 +8640,7 @@ function step(dt, t) {
   dust.update(dt, player.gravity, world.dustDrag);
   dust.light();
   stepSound(dt);
+  stepHash(dt);
   if (world.dose) doseSv += world.dose * dt / 86400;
 
   if (noteTimer > 0 && (noteTimer -= dt) <= 0) el.note.textContent = '';
@@ -8509,6 +8651,7 @@ function step(dt, t) {
     el.v.textContent = hudSpeed.toFixed(2) + ' m/s';
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
+    drawCompass();
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';   // the demo moves it
     if (world.dose) el.dose.textContent = doseSv < 1 ? (doseSv * 1000).toFixed(1) + ' mSv' : doseSv.toFixed(3) + ' Sv';
     // How hard the push being wound up is, and what it will launch you at.
@@ -8801,7 +8944,12 @@ const worldButtons = WORLD_IDS.map((id) => {
 
 gradePass.uniforms.uRes.value.set(innerWidth, innerHeight);
 let loading, elapsed = 0, everStarted = false;
-applyWorld('moon');
+// Opened from a shared link: that world, that place, that sun.
+{
+  const shared = parseView(location.hash);
+  applyWorld(shared ? shared.w : 'moon');
+  if (shared) goTo(shared);
+}
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
