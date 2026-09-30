@@ -196,22 +196,24 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 9. Landers
+## 9. Landers ✅ (Moon)
 
 **Why.** The landing site has only a flag or a beacon. A lander, built from primitives like the rover, would be the iconic landmark and a good test object for shadows.
 
 **Substeps**
-- [ ] Moon: the Apollo LM, complete (ascent stage on, since you're still here), at real dimensions:
+- [x] Moon: the Apollo LM, complete (ascent stage on, since you're still here), at real dimensions:
   - descent stage about 4.2 m across;
   - four legs with footpads about 0.9 m wide, spread about 9.4 m;
   - gold and black foil, descent engine bell, forward ladder and porch;
   - about 7 m tall in all.
-- [ ] Put each footpad on `terrainHeight()` independently, like the rover's wheels, and level the body from the pads. Merge by material (`mergeInto`) to hold draw calls down.
-- [ ] Materials through `surfacePatch(…, 'object')` (lifted terrain shadows), casting into both cascades.
-- [ ] Blast zone: a brightened halo around the site (LROC sees one at every Apollo landing). Make it a colour-only side output in the kernel's colour pass, like `CR_ALB`, which physics ignores. No pebbles inside the scoured radius.
-- [ ] Collision: simple cylinders for pads, legs and body in `stepEVA` and the rover.
-- [ ] Placement: the opening view (`world.look`) still frames the flag and the companion.
-- [ ] Later: Viking on Mars, Venera on Venus, a generic lander elsewhere. Keep the beacon on the moonlets.
+
+  Placed 24 m east of the site, under Earth in the opening view, on the levellest spot nearby (0.5° tilt).
+- [x] Put each footpad on `terrainHeight()` independently, like the rover's wheels, and level the body from the pads. Merge by material (`mergeInto`) to hold draw calls down.
+- [x] Materials through `surfacePatch(…, 'object')` (lifted terrain shadows), casting into both cascades.
+- [x] Blast zone: a brightened halo around the site (LROC sees one at every Apollo landing). Make it a colour-only side output in the kernel's colour pass, like `CR_ALB`, which physics ignores. No pebbles inside the scoured radius.
+- [x] Collision: simple cylinders for pads, legs and body in `stepEVA` and the rover.
+- [x] Placement: the opening view (`world.look`) still frames the flag and the companion.
+- [ ] Later: Viking on Mars, Venera on Venus, a generic lander elsewhere. Keep the beacon on the moonlets. (Not done.)
 
 **Verify.** Low-sun probe shots: shadows attached at the pads, and no floating pads on slopes.
 

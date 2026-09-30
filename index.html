@@ -248,6 +248,9 @@ var WORLDS = {
     // Fresh ejecta is immature — not yet darkened by the solar wind
     // and micrometeorites — so every young crater wears a bright halo.
     halo: 0.55,
+    // Where the lunar module stands (§6c). Its descent engine blew the
+    // fines off the ground around it; the colour pass brightens that.
+    lander: [23.8, -2.9],
   },
 
   /* Mars. Craters below a few metres do not survive: dust settles
@@ -1464,6 +1467,13 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, out) {
     v += highlandMask(x, z) * 0.22;
     v += fresh * WORLD.halo;
     v *= 0.88 + valueNoise(x * 0.07, z * 0.07) * 0.26;
+    // The blast zone: LROC sees every Apollo descent stage in a halo of
+    // soil some 10% brighter, a hundred-odd metres across, where the
+    // engine swept the fluffy top layer away (Clegg et al. 2014).
+    if (WORLD.lander) {
+      var bx = x - WORLD.lander[0], bz = z - WORLD.lander[1], b2 = bx * bx + bz * bz;
+      if (b2 < 32400) v *= 1 + 0.12 * (1 - sstep(35, 180, Math.sqrt(b2)));
+    }
     v = v < 0.30 ? 0.30 : v > 1.45 ? 1.45 : v;
     out[0] = v * 1.005; out[1] = v; out[2] = v * 0.975;
 
@@ -3884,8 +3894,12 @@ const rockSystem = (() => {
     const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
     const slots = [];   // { x, z, size }
+    const LS = WORLD.lander;
     const consider = (x, z, size) => {
       if (x < x0 || x >= x0 + SIZE || z < z0 || z >= z0 + SIZE) return;
+      // Nothing under the lander: it came down on a clear patch, and its
+      // engine swept the pebbles out from under it.
+      if (LS && (x - LS[0]) ** 2 + (z - LS[1]) ** 2 < 42) return;
       if (slots.length >= MAXR) return;
       slots.push({ x, z, size });
     };
@@ -4160,6 +4174,281 @@ const landmark = (() => {
       cube.castShadow = true;
       group.add(cube);
     }
+  };
+})();
+
+/* ═════════════════════════════════════════════════════════════
+   6c. THE LANDER — the lunar module you came down in, where the
+   world's row says it stands (WORLD.lander): built from primitives to
+   the real thing's dimensions, as the rover is.
+
+   The descent stage is an octagon 4.2 m across in crinkled gold
+   Kapton, black on its upper deck, with the engine bell under it;
+   four legs on 0.94 m footpads spread 9.4 m corner to corner, three
+   with their contact probes bent over on the ground; the porch, and
+   a ladder that stops a long step short of the forward pad. On it
+   the ascent stage, still there because you have not left yet: the
+   crew cabin with its two triangular windows and the hatch below
+   them, the aft equipment bay, the docking tunnel, four RCS quads
+   and the dishes. Seven metres in all.
+
+   Each pad stands on the ground where it is. The stage is levelled
+   on the plane through the four, and the legs' crushable struts take
+   up the rest, as the real ones did. The group follows the ground's
+   curvature drop around the streaming anchor, so it stays on the
+   drawn mesh from any distance, and it keeps walkers and the rover
+   out of its body and off its pads.
+   ═════════════════════════════════════════════════════════════ */
+const lander = (() => {
+  const group = new THREE.Group();
+  scene.add(group);
+  let site = null, baseH = 0, yaw = 0;
+  const FOOT_R = 4.72, BODY_R = 2.3;
+
+  // Gold foil is never flat: a normal map of creases, generated.
+  const crinkle = (() => {
+    const S = 256, hgt = new Float32Array(S * S);
+    let sd = 1969;
+    const rnd = () => (sd = (sd * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let k = 0; k < 900; k++) {
+      // A crease: a short ridge or trough, at any angle.
+      const cx = rnd() * S, cy = rnd() * S, a = rnd() * Math.PI, len = 6 + rnd() * 26, w = 1 + rnd() * 3, amp = (rnd() - 0.5) * 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      for (let y = -len; y <= len; y++) for (let x = -w * 2; x <= w * 2; x++) {
+        const px = Math.round(cx + ca * y - sa * x), py = Math.round(cy + sa * y + ca * x);
+        const i = ((py % S + S) % S) * S + ((px % S + S) % S);
+        hgt[i] += amp * Math.max(0, 1 - Math.abs(x) / (w * 2)) * (1 - Math.abs(y) / len);
+      }
+    }
+    const data = new Uint8Array(S * S * 4);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const i = y * S + x;
+      const dx = hgt[y * S + ((x + 1) % S)] - hgt[y * S + ((x + S - 1) % S)];
+      const dy = hgt[((y + 1) % S) * S + x] - hgt[((y + S - 1) % S) * S + x];
+      const nx = -dx * 0.9, ny = -dy * 0.9, l = 1 / Math.hypot(nx, ny, 1);
+      data[i * 4] = (nx * l * 0.5 + 0.5) * 255; data[i * 4 + 1] = (ny * l * 0.5 + 0.5) * 255;
+      data[i * 4 + 2] = (l * 0.5 + 0.5) * 255; data[i * 4 + 3] = 255;
+    }
+    const t = new THREE.DataTexture(data, S, S);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.needsUpdate = true;
+    return t;
+  })();
+
+  const obj = (o) => surfacePatch(new THREE.MeshStandardMaterial(o), 'object');
+  const M = {
+    gold: obj({ color: 0xc79a3c, metalness: 0.9, roughness: 0.32, normalMap: crinkle, normalScale: new THREE.Vector2(0.6, 0.6) }),
+    black: obj({ color: 0x1c1d20, metalness: 0.1, roughness: 0.7 }),
+    silver: obj({ color: 0xaab0b6, metalness: 0.65, roughness: 0.42 }),
+    grey: obj({ color: 0x5a5f66, metalness: 0.45, roughness: 0.5 }),
+    bell: obj({ color: 0x3b3a38, metalness: 0.6, roughness: 0.45, side: THREE.DoubleSide }),
+    glass: obj({ color: 0x0c0f14, metalness: 0.2, roughness: 0.08 }),
+  };
+
+  // Cylinder from a to b (local coordinates), radius r.
+  const _up = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
+  function rod(parent, mat, a, b, r, seg = 8) {
+    _d.subVectors(b, a);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, _d.length(), seg), mat);
+    m.position.addVectors(a, b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(_up, _d.normalize());
+    parent.add(m);
+    return m;
+  }
+  function box(parent, mat, w, h, d, x, y, z, ry = 0) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.rotation.y = ry;
+    parent.add(m);
+    return m;
+  }
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+  // pads[k]: how far pad k sits above the stage's plane (the struts
+  // absorb it). Local frame: +x forward, the ladder leg.
+  function build(pads) {
+    const g = new THREE.Group();
+    const Y0 = 1.42, Y1 = 3.07;                      // descent stage, bottom and top
+    // Descent stage: the octagon, its black deck, the engine bell.
+    const oct = new THREE.Mesh(new THREE.CylinderGeometry(2.11, 2.11, Y1 - Y0, 8, 1), M.gold);
+    oct.rotation.y = Math.PI / 8; oct.position.y = (Y0 + Y1) / 2; g.add(oct);
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(2.13, 2.13, 0.08, 8, 1), M.black);
+    deck.rotation.y = Math.PI / 8; deck.position.y = Y1 - 0.02; g.add(deck);
+    const under = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 0.06, 8, 1), M.black);
+    under.rotation.y = Math.PI / 8; under.position.y = Y0; g.add(under);
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.78, 1.15, 24, 1, true), M.bell);
+    bell.position.y = Y0 - 0.55; g.add(bell);
+    // Black panels on alternate faces of the stage.
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2 + Math.PI / 4;
+      box(g, M.black, 0.06, 1.1, 1.3, Math.cos(a) * 1.96, (Y0 + Y1) / 2, -Math.sin(a) * 1.96, a);
+    }
+    // Legs.
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2, ca = Math.cos(a), sa = -Math.sin(a);
+      const L = (r, y) => V(ca * r, y, sa * r);
+      const Lt = (r, y, t) => V(ca * r - sa * t, y, sa * r + ca * t);   // t: across the leg
+      const py = pads[k];
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.38, 0.16, 18), M.silver);
+      pad.position.copy(L(FOOT_R, py + 0.05)); g.add(pad);
+      // The primary strut, gold-wrapped, and its two secondaries.
+      rod(g, M.gold, L(2.08, 2.55), L(FOOT_R, py + 0.2), 0.085);
+      for (const t of [-1, 1]) rod(g, M.silver, Lt(FOOT_R - 0.45, py + 0.65, 0), Lt(1.75, Y0 + 0.05, t * 1.05), 0.045);
+      // The deployment truss up to the deck.
+      for (const t of [-1, 1]) rod(g, M.silver, L(3.1, 1.75 + py * 0.5), Lt(2.0, Y1 - 0.15, t * 0.8), 0.03);
+      if (k !== 0) {
+        // A contact probe, bent over on landing and lying out behind the pad.
+        rod(g, M.silver, L(FOOT_R + 0.3, py + 0.02), Lt(FOOT_R + 1.9, py + 0.02, 0.35), 0.018, 5);
+      }
+    }
+    // Porch and ladder on the forward leg.
+    box(g, M.silver, 0.9, 0.05, 1.05, 2.55, Y1 - 0.1, 0);
+    for (const t of [-0.48, 0.48]) rod(g, M.silver, V(2.2, Y1 + 0.85, t), V(2.95, Y1 + 0.85, t), 0.015, 5);
+    for (const t of [-0.48, 0.48]) rod(g, M.silver, V(2.95, Y1 - 0.1, t), V(2.95, Y1 + 0.85, t), 0.015, 5);
+    const top = V(2.95, Y1 - 0.12, 0), bot = V(3.95, 1.0 + pads[0] * 0.8, 0);
+    for (const t of [-0.24, 0.24]) rod(g, M.silver, V(top.x, top.y, t), V(bot.x, bot.y, t), 0.02, 6);
+    for (let i = 1; i < 9; i++) {
+      const f = i / 9;
+      rod(g, M.silver, V(top.x + (bot.x - top.x) * f, top.y + (bot.y - top.y) * f, -0.24), V(top.x + (bot.x - top.x) * f, top.y + (bot.y - top.y) * f, 0.24), 0.012, 5);
+    }
+    // Ascent stage.
+    const A0 = Y1 + 0.05;
+    box(g, M.grey, 1.9, 1.55, 2.5, -0.15, A0 + 0.78, 0);                          // midsection
+    const cab = new THREE.Mesh(new THREE.CylinderGeometry(1.17, 1.17, 1.35, 20), M.silver);
+    cab.rotation.z = Math.PI / 2; cab.position.set(0.55, A0 + 1.35, 0); g.add(cab);   // crew cabin
+    box(g, M.silver, 0.12, 1.95, 2.3, 1.22, A0 + 1.05, 0);                        // its front face
+    box(g, M.black, 0.1, 0.82, 0.82, 1.3, A0 + 0.5, 0);                           // the hatch
+    for (const t of [-1, 1]) {
+      // Two triangular windows, canted inward.
+      const tri = new THREE.Shape();
+      tri.moveTo(0, 0); tri.lineTo(0.62, 0); tri.lineTo(0.31 * (1 - t * 0.6), 0.55); tri.closePath();
+      const w = new THREE.Mesh(new THREE.ShapeGeometry(tri), M.glass);
+      w.position.set(1.29, A0 + 1.25, t * 0.08 + (t < 0 ? -0.7 : 0.08));
+      w.rotation.y = Math.PI / 2 + t * 0.35;
+      g.add(w);
+    }
+    box(g, M.black, 1.0, 1.4, 2.0, -1.55, A0 + 0.95, 0);                          // aft equipment bay
+    box(g, M.gold, 0.9, 0.5, 1.7, -1.5, A0 + 1.85, 0);
+    const tun = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.55, 16), M.silver);
+    tun.position.set(0, A0 + 2.4, 0); g.add(tun);                                 // docking tunnel
+    for (const [x, z] of [[0.95, 1.25], [0.95, -1.25], [-1.05, 1.25], [-1.05, -1.25]]) {
+      // RCS quads: a housing and four small nozzles each.
+      box(g, M.grey, 0.32, 0.32, 0.32, x, A0 + 1.95, z);
+      for (const [nx, ny, nz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]) {
+        rod(g, M.black, V(x + nx * 0.14, A0 + 1.95 + ny * 0.14, z), V(x + nx * 0.34, A0 + 1.95 + ny * 0.34, z), 0.04, 6);
+      }
+    }
+    // The rendezvous radar dish up front, the S-band dish on its mast.
+    const dish = (x, y, z, r, tx, ty) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 6, 0, Math.PI * 2, 0, 0.9), M.silver);
+      m.position.set(x, y, z); m.rotation.set(tx, 0, ty); g.add(m);
+    };
+    dish(1.0, A0 + 2.35, 0.55, 0.32, 0, -1.0);
+    rod(g, M.silver, V(-0.5, A0 + 1.9, -1.0), V(-0.5, A0 + 2.8, -1.0), 0.03);
+    dish(-0.5, A0 + 2.85, -1.0, 0.34, 0.5, 0.2);
+    for (const z of [-0.6, 0.6]) rod(g, M.silver, V(-0.9, A0 + 1.9, z), V(-1.2, A0 + 2.9, z * 1.4), 0.012, 4);  // VHF
+    for (const m of g.children) m.castShadow = m.receiveShadow = true;
+    return g;
+  }
+
+  function mergeByMaterial(g) {
+    const byMat = new Map();
+    g.updateMatrixWorld(true);
+    for (const m of [...g.children]) {
+      const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone());
+      geo.applyMatrix4(m.matrix);
+      if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+      if (!byMat.has(m.material)) byMat.set(m.material, []);
+      byMat.get(m.material).push(geo);
+      m.geometry.dispose();
+    }
+    const out = new THREE.Group();
+    for (const [mat, list] of byMat) {
+      const n = list.reduce((a, q) => a + q.attributes.position.count, 0);
+      const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      let o = 0;
+      for (const q of list) {
+        pos.set(q.attributes.position.array, o * 3);
+        nrm.set(q.attributes.normal.array, o * 3);
+        uv.set(q.attributes.uv.array, o * 2);
+        o += q.attributes.position.count;
+        q.dispose();
+      }
+      // Foil is crinkled at its own scale, not stretched over whatever
+      // primitive it wraps: map it in metres, across each face.
+      if (mat.normalMap) {
+        for (let i = 0; i < n; i++) {
+          const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+          const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+          if (Math.abs(ny) > 0.7) { uv[i * 2] = x * 0.9; uv[i * 2 + 1] = z * 0.9; }
+          else { const l = Math.hypot(nx, nz) || 1; uv[i * 2] = (x * -nz + z * nx) / l * 0.9; uv[i * 2 + 1] = y * 0.9; }
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      out.add(mesh);
+    }
+    return out;
+  }
+
+  return {
+    place() {
+      for (const m of group.children) m.traverse((o) => o.geometry && o.geometry.dispose());
+      group.clear();
+      site = WORLD.lander || null;
+      if (!site) return;
+      // Facing south-west: the porch and ladder turned toward the
+      // landing site, three-quarters on.
+      yaw = -2.443;
+      const [x, z] = site;
+      const h = [0, 1, 2, 3].map((k) => {
+        const a = yaw + k * Math.PI / 2;
+        return terrainHeight(x + Math.cos(a) * FOOT_R, z - Math.sin(a) * FOOT_R) - 0.04;   // pads sink a few cm
+      });
+      // The plane through the pads: its centre, and its tilt fore-aft and across.
+      const hc = (h[0] + h[1] + h[2] + h[3]) / 4;
+      const pitch = Math.atan((h[0] - h[2]) / (2 * FOOT_R)), roll = Math.atan((h[1] - h[3]) / (2 * FOOT_R));
+      const res = (h[0] + h[2] - h[1] - h[3]) / 4;
+      const lm = mergeByMaterial(build([res, -res, res, -res]));
+      lm.rotation.set(roll, 0, pitch, 'YXZ');
+      const holder = new THREE.Group();
+      holder.rotation.y = yaw;
+      holder.add(lm);
+      group.add(holder);
+      baseH = hc;
+      group.position.set(x, hc, z);
+      this.update();
+    },
+    // Once a frame: ride the drawn mesh's curvature drop.
+    update() { if (site) group.position.y = baseH - dropAt(site[0], site[1]); },
+    // Keep a body of radius r at p (feet at feetY) out of the stage and
+    // off the pads; true on contact, with the outward normal in n.
+    push(p, r, feetY, n) {
+      if (!site) return false;
+      const dx = p.x - site[0], dz = p.z - site[1], d = Math.hypot(dx, dz);
+      if (d > FOOT_R + 1.5) return false;
+      let hit = false;
+      const out = (cx, cz, R) => {
+        const ex = p.x - cx, ez = p.z - cz, e = Math.hypot(ex, ez);
+        if (e < R + r && e > 1e-6) {
+          const k = (R + r) / e; p.x = cx + ex * k; p.z = cz + ez * k; hit = true;
+          if (n) n.set(ex / e, 0, ez / e);
+        }
+      };
+      // Physics stands on raw heights, so compare against the pads' plane.
+      if (feetY < baseH + 6.5) out(site[0], site[1], BODY_R);
+      if (feetY < baseH + 0.3) {
+        for (let k = 0; k < 4; k++) {
+          const a = yaw + k * Math.PI / 2;
+          out(site[0] + Math.cos(a) * FOOT_R, site[1] - Math.sin(a) * FOOT_R, 0.5);
+        }
+      }
+      return hit;
+    },
   };
 })();
 
@@ -8149,6 +8438,7 @@ const body = (() => {
 })();
 
 const _tan = new THREE.Vector3();
+const _hitN = new THREE.Vector3();
 function stepEVA(dt) {
   const p = player, v = p.vel;
   // Weight, less what dense air holds up (Venus carries 7% of you),
@@ -8263,6 +8553,11 @@ function stepEVA(dt) {
   }
 
   p.pos.addScaledVector(v, dt);
+  // The lander is solid: you stop against it, and slide along it.
+  if (lander.push(p.pos, 0.4, p.pos.y - EYE + p.crouch, _hitN)) {
+    const vn = v.x * _hitN.x + v.z * _hitN.z;
+    if (vn < 0) { v.x -= vn * _hitN.x; v.z -= vn * _hitN.z; }
+  }
 
   // The streamed world ends somewhere; this keeps you inside it.
   const ceil = terrainHeight(p.pos.x, p.pos.z) + EYE + FLY_CEILING;
@@ -8364,6 +8659,11 @@ function stepROVER(dt) {
   body.hide();
   rover.step(dt, keys, player.gravity);
   const s = rover.state;
+  // Into the lander at speed: stopped dead, with a knock.
+  if (lander.push(s.pos, 1.7, s.y - 0.5, _hitN)) {
+    if (Math.abs(s.vel) > 0.3) sound.step(Math.min(1.2, Math.abs(s.vel) * 0.5));
+    s.vel *= -0.15;
+  }
 
   // Chase camera: orbit the rover with the same mouse look, keep
   // the lens out of the ground.
@@ -8609,6 +8909,7 @@ function step(dt, t) {
   // Stream the world around whatever is moving.
   chunkStreamer.update(focus.x, focus.z);
   rockSystem.update(focus.x, focus.z);
+  lander.update();
 
   // Both shadow cascades follow the focus, stepped in whole texels
   // of their own maps so shadow edges do not crawl as you walk.
@@ -8895,6 +9196,7 @@ function applyWorld(id) {
   chunkStreamer.setWorld(id);
   rockSystem.reset();
   landmark(world.landmark, world.flagColor);
+  lander.place();
   dust.clear();
   rover.despawn();
 
