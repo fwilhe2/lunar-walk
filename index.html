@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Surface Walk — Venus · Moon · Mars · Phobos · Deimos · Europa · Pluto · Charon</title>
+<title>Surface Walk — Mercury · Venus · Moon · Mars · Phobos · Deimos · Europa · Pluto · Charon</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -55,15 +55,17 @@
     pointer-events: auto; cursor: pointer; transition: opacity .5s ease;
   }
   #overlay.hidden { opacity: 0; pointer-events: none; }
-  #panel { text-align: center; max-width: 560px; padding: 0 24px; }
+  #panel { text-align: center; max-width: 640px; padding: 0 24px; }
   #panel h1 { font: 300 34px/1.15 ui-monospace, Menlo, monospace; letter-spacing: .15em; text-transform: uppercase; color: #f2f2f5; }
   #panel .sub { margin-top: 10px; color: #8b949e; letter-spacing: .08em; }
   #panel .go { margin-top: 28px; display: inline-block; border: 1px solid #4a5058; padding: 11px 26px; letter-spacing: .18em; text-transform: uppercase; color: #e6e6ea; }
   #panel .go:hover { background: #e6e6ea; color: #101014; }
   #panel .fine { margin-top: 22px; font-size: 11px; color: #5c636b; line-height: 1.9; }
-  #worlds { margin-top: 26px; display: flex; gap: 8px; justify-content: center; }
+  /* Two rows, however many worlds: the script sets the column count. */
+  #worlds { margin-top: 26px; display: grid; gap: 8px; grid-template-columns: repeat(5, 1fr); }
+  @media (max-width: 560px) { #worlds { grid-template-columns: repeat(3, 1fr) !important; } }
   #worlds button {
-    flex: 1; background: none; border: 1px solid #33383f; color: #7d858f;
+    background: none; border: 1px solid #33383f; color: #7d858f;
     font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
     padding: 9px 4px; cursor: pointer;
   }
@@ -161,8 +163,8 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
    so both sides compute byte-identical heights: the surface you
    see is exactly the surface you stand on.
 
-   Eight bodies share the kernel — Venus, the Moon, Mars, Phobos,
-   Deimos, Europa, Pluto, Charon — selected by setWorld(). Everything that differs between
+   Nine bodies share the kernel — Mercury, Venus, the Moon, Mars,
+   Phobos, Deimos, Europa, Pluto, Charon — selected by setWorld(). Everything that differs between
    them is a row in the WORLDS table below, so a chunk built in a
    worker and a footstep tested on the main thread always agree
    about which world they are on.
@@ -223,7 +225,7 @@ function ridged(x, y, octaves) {
 }
 
 /* ── Worlds ─────────────────────────────────────────────────────
-   One kernel, eight bodies. Gravity and radius are the real
+   One kernel, nine bodies. Gravity and radius are the real
    values; the rest describes what the ground actually looks
    like on each, and is shared verbatim with the mesh workers.
 
@@ -232,7 +234,8 @@ function ridged(x, y, octaves) {
    captured-asteroid regolith (Phobos, Deimos), 3 = young flood
    basalt under 92 bar (Venus), 4 = a young ice shell broken by
    its own tides (Europa), 5 = old tholin-mantled ice under a
-   nitrogen haze (Pluto), 6 = ice plains flooded from below (Charon).
+   nitrogen haze (Pluto), 6 = ice plains flooded from below (Charon),
+   7 = cratered plains broken by a shrinking planet (Mercury).
 
    Seeds are the dates that matter: Apollo 11's launch, Viking 1's
    launch, Asaph Hall's two nights in August 1877, the morning
@@ -240,8 +243,9 @@ function ridged(x, y, octaves) {
    planet's surface, the night in January 1610 Galileo first saw
    Europa and Io as two points of light instead of one, and the
    day in February 1930 Clyde Tombaugh found Pluto on a pair of
-   photographic plates, and the day in June 1978 James Christy
-   noticed that Pluto's image had a bump on it that moved.        */
+   photographic plates, the day in June 1978 James Christy noticed
+   that Pluto's image had a bump on it that moved, and the day in
+   March 1974 Mariner 10 flew past Mercury and showed it had a face. */
 var WORLDS = {
 
   moon: {
@@ -435,6 +439,35 @@ var WORLDS = {
     craterAmp: 1, depthK: 0.8, rampart: 0, halo: 0.4,
     Dtr: 14500,    // 13.5–16 km (Robbins et al. 2021)
   },
+
+  /* Mercury: the Moon's cratering under two and a third times the
+     gravity. Everything thrown out lands closer — ejecta blankets are
+     narrower, and the secondaries fall in dense clusters and chains
+     near their parent instead of spreading thin (Gault et al. 1975),
+     which is what the clumped class draws. The equilibrium population
+     at small sizes is the Moon's; the bowls are as deep for their
+     width. Fresh craters wear bright rays, and Mercury has some of the
+     longest in the solar system. See hMercury(). */
+  mercury: {
+    id: 'mercury', kind: 7, seed: 19740329,
+    g: 3.70, R: 2439700,
+    craters: [
+      { cell: 40960, salt: 35, rMin: 2500, rMax: 15000, count: 1, prob: 0.45, ageK: 1.0, rays: 1, hol: 1 },
+      { cell: 2560, salt:  7, rMin: 230, rMax: 620, count: 1, prob: 0.40, ageK: 1.3, rays: 1, hol: 1 },
+      { cell:  640, salt: 11, rMin:  60, rMax: 230, count: 2, prob: 0.50, ageK: 1.6, rocks: 1, rays: 1, hol: 1 },
+      { cell:  320, salt: 19, rMin:  10, rMax:  40, count: 3, prob: 0.85, ageK: 1.5, clump: 7000, rocks: 1 },
+      { cell:  160, salt: 23, rMin:  16, rMax:  60, count: 2, prob: 0.70, ageK: 2.0, rocks: 1 },
+      { cell:   40, salt: 37, rMin:   4, rMax:  16, count: 2, prob: 0.62, ageK: 2.4, rocks: 1 },
+      { cell:    8, salt: 53, rMin: 1.6, rMax:   4, count: 1, prob: 0.40, ageK: 2.6, rocks: 1 },
+      { cell:  3.2, salt: 67, rMin: 0.8, rMax: 1.6, count: 1, prob: 0.32, ageK: 2.8 },
+    ],
+    craterAmp: 1, depthK: 1, rampart: 0,
+    // Pike (1988) put the transition at about 10 km, against 15–20 on
+    // the Moon: the stronger gravity collapses a bowl sooner. Set in the
+    // same proportion to it as the Moon's is.
+    Dtr: 7000,
+    halo: 0.5,
+  },
 };
 
 var WORLD = WORLDS.moon;      // active row; setWorld() swaps it
@@ -442,7 +475,7 @@ var WK = 0;                   // WORLD.kind, hoisted for the hot path
 var CRATER_LAYERS = WORLD.craters;
 // Which classes carry what, by flag rather than by place in the table,
 // so adding a class never quietly moves them: ray systems (rays), wind
-// streaks (streak); §6 reads rocks itself.
+// streaks (streak), Mercury's hollows (hol); §6 reads rocks itself.
 function flagged(key) {
   var out = [];
   for (var i = 0; i < CRATER_LAYERS.length; i++) if (CRATER_LAYERS[i][key]) out.push(i);
@@ -450,7 +483,7 @@ function flagged(key) {
 }
 // Filled here for the opening world too: setWorld() returns early for
 // the world already active, and the kernel starts on the Moon.
-var RAY_LI = flagged('rays'), STREAK_LI = flagged('streak');
+var RAY_LI = flagged('rays'), STREAK_LI = flagged('streak'), HOL_LI = flagged('hol');
 var CURVE_R = WORLD.R;        // apparent, not physical — see curveDrop()
 
 function setWorld(id) {
@@ -461,8 +494,11 @@ function setWorld(id) {
   CRATER_LAYERS = WORLD.craters;
   RAY_LI = flagged('rays');
   STREAK_LI = flagged('streak');
+  HOL_LI = flagged('hol');
   CURVE_R = WORLD.Rc || WORLD.R;
   craterCacheReset();
+  hollowCacheReset();
+  SC_LI = 0.5;
   CF0 = craterField(0, 0);
   return WORLD;
 }
@@ -1461,13 +1497,217 @@ function hCharon(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Mercury ────────────────────────────────────────────────────
+   Most of Mercury is intercrater plains: old, rolling ground between
+   and over the craters, laid down early and cratered ever since. In
+   patches it gives way to smooth plains, lava floods younger and
+   flatter than anything around them, wrinkled by ridges where they
+   shrank as they cooled.
+
+   Then the whole planet shrank. As its iron core cooled Mercury lost
+   some seven kilometres of radius (Byrne et al. 2014), and the crust,
+   with nowhere to go, broke in thrust faults: lobate scarps, the
+   landform Mercury is known for. One side of the fault rode up over
+   the other, so each is a cliff a kilometre or two high facing one
+   way, with a long gentle back behind it, running for hundreds of
+   kilometres in arcs that bulge toward the lower side — Discovery
+   Rupes, Beagle Rupes, Enterprise Rupes. They cut straight through
+   craters, which is how anyone knows they are young. Drawn in lanes,
+   the same trick as Charon's graben, one scarp at most per lane, face
+   and back limb kept inside it.
+
+   And the strangest thing on Mercury is small: hollows. Shallow,
+   flat-floored pits with no rims, tens of metres to a kilometre
+   across and a few tens of metres deep, bright and faintly blue, in
+   clusters on crater floors, walls and peaks — where some volatile in
+   the rock is still subliming away into space (Blewett et al. 2011).
+   They are among the youngest things on the planet; some may be
+   growing now. Each cluster is a field of cells; a hollow's outline is
+   ragged, and where two meet they merge rather than stack. MH_HOL is
+   how much of one is at the last query point, for the colour pass. */
+var MH_LANE = 70000;
+var MH_TC = Math.cos(0.22), MH_TS = Math.sin(0.22);    // scarp strike, a little east of north
+var MH_HCELL = 260;                                    // hollow cell
+// The site: out on intercrater plains seven kilometres west of the
+// face of a scarp a kilometre and a half high, which the opening view
+// looks at, among craters full of hollows. Craters stay put, so the
+// spawn fade holds.
+var MH_OX = -107750, MH_OZ = -400000;
+var MH_HOL = 0;
+
+// Where the smooth plains lie. Shared with the colour pass: they are
+// the brighter, redder unit.
+function mercPlains(x, z) {
+  return sstep(0.55, 0.68, fbm(x * 0.000032 + 4.4, z * 0.000032 - 1.7, 3));
+}
+
+// Where hollows gather: in craters (the classes flagged hol), on their
+// floors, walls and peaks, and only in some of them — a coarse field
+// of provinces decides which. 1 on a crater floor inside one.
+function mercHollowField(x, z) {
+  var f = sstep(0.55, 0.65, fbm(x * 0.00006 - 7.1, z * 0.00006 + 2.3, 2));
+  if (f <= 0) return 0;
+  var k = 0;
+  for (var hi = 0; hi < HOL_LI.length; hi++) {
+    var li = HOL_LI[hi], L = CRATER_LAYERS[li];
+    var ccx = Math.floor(x / L.cell), ccz = Math.floor(z / L.cell);
+    for (var dz = -1; dz <= 1; dz++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        var list = cellCraters(li, ccx + dx, ccz + dz);
+        for (var i = 0; i < list.length; i++) {
+          var c = list[i], ox = x - c.x, oz = z - c.z, rr = c.r * 1.15;
+          if (ox * ox + oz * oz > rr * rr) continue;
+          // Fresh craters have not had time to grow any; old ones have
+          // lost theirs to the regolith.
+          var q = (1 - sstep(0.8, 1.15, Math.sqrt(ox * ox + oz * oz) / c.r)) * sstep(0.2, 0.45, c.age) * (1 - sstep(0.85, 0.97, c.age));
+          if (q > k) k = q;
+        }
+      }
+    }
+  }
+  return f * k;
+}
+
+// Each lane's constants, for the lane last asked about: a mesh build
+// stays in one lane for thousands of queries, and the seven hashes cost
+// as much as the rest of the scarp together. A pure function of the
+// lane, so a miss just recomputes.
+var SC_LI = 0.5, SC = { on: false, H: 0, k: 0, A: 0, ph: 0, fr: 0, lb: 0 };
+function scarpLane(li) {
+  if (li === SC_LI) return SC;
+  SC_LI = li;
+  SC.on = cellRnd(li, 0, 97, 0) <= 0.6;
+  SC.H = 700 + cellRnd(li, 0, 97, 1) * 1100;
+  SC.k = 0.00010 + cellRnd(li, 0, 97, 2) * 0.00008;
+  SC.A = 900 + cellRnd(li, 0, 97, 3) * 1600;
+  SC.ph = cellRnd(li, 0, 97, 4) * 6.28;
+  SC.fr = (li + 0.16 + cellRnd(li, 0, 97, 5) * 0.1) * MH_LANE;
+  SC.lb = 9000 + 4000 * cellRnd(li, 0, 97, 6);
+  return SC;
+}
+
+function mercScarp(x, z) {
+  var u = x * MH_TC + z * MH_TS, s = z * MH_TC - x * MH_TS;
+  var li = Math.floor(u / MH_LANE);
+  var P = scarpLane(li);
+  if (!P.on) return 0;
+  // A scarp runs for a few hundred kilometres, rising out of nothing
+  // at each end, and its height wanders along it.
+  var seg = sstep(0.34, 0.52, valueNoise(s * 0.000006 + li * 5.3, li * 0.71));
+  if (seg <= 0) return 0;
+  var H = P.H * seg * (0.7 + 0.3 * valueNoise(s * 0.00004, li * 2.9));
+  // The trace: a broad swing over a hundred kilometres or so, and on it
+  // arcs bulging toward the footwall (west), cusped between, of
+  // uneven length.
+  var ph = s * P.k + valueNoise(s * 0.000025, li * 3.7) * 4 + P.ph;
+  var sn = Math.sin(ph);
+  var fr = P.fr + P.A * (1 - (sn < 0 ? -sn : sn))
+         + (valueNoise(s * 0.0000085 + li * 7.9, li * 1.3) - 0.5) * 16000;
+  // The slope of the arcs along strike, so the distance is taken across
+  // the scarp and not across the lane — a face running at an angle would
+  // otherwise come out wider than one running straight. The broad swing
+  // turns it by ten degrees at most, which is left out.
+  var sl = P.A * P.k * Math.cos(ph) * (sn < 0 ? 1 : -1);
+  var t = (u - fr) / Math.sqrt(1 + sl * sl);
+  // Face: a kilometre of rise over two or three, then the crest, and a
+  // back limb that sags away over tens. The widest it reaches, front
+  // to taper, stays inside the lane.
+  var wf = 800 + H * 2;
+  if (t < -0.15 * wf || t > 32000) return 0;
+  var g = sstep(-0.15 * wf, wf, t);
+  if (t > wf) g *= Math.exp(-(t - wf) / P.lb) * (1 - sstep(22000, 32000, t));
+  return H * g;
+}
+
+/* One hollow per cell at most, decided at its own centre — whether a
+   hollow province and a crater are there — so it is a pure function of
+   the cell and cached like the craters are, direct-mapped: the crater
+   test behind it scans three classes. false: no hollow in that cell. */
+var HC_BITS = 12, HC_SIZE = 1 << HC_BITS, HC_SHIFT = 32 - HC_BITS;
+var hcX = new Int32Array(HC_SIZE), hcZ = new Int32Array(HC_SIZE), hcL = new Array(HC_SIZE).fill(null);
+function hollowCacheReset() { hcL.fill(null); }
+function hollowCell(ix, iz) {
+  var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> HC_SHIFT;
+  var hit = hcL[slot];
+  if (hit !== null && hcX[slot] === ix && hcZ[slot] === iz) return hit;
+  var out = false;
+  var px = (ix + 0.1 + cellRnd(ix, iz, 59, 2) * 0.8) * MH_HCELL;
+  var pz = (iz + 0.1 + cellRnd(ix, iz, 59, 3) * 0.8) * MH_HCELL;
+  var f = mercHollowField(px, pz);
+  if (f > 0 && cellRnd(ix, iz, 59, 0) <= f * 0.8) {
+    var r = 35 + Math.pow(cellRnd(ix, iz, 59, 1), 1.6) * 190 * (0.5 + 0.5 * f);
+    // Steep-walled, but not sheer, and the small ones shallower.
+    out = { x: px, z: pz, r: r, dep: Math.min(14 + cellRnd(ix, iz, 59, 4) * 22, r * 0.3) };
+  }
+  hcX[slot] = ix; hcZ[slot] = iz; hcL[slot] = out;
+  return out;
+}
+
+function mercHollows(x, z) {
+  MH_HOL = 0;
+  // Hollows only stand inside a province (fbm over 0.55), and reach at
+  // most 400 m from their centres, over which the field can fall by
+  // 0.07 at the steepest: past that margin there are none to find.
+  if (fbm(x * 0.00006 - 7.1, z * 0.00006 + 2.3, 2) < 0.48) return 0;
+  var cx = Math.floor(x / MH_HCELL), cz = Math.floor(z / MH_HCELL);
+  var best = 0, halo = 0;
+  for (var dz = -1; dz <= 1; dz++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      var c = hollowCell(cx + dx, cz + dz);
+      if (c === false) continue;
+      var ox = x - c.x, oz = z - c.z;
+      var d2 = ox * ox + oz * oz;
+      if (d2 > c.r * c.r * 3.2) continue;
+      // Ragged outlines: the edge wanders by a third of the radius.
+      var d = Math.sqrt(d2) / c.r * (1 + (valueNoise(x * 0.018 + (cx + dx) * 3.1, z * 0.018 - (cz + dz) * 2.7) - 0.5) * 0.7);
+      var dep = c.dep * (1 - sstep(0.62, 1.0, d));
+      if (dep > best) best = dep;
+      var hk = 1 - sstep(0.9, 1.75, d);
+      if (hk > halo) halo = hk;
+    }
+  }
+  // Floors bright, and a halo of the same bright stuff around them.
+  MH_HOL = best > 0 ? 0.6 + 0.4 * (best / 36) : halo * 0.55;
+  if (MH_HOL > 1) MH_HOL = 1;
+  // Merged, not stacked: the deepest of the pits here.
+  return -best;
+}
+
+function mercWrinkles(x, z) {
+  var u = (x * MH_TS - z * MH_TC) / 11000 + valueNoise(x * 0.00012, z * 0.00012) * 1.7;
+  var lane = Math.floor(u);
+  if (hash2(lane, 733) > 0.55) return 0;
+  var tt = u - lane - 0.5;
+  // Asymmetric, like the lunar ones: a broad arch and a narrow ridge on it.
+  return Math.exp(-tt * tt * 30) * (40 + hash2(lane, 734) * 60) + Math.exp(-(tt - 0.04) * (tt - 0.04) * 400) * (18 + hash2(lane, 735) * 30);
+}
+
+function hMercury(x0, z0) {
+  var x = x0 + MH_OX, z = z0 + MH_OZ;
+  var nx = x * 0.00012, nz = z * 0.00012;
+  var pk = mercPlains(x, z), ik = 1 - pk;
+  // Intercrater plains roll over tens of kilometres; the floods have
+  // drowned most of that.
+  var h = (fbm(nx, nz, 4) - 0.5) * 700 * (1 - 0.7 * pk) - pk * 150;
+  h += (fbm(nx * 8 + 13, nz * 8 - 6, 3) - 0.5) * 90 * (0.3 + 0.7 * ik);   // hummocky ground
+  h += (fbm(x * 0.0021 - 8, z * 0.0021 + 3, 3) - 0.5) * 12;             // swales
+  h += (fbm(x * 0.012, z * 0.012, 2) - 0.5) * 1.5;                       // metre relief
+  h += (fbm(x * 0.03 + 5, z * 0.03 - 2, 2) - 0.5) * 0.6;                 // regolith grain
+  if (pk > 0.004) h += mercWrinkles(x, z) * pk;
+  h += mercScarp(x, z);
+  // Hollows grow in craters, so they stay with the craters, unshifted.
+  h += mercHollows(x0, z0);
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
 function terrainHeight(x, z) {
   return WK === 0 ? hMoon(x, z) : WK === 1 ? hMars(x, z)
        : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z)
-       : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z) : hSmall(x, z);
+       : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z)
+       : WK === 7 ? hMercury(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -1514,7 +1754,7 @@ function curveDrop(dx, dz) {
    0.28 for the ferric dust that coats everything else on Mars,
    and 0.10 for Venusian basalt, which is about as dark as the
    Moon and looks nothing like it.                               */
-function surfaceTint(x, z, h, slope, fresh, dark, yel, out) {
+function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
   var v;
   if (WK === 0) {
     // Steep walls shed dust and expose brighter bedrock, crater
@@ -1641,6 +1881,26 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, out) {
     v = v < 0.45 ? 0.45 : v > 1.45 ? 1.45 : v;
     out[0] = v * 0.975; out[1] = v * 0.985; out[2] = v;
 
+  } else if (WK === 7) {
+    // Mercury is grey, a little brighter than the Moon on average and
+    // a little less brown, and its colour units are subtle: the smooth
+    // plains are brighter and redder, and the low-reflectance material
+    // — dark, bluish, rich in graphite (Peplowski et al. 2016), dug up
+    // from depth by craters — lies in broad patches over the rest.
+    // Fresh craters are brighter and bluer still, rays and all, and
+    // brightest of anything are the hollows, bluish-white, with a halo
+    // of the same stuff round every cluster.
+    var pl = mercPlains(x + MH_OX, z + MH_OZ);
+    var lrm = sstep(0.52, 0.7, fbm(x * 0.00011 - 6.1, z * 0.00011 + 3.9, 3)) * (1 - pl);
+    var cl = fresh * WORLD.halo + rayBrightness(x, z);
+    v = 0.78 + pl * 0.10 - lrm * 0.20 + slope * 0.26 + cl;
+    v *= 0.9 + valueNoise(x * 0.0012 + 3, z * 0.0012) * 0.12 + valueNoise(x * 0.07, z * 0.07) * 0.08;
+    var hb = hol * hol;
+    v *= 1 + hb * 1.3;
+    v = v < 0.35 ? 0.35 : v > 2.2 ? 2.2 : v;
+    var blue = lrm * 0.05 + cl * 0.04 + hb * 0.10 - pl * 0.035;
+    out[0] = v * (1.012 - blue * 0.6); out[1] = v; out[2] = v * (0.965 + blue);
+
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
     // has two units, a redder one over most of the body and a bluer
@@ -1764,7 +2024,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>8</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>9</b> change world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -1811,7 +2071,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a full push would be a launch,<br>' +
           'so you push gently and drift, and steer on the jets. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1</b>–<b>8</b> change world.',
+          'the sky and never moves. <b>1</b>–<b>9</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -1842,7 +2102,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1</b>–<b>8</b> change world.',
+          'you want back. <b>1</b>–<b>9</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -1947,7 +2207,7 @@ const VIEW = {
     title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
     fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
           'Jupiter hangs 12° wide over the chaos to the east, bands on end, and never<br>' +
-          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>8</b> change world.',
+          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>9</b> change world.',
     air: false, stars: 1,
     // Light here is kept in units ten times the Moon's — a sun of
     // 1.26 rather than 0.126 — and the stars and the eye's range are
@@ -2027,7 +2287,7 @@ const VIEW = {
     title: 'Pluto Walk', sub: 'Charon-facing hemisphere · 0.063 g · surface unbounded',
     fine: 'Noon here is dusk: the sun is a point a thousandth as bright, and the<br>' +
           'stars stay out. Charon hangs 3.7° wide in the east and never moves, over<br>' +
-          'mountains capped with methane frost. <b>1</b>–<b>8</b> change world.',
+          'mountains capped with methane frost. <b>1</b>–<b>9</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2081,7 +2341,7 @@ const VIEW = {
     title: 'Charon Walk', sub: 'Vulcan Planitia · 0.029 g · surface unbounded',
     fine: 'Water ice at −220 °C under Pluto\'s dusk-dim sun. Pluto hangs 7° wide in<br>' +
           'the east, over a mountain standing in a moat, and never moves. A full<br>' +
-          'push keeps you aloft for twelve seconds. <b>1</b>–<b>8</b> change world.',
+          'push keeps you aloft for twelve seconds. <b>1</b>–<b>9</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2110,11 +2370,52 @@ const VIEW = {
     // to hold both — yaw and pitch, in radians.
     look: [-1.32, 0.3],
   },
+
+  /* Mercury is 0.39 AU from the sun, where the disc is 1.4° across —
+     two and a half times the Moon's — and delivers 6.7 times the
+     light: 9 kW on every square metre, enough to hold the ground at
+     noon over 400 °C. Light is kept in units 6.7 times the Moon's, so
+     the numbers below read like the Moon's; only the stars, which do
+     not care, are relatively that much fainter.
+
+     There is no air, no night lamp overhead — nothing lights a
+     Mercurian night but the stars and Venus — and the ground is
+     brighter than the Moon's, a little over a tenth, so shadows are
+     black but a shade less so. What hangs in the sky are two stars:
+     Venus near opposition, the brightest thing in it after the sun, and
+     Earth, with the Moon beside it if you look closely. */
+  mercury: {
+    name: 'MERCURY', site: 'below Discovery Rupes', gTxt: '3.70 m/s²',
+    title: 'Mercury Walk', sub: 'Discovery Rupes · 0.377 g · surface unbounded',
+    fine: 'The sun is two and a half times as wide as from the Moon and seven times as bright;<br>' +
+          'at noon the ground under it would melt lead. To the east a cliff a kilometre and a<br>' +
+          'half high crosses the horizon: the planet shrank, and broke. <b>1</b>–<b>9</b> change world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 145, sunHDR: [60, 57, 52],
+    corona: 3400, coronaColor: [1.6, 1.55, 1.45],
+    // Bounce off ground nearly twice as bright as mare basalt.
+    hemi: [0x272624, 0x5f5b57, 1.7], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 108, mapTint: [1.02, 1.0, 0.965], pits: 110, grain: 1, pebbles: 170,
+    // MESSENGER's photometry (Domingue et al. 2016) puts Mercury's soil
+    // close to the Moon's: grains a little brighter, the same strong
+    // backscatter and surge, and a little less rough.
+    hapke: { w: 0.28, b: 0.22, c: 0.65, B0: 1.5, h: 0.06, theta: 17, Bc0: 0.4, hc: 0.006 },
+    micro: [1, 0.45], sparkle: 0.8,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.65,
+    dustColor: 0x77736d, dustDrag: 0, stampColor: 0x5f5b56, soil: 0x67635e,
+    rockTint: [1.02, 1.0, 0.97], rockAlb: [0.13, 0.09], rockN: 1,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    exposure: 1.0, eye: [0.18, 0.5, 150], starGain: 0.00018, bloom: [0.55, 0.65, 3.0],
+    // Earth first: it is where the rover's dish looks.
+    companions: ['earth-star', 'venus-star'],
+  },
 };
 
-// In order out from the sun, which is the order of keys 1–8, the
+// In order out from the sun, which is the order of keys 1–9, the
 // buttons on the opening screen and the demo's tour.
-const WORLD_IDS = ['venus', 'moon', 'mars', 'phobos', 'deimos', 'europa', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'europa', 'pluto', 'charon'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -2155,12 +2456,13 @@ onmessage = function (e) {
   var hg = new Float32Array(V);          // true heights, incl. 1-ring outside
   var fg = new Float32Array(V);          // fresh-ejecta weight, from the same pass
   var dg = new Float32Array(V), yg = new Float32Array(V);   // Europa: non-ice, and salt
+  var og = new Float32Array(V);                             // Mercury: hollows
   for (var j = 0; j < W; j++) {
     var pz = z0 + (j - 1) * step;
     for (var i = 0; i < W; i++) {
       hg[j * W + i] = terrainHeight(x0 + (i - 1) * step, pz);
       fg[j * W + i] = CR_ALB;
-      dg[j * W + i] = EU_DARK; yg[j * W + i] = EU_YEL;
+      dg[j * W + i] = EU_DARK; yg[j * W + i] = EU_YEL; og[j * W + i] = MH_HOL;
     }
   }
 
@@ -2216,7 +2518,7 @@ onmessage = function (e) {
       // Albedo comes from the kernel, so it changes with the body.
       var slope = Math.hypot(hR - hL, hU - hD) * inv2s * 0.7;
       if (slope > 1) slope = 1;
-      surfaceTint(px, pz, hC, slope, fg[kc], dg[kc], yg[kc], _tint);
+      surfaceTint(px, pz, hC, slope, fg[kc], dg[kc], yg[kc], og[kc], _tint);
       col[k * 3] = _tint[0]; col[k * 3 + 1] = _tint[1]; col[k * 3 + 2] = _tint[2];
     }
   }
@@ -5733,6 +6035,29 @@ function plutoMaps() {
   return { day: t };
 }
 
+/* ── Venus, from outside ────────────────────────────────────────
+   From Mercury it is a point, so this is only its colour: the cloud
+   tops, pale cream and almost featureless in visible light — the
+   famous banding is in the ultraviolet — at an albedo of three
+   quarters, the brightest planet in the system. */
+function venusMaps() {
+  const W = 128, H = 64;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const img = x.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let xx = 0; xx < W; xx++) {
+      const v = 226 + (fbm(xx * 0.05, y * 0.12, 3) - 0.5) * 14;
+      const o = (y * W + xx) * 4;
+      img.data[o] = v; img.data[o + 1] = v * 0.96; img.data[o + 2] = v * 0.84; img.data[o + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  return { day: t };
+}
+
 /* ── What hangs overhead ────────────────────────────────────────
    Every companion sits on the same 6.2 km shell and is drawn at a
    stated angular size, so the sizes below are comparable to each
@@ -5747,7 +6072,7 @@ const COMPANION_DIST = 6200;
 const TEXGEN = {
   earth: earthMaps, mars: marsMaps,
   phobos: () => moonletMaps('phobos'), deimos: () => moonletMaps('deimos'),
-  jupiter: jupiterMaps, io: () => galileanMaps('io'), charon: charonMaps, pluto: plutoMaps,
+  jupiter: jupiterMaps, io: () => galileanMaps('io'), charon: charonMaps, pluto: plutoMaps, venus: venusMaps,
   ganymede: () => galileanMaps('ganymede'), callisto: () => galileanMaps('callisto'),
 };
 
@@ -5941,6 +6266,20 @@ const COMPANIONS = {
     tex: 'pluto', r: COMPANION_DIST * Math.sin(PLUTO.ang), dir: PLUTO.dir, pole: PLUTO.pole,
     face: PLUTO.face, gain: 1.0, bright: 1.08, detail: 0.12,
     atmo: [0.32, 0.52, 1.0], atmoK: 0.12, atmoR: 1.03,
+  },
+
+  /* Earth and Venus from Mercury, both near opposition, where they
+     are full and nearest: Venus 50 arcseconds across and Earth 29, so
+     both are points, drawn a little over life size only so they
+     survive being rasterised at all, like Deimos from Mars. Their
+     brightness per unit of disc is the physical one — sunlight at 0.72
+     and 1 AU, a third and a seventh of Mercury's, on albedos of 0.75
+     and 0.3 — which makes Venus the brighter star. */
+  'earth-star': {
+    tex: 'earth', r: 8, dir: [0.80, 0.35, 0.10], gain: 1.0, bright: 0.16, clouds: true,
+  },
+  'venus-star': {
+    tex: 'venus', r: 10, dir: [0.62, 0.40, -0.20], gain: 1.0, bright: 0.31,
   },
 };
 
@@ -8061,7 +8400,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { mercury: 3.70, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
@@ -8179,7 +8518,7 @@ function setMode(next) {
 
 function updateKeysHelp() {
   const k = document.getElementById('keys');
-  const tail = '<div><b>1</b>–<b>8</b> venus &middot; moon &middot; mars &middot; phobos &middot; deimos &middot; europa &middot; pluto &middot; charon &nbsp; <b>0</b> demo</div>' +
+  const tail = '<div><b>1</b>–<b>9</b> mercury &middot; venus &middot; moon &middot; mars &middot; phobos &middot; deimos &middot; europa &middot; pluto &middot; charon &nbsp; <b>0</b> demo</div>' +
     '<div><b>[ ]</b> sun elevation &nbsp; <b>G</b> gravity &nbsp; <b>Q</b> quality &nbsp; <b>M</b> sound &nbsp; <b>ESC</b> release</div>' +
     '<div><b>Z</b> / right button zoom &nbsp; <b>P</b> photo &nbsp; <b>H</b> hide HUD &nbsp; <b>L</b> copy link</div>';
   if (mode === 'ROVER') {
@@ -8240,7 +8579,7 @@ function press(code) {
   }
   if (code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].indexOf(code);
+  const pick = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(code);
   if (pick >= 0) applyWorld(WORLD_IDS[pick]);
   if (code === 'BracketLeft' || code === 'BracketRight') {
     // Below the horizon only where there is something to light the night.
@@ -9465,6 +9804,7 @@ const worldButtons = WORLD_IDS.map((id) => {
   document.getElementById('worlds').appendChild(b);
   return b;
 });
+document.getElementById('worlds').style.gridTemplateColumns = 'repeat(' + Math.ceil(WORLD_IDS.length / 2) + ', 1fr)';
 
 gradePass.uniforms.uRes.value.set(innerWidth, innerHeight);
 let loading, elapsed = 0, everStarted = false;
