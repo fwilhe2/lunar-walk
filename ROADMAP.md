@@ -103,7 +103,7 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
   - [x] segments that start at a source depression;
   - [x] gated to mare (`1 − highlandMask`);
   - [x] craters overprint it.
-- [ ] Optionally, talus rocks on the rille walls (the `world.talus` path Europa uses). (Not done.)
+- [x] Optionally, talus rocks on the rille walls — done later as `world.rilleTalus`: candidates tested on the rille term's own slope, which is zero and cheap nearly everywhere, instead of Europa's three full height queries.
 - [x] Measure µs per call in Node. The Moon's hot path is the most expensive one to break.
 
 **Verify.** A probe flight shot from the landing site shows a landmark on the horizon, and the timings stay within budget.

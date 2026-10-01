@@ -2319,6 +2319,7 @@ const VIEW = {
     // Basalt blocks weather more slowly than soil: 0.12–0.22 against ~0.10.
     rockTint: [1.03, 1.0, 0.95], rockAlb: [0.11, 0.08], rockN: 1,
     landmark: 'flag', flagColor: 0xc9ccd2,
+    rilleTalus: 900,
     // Eye adaptation: [key, min, max]. The key puts sunlit mare at a
     // photographic mid-grey; the ceiling is how far the eye opens in
     // the dark, which is just far enough for the brightest stars.
@@ -4716,6 +4717,19 @@ const rockSystem = (() => {
       const x = x0 + rnd() * SIZE, z = z0 + rnd() * SIZE, e = 2, h0 = terrainHeight(x, z);
       const sl = Math.hypot(terrainHeight(x + e, z) - h0, terrainHeight(x, z + e) - h0) / e;
       if (rnd() < (sl - 0.13) * 4) consider(x, z, 0.08 + Math.pow(rnd(), 2.4) * 1.8);
+    }
+    // Rille walls. Lava cut Hadley Rille down through the mare's own
+    // layers, and its walls are strewn with blocks shed off the ledges
+    // near the rim — Apollo 15 photographed them from the edge, boulders
+    // metres across all the way down to the floor. Candidates are tested
+    // on the rille term alone, which is zero, and cheap, nearly everywhere.
+    if (world.rilleTalus) {
+      for (let i = 0; i < world.rilleTalus; i++) {
+        const x = x0 + rnd() * SIZE, z = z0 + rnd() * SIZE, r0 = moonRille(x, z);
+        if (r0 === 0) continue;
+        const e = 3, sl = Math.hypot(moonRille(x + e, z) - r0, moonRille(x, z + e) - r0) / e;
+        if (rnd() < (sl - 0.1) * 3) consider(x, z, 0.1 + Math.pow(rnd(), 2.4) * 3.2);
+      }
     }
     // Big blocks, where a world has them lying about for other reasons
     // than craters: Enceladus's ice blocks, tens of metres across.
