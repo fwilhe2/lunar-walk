@@ -196,7 +196,7 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ---
 
-## 9. Landers ✅ (Moon)
+## 9. Landers ✅
 
 **Why.** The landing site has only a flag or a beacon. A lander, built from primitives like the rover, would be the iconic landmark and a good test object for shadows.
 
@@ -213,7 +213,7 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 - [x] Blast zone: a brightened halo around the site (LROC sees one at every Apollo landing). Make it a colour-only side output in the kernel's colour pass, like `CR_ALB`, which physics ignores. No pebbles inside the scoured radius.
 - [x] Collision: simple cylinders for pads, legs and body in `stepEVA` and the rover.
 - [x] Placement: the opening view (`world.look`) still frames the flag and the companion.
-- [ ] Later: Viking on Mars, Venera on Venus, a generic lander elsewhere. Keep the beacon on the moonlets. (Not done.)
+- [x] Later: Viking on Mars, Venera on Venus, a generic crewed lander elsewhere (Mercury, Io, Europa, Enceladus, Pluto, Charon). The beacon stays on the moonlets. Pads levelled by a least-squares plane, so three legs and a landing ring work as four legs do.
 
 **Verify.** Low-sun probe shots: shadows attached at the pads, and no floating pads on slopes.
 

@@ -146,7 +146,7 @@ Physics never reads `keys` directly: `readInput()` folds keys, a standard-mappin
 
 ## The lander (§6c)
 
-`WORLD.lander` (kernel row, Moon only) is both where `lander.place()` stands the LM and, in the colour pass, the centre of the blast-zone brightening — a colour-only term like `CR_ALB`; physics never sees it. The rock system keeps pebbles off its footprint. The LM is ~110 primitives merged by material into six draws; its foil is mapped in metres per face, so a primitive's 0–1 UVs don't stretch the crinkle map. `lander.update()` follows `dropAt()` every frame (the drawn ground drops with the streaming anchor; the flag doesn't bother, at 14 m it can't matter), and `lander.push()` does the walker's and rover's collision against raw physics heights, not the drawn ones.
+`WORLD.lander` (kernel row) is where `lander.place()` stands the lander, of the kind `world.lander` names (`KINDS`: `lm` by default, `viking`, `venera`, `generic`; each gives pad count, pad radius and the body to collide with). Positions were picked in Node for level ground with a line of sight from the site. On the Moon it is also, in the colour pass, the centre of the blast-zone brightening — a colour-only term like `CR_ALB`; physics never sees it. The rock system keeps pebbles off its footprint. The LM is ~110 primitives merged by material into six draws; its foil is mapped in metres per face, so a primitive's 0–1 UVs don't stretch the crinkle map. `lander.update()` follows `dropAt()` every frame (the drawn ground drops with the streaming anchor; the flag doesn't bother, at 14 m it can't matter), and `lander.push()` does the walker's and rover's collision against raw physics heights, not the drawn ones.
 
 ## Sound (§11b)
 

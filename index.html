@@ -294,6 +294,7 @@ var WORLDS = {
   mars: {
     id: 'mars', kind: 1, seed: 19750820,
     g: 3.72, R: 3389500,
+    lander: [11.3, -3.9],
     craters: [
       { cell: 3200, salt:  5, rMin: 300, rMax: 780, count: 1, prob: 0.30, streak: 1 },
       { cell:  800, salt: 13, rMin:  70, rMax: 300, count: 1, prob: 0.42, rocks: 1, streak: 1 },
@@ -359,6 +360,7 @@ var WORLDS = {
   venus: {
     id: 'venus', kind: 3, seed: 19751022,
     g: 8.87, R: 6051800, Rc: -1330000,
+    lander: [7.5, -27],
     craters: [
       // Skewed young, not old: about 85% of Venus's craters are pristine
       // (Schaber et al. 1992), since little has touched them since.
@@ -385,6 +387,7 @@ var WORLDS = {
   europa: {
     id: 'europa', kind: 4, seed: 16100108,
     g: 1.315, R: 1560800,
+    lander: [30, 0],
     craters: [
       { cell: 20480, salt:  7, rMin: 500, rMax: 2400, count: 1, prob: 0.22, ageK: 1.0, rays: 1 },
       { cell:  5120, salt: 13, rMin: 110, rMax:  500, count: 1, prob: 0.16, ageK: 1.2, rocks: 1 },
@@ -407,6 +410,7 @@ var WORLDS = {
   pluto: {
     id: 'pluto', kind: 5, seed: 19300218,
     g: 0.620, R: 1188300,
+    lander: [23.9, 2.1],
     craters: [
       { cell: 24000, salt:  7, rMin: 2500, rMax: 9000, count: 1, prob: 0.55, ageK: 1.5 },
       { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.45, ageK: 1.7, rocks: 1 },
@@ -429,6 +433,7 @@ var WORLDS = {
   charon: {
     id: 'charon', kind: 6, seed: 19780622,
     g: 0.288, R: 606000,
+    lander: [31, 1.2],
     craters: [
       { cell: 24000, salt:  7, rMin: 2500, rMax: 9000, count: 1, prob: 0.50, ageK: 1.4, rays: 1 },
       { cell:  6000, salt: 13, rMin:  500, rMax: 2500, count: 1, prob: 0.50, ageK: 1.6, rocks: 1 },
@@ -451,6 +456,7 @@ var WORLDS = {
   mercury: {
     id: 'mercury', kind: 7, seed: 19740329,
     g: 3.70, R: 2439700,
+    lander: [33.9, -3.1],
     craters: [
       { cell: 40960, salt: 35, rMin: 2500, rMax: 15000, count: 1, prob: 0.45, ageK: 1.0, rays: 1, hol: 1 },
       { cell: 2560, salt:  7, rMin: 230, rMax: 620, count: 1, prob: 0.40, ageK: 1.3, rays: 1, hol: 1 },
@@ -476,6 +482,7 @@ var WORLDS = {
   io: {
     id: 'io', kind: 8, seed: 19790309,
     g: 1.796, R: 1821600,
+    lander: [30.5, -5.3],
     craters: [],
     craterAmp: 1, depthK: 1, rampart: 0, halo: 0,
   },
@@ -486,6 +493,7 @@ var WORLDS = {
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
+    lander: [21.9, -9.9],
     craters: [
       { cell: 900, salt: 13, rMin: 20, rMax: 120, count: 1, prob: 0.05, ageK: 3.0 },
     ],
@@ -2370,6 +2378,7 @@ const VIEW = {
     // Dark basalt under a film of the bright dust.
     rockTint: [1.0, 0.86, 0.74], rockAlb: [0.12, 0.13], rockN: 0.85,
     landmark: 'flag', flagColor: 0xd8dce2,
+    lander: 'viking',
     // ACES here, not AgX: a sky that is itself coloured needs the
     // saturation AgX gives away in the highlights.
     exposure: 1.0, eye: [0.13, 0.3, 4], tone: 'aces', bloom: [0.42, 0.7, 3.0],
@@ -2490,6 +2499,7 @@ const VIEW = {
     rockTint: [1.0, 0.97, 0.93], rockAlb: [0.08, 0.07],
     rockN: 0.8, rockFlat: 0.42,
     landmark: 'flag', flagColor: 0xcfc6b4,
+    lander: 'venera',
     exposure: 1.0, eye: [0.16, 0.3, 6], tone: 'aces', bloom: [0.2, 0.75, 3.0],
     companions: [],
   },
@@ -2548,6 +2558,7 @@ const VIEW = {
     // come from craters, most are talus shed off steep faces.
     rockTint: [0.97, 0.99, 1.03], rockAlb: [0.50, 0.25], rockN: 0.35, talus: 700,
     landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
     // The key sits higher than on the dark bodies: an eye anchors
     // white on the brightest surface in view, and ice this reflective
     // should read as white, not as the mid-grey the Moon's mare does.
@@ -2621,6 +2632,7 @@ const VIEW = {
     // Blocks of the water-ice crust, under the same tholin dust.
     rockTint: [1.35, 0.85, 0.62], rockAlb: [0.09, 0.08], rockN: 0.6, talus: 300,
     landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
     exposure: 1.0, eye: [0.16, 0.5, 20], starGain: 0.03, bloom: [0.55, 0.65, 3.0],
     companions: ['charon'],
     // Night: Charon, 3.65° across at albedo 0.4 — 0.04% of the sun.
@@ -2671,6 +2683,7 @@ const VIEW = {
     // graben walls and the massif's flanks.
     rockTint: [0.98, 0.99, 1.02], rockAlb: [0.42, 0.2], rockN: 0.5, talus: 400,
     landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
     exposure: 1.0, eye: [0.30, 0.3, 20], starGain: 0.03, bloom: [0.55, 0.65, 3.0],
     companions: ['pluto'],
     // Night: Pluto, 7.1° across at albedo 0.55 — 0.2% of the sun.
@@ -2717,6 +2730,7 @@ const VIEW = {
     dustColor: 0x77736d, dustDrag: 0, stampColor: 0x5f5b56, soil: 0x67635e,
     rockTint: [1.02, 1.0, 0.97], rockAlb: [0.13, 0.09], rockN: 1,
     landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
     exposure: 1.0, eye: [0.18, 0.5, 150], starGain: 0.00018, bloom: [0.55, 0.65, 3.0],
     // Earth first: it is where the rover's dish looks.
     companions: ['earth-star', 'venus-star'],
@@ -2763,6 +2777,7 @@ const VIEW = {
     // film of the sulphur that falls on everything.
     rockTint: [1.0, 0.9, 0.72], rockAlb: [0.30, 0.2], rockN: 0.4, talus: 500,
     landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
     // ACES, as on Mars: AgX gives away the saturation in the highlights,
     // and here that is the yellow of the sulphur.
     exposure: 1.0, eye: [0.30, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0], tone: 'aces',
@@ -2820,6 +2835,7 @@ const VIEW = {
     // terrain, broken off the stripes' walls; smaller ones among them.
     rockTint: [0.97, 0.99, 1.03], rockAlb: [0.7, 0.2], rockN: 0.25, blocks: 6,
     landmark: 'beacon', flagColor: 0xb9bcc2,
+    lander: 'generic',
     exposure: 1.0, eye: [0.42, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0],
     companions: ['saturn-enc', 'mimas-enc', 'tethys-enc', 'dione-enc', 'rhea-enc', 'titan-enc'],
     // Night: Saturn, 29° across at albedo 0.47 — 3% of the sun.
@@ -5003,8 +5019,7 @@ const landmark = (() => {
 const lander = (() => {
   const group = new THREE.Group();
   scene.add(group);
-  let site = null, baseH = 0, yaw = 0;
-  const FOOT_R = 4.72, BODY_R = 2.3;
+  let site = null, baseH = 0, yaw = 0, K = null;
 
   // Gold foil is never flat: a normal map of creases, generated.
   const crinkle = (() => {
@@ -5041,6 +5056,9 @@ const lander = (() => {
     gold: obj({ color: 0xc79a3c, metalness: 0.9, roughness: 0.32, normalMap: crinkle, normalScale: new THREE.Vector2(0.6, 0.6) }),
     black: obj({ color: 0x1c1d20, metalness: 0.1, roughness: 0.7 }),
     silver: obj({ color: 0xaab0b6, metalness: 0.65, roughness: 0.42 }),
+    white: obj({ color: 0xdcdcd6, metalness: 0.05, roughness: 0.65 }),
+    foil: obj({ color: 0xc8ccd0, metalness: 0.85, roughness: 0.3, normalMap: crinkle, normalScale: new THREE.Vector2(0.5, 0.5) }),
+    orange: obj({ color: 0xb8622a, metalness: 0.1, roughness: 0.6 }),
     grey: obj({ color: 0x5a5f66, metalness: 0.45, roughness: 0.5 }),
     bell: obj({ color: 0x3b3a38, metalness: 0.6, roughness: 0.45, side: THREE.DoubleSide }),
     glass: obj({ color: 0x0c0f14, metalness: 0.2, roughness: 0.08 }),
@@ -5066,7 +5084,8 @@ const lander = (() => {
 
   // pads[k]: how far pad k sits above the stage's plane (the struts
   // absorb it). Local frame: +x forward, the ladder leg.
-  function build(pads) {
+  function buildLM(pads) {
+    const FOOT_R = 4.72;
     const g = new THREE.Group();
     const Y0 = 1.42, Y1 = 3.07;                      // descent stage, bottom and top
     // Descent stage: the octagon, its black deck, the engine bell.
@@ -5151,6 +5170,162 @@ const lander = (() => {
     return g;
   }
 
+  /* Viking, as it stood in Chryse Planitia in 1976 and Utopia after it:
+     a hexagonal equipment bus 1.5 m across on three legs, the two RTGs
+     in their wind covers on its flanks, the camera turrets up front,
+     the high-gain dish on its mast, the weather boom, and the sampler
+     arm reaching out to the trench it dug. About two metres high. */
+  function buildViking(pads) {
+    const g = new THREE.Group();
+    const R = 1.15;
+    const bus = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.46, 6), M.white);
+    bus.position.y = 0.7; bus.rotation.y = Math.PI / 6; g.add(bus);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.82, 0.04, 6), M.grey);
+    lid.position.y = 0.94; lid.rotation.y = Math.PI / 6; g.add(lid);
+    for (let k = 0; k < 3; k++) {
+      const a = k * 2 * Math.PI / 3 + Math.PI / 3, ca = Math.cos(a), sa = -Math.sin(a);
+      const L = (r, y) => V(ca * r, y, sa * r), py = pads[k];
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.06, 14), M.silver);
+      pad.position.copy(L(R, py + 0.03)); g.add(pad);
+      rod(g, M.silver, L(0.7, 0.62), L(R, py + 0.08), 0.04);
+      rod(g, M.silver, L(0.55, 0.48), L(R - 0.05, py + 0.1), 0.025);
+    }
+    // RTG wind covers, port and starboard.
+    for (const t of [-1, 1]) box(g, M.grey, 0.42, 0.34, 0.24, -0.1, 1.05, t * 0.62);
+    // Camera turrets, a stereo pair a metre apart.
+    for (const t of [-0.5, 0.5]) {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.42, 12), M.silver);
+      c.position.set(0.55, 1.15, t); g.add(c);
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.16, 12), M.grey);
+      h.position.set(0.55, 1.42, t); g.add(h);
+      box(g, M.black, 0.06, 0.05, 0.08, 0.66, 1.42, t);
+    }
+    // The high-gain dish on its mast, aft.
+    rod(g, M.silver, V(-0.45, 0.95, 0), V(-0.45, 1.7, 0), 0.03);
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 6, 0, Math.PI * 2, 0, 0.75), M.white);
+    dish.position.set(-0.45, 1.78, 0); dish.rotation.set(0, 0, 0.9); g.add(dish);
+    // Meteorology boom, folded out to one side.
+    rod(g, M.silver, V(0.1, 0.95, -0.5), V(0.1, 1.85, -0.75), 0.015, 5);
+    rod(g, M.silver, V(0.1, 1.85, -0.75), V(0.45, 1.85, -0.8), 0.012, 5);
+    box(g, M.grey, 0.08, 0.06, 0.06, 0.48, 1.85, -0.8);
+    // UHF antenna, and the sampler arm out to its trench.
+    rod(g, M.silver, V(-0.2, 0.95, 0.4), V(-0.2, 1.5, 0.4), 0.012, 5);
+    box(g, M.grey, 0.3, 0.16, 0.2, 0.62, 0.84, 0.15);
+    rod(g, M.silver, V(0.75, 0.84, 0.15), V(2.2, 0.12 + pads[0] * 0.3, 0.6), 0.025, 6);
+    box(g, M.grey, 0.12, 0.08, 0.1, 2.25, 0.1 + pads[0] * 0.3, 0.62);
+    for (const m of g.children) m.castShadow = m.receiveShadow = true;
+    return g;
+  }
+
+  /* Venera 13, which landed in 1982 and worked for 127 minutes at
+     457 °C and 89 bar: a titanium sphere holding the electronics, on a
+     crushable landing ring 2 m across, under the disc of its drag plate
+     — at this density a disc is all the air brake it needed for the
+     last fifty kilometres — and the helical antenna on top. Its camera
+     ports look out of the sphere at the ground either side; its colour
+     chart and the arm of its penetrometer lie on the ring. */
+  function buildVenera() {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.16, 10, 40), M.grey);
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.16; g.add(ring);
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4;
+      rod(g, M.silver, V(Math.cos(a) * 0.95, 0.28, Math.sin(a) * 0.95), V(Math.cos(a) * 0.4, 0.62, Math.sin(a) * 0.4), 0.035, 6);
+    }
+    const sph = new THREE.Mesh(new THREE.SphereGeometry(0.62, 28, 18), M.white);
+    sph.position.y = 1.02; g.add(sph);
+    // Two camera ports, each looking down at the ground beside the ring.
+    for (const t of [-1, 1]) {
+      const port = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.14, 12), M.black);
+      port.position.set(0, 0.86, t * 0.56); port.rotation.x = t * 1.1; g.add(port);
+    }
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.32, 0.3, 16), M.silver);
+    neck.position.y = 1.68; g.add(neck);
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(1.08, 1.08, 0.05, 40), M.white);
+    plate.position.y = 1.86; g.add(plate);
+    const lip = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 0.98, 0.12, 40, 1, true), M.grey);
+    lip.position.y = 1.8; g.add(lip);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.55, 14), M.grey);
+    ant.position.y = 2.17; g.add(ant);
+    for (let k = 0; k < 6; k++) {
+      const h = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.012, 4, 20), M.silver);
+      h.rotation.x = Math.PI / 2 + 0.12; h.position.y = 1.96 + k * 0.08; g.add(h);
+    }
+    // The colour chart and the penetrometer arm, on the ring.
+    box(g, M.orange, 0.32, 0.03, 0.12, 1.05, 0.34, 0.25);
+    rod(g, M.silver, V(0.9, 0.3, -0.3), V(1.55, 0.05, -0.45), 0.02, 5);
+    for (const m of g.children) m.castShadow = m.receiveShadow = true;
+    return g;
+  }
+
+  /* Everywhere else nobody has landed yet, so this is what you came
+     down in: a crewed lander of the size the Apollo one was — a crew
+     cabin on a descent stage, four legs spread 7.8 m, a ladder, the
+     engine bell, radiators and a dish — in white paint and silver foil
+     rather than the LM's gold. About six and a half metres high. */
+  function buildGeneric(pads) {
+    const g = new THREE.Group();
+    const FR = 3.9, Y0 = 1.35, Y1 = 2.55;
+    const stage = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, Y1 - Y0, 8), M.foil);
+    stage.rotation.y = Math.PI / 8; stage.position.y = (Y0 + Y1) / 2; g.add(stage);
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(2.02, 2.02, 0.07, 8), M.grey);
+    deck.rotation.y = Math.PI / 8; deck.position.y = Y1; g.add(deck);
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.72, 1.0, 24, 1, true), M.bell);
+    bell.position.y = Y0 - 0.48; g.add(bell);
+    // Spherical tanks showing between the stage panels.
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2 + Math.PI / 4;
+      const t = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 12), M.silver);
+      t.position.set(Math.cos(a) * 1.55, (Y0 + Y1) / 2, -Math.sin(a) * 1.55); g.add(t);
+    }
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2, ca = Math.cos(a), sa = -Math.sin(a);
+      const L = (r, y) => V(ca * r, y, sa * r);
+      const Lt = (r, y, t) => V(ca * r - sa * t, y, sa * r + ca * t);
+      const py = pads[k];
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.36, 0.14, 18), M.silver);
+      pad.position.copy(L(FR, py + 0.05)); g.add(pad);
+      rod(g, M.white, L(1.95, 2.3), L(FR, py + 0.18), 0.09);
+      for (const t of [-1, 1]) rod(g, M.silver, Lt(FR - 0.4, py + 0.55, 0), Lt(1.7, Y0 + 0.05, t * 0.95), 0.04);
+    }
+    // Crew cabin, its windows, the hatch facing the ladder, the docking
+    // port on top.
+    const cab = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.55, 2.4, 24), M.white);
+    cab.position.y = Y1 + 1.25; g.add(cab);
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.45, 0.7, 24), M.white);
+    cone.position.y = Y1 + 2.8; g.add(cone);
+    const dock = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.3, 18), M.silver);
+    dock.position.y = Y1 + 3.3; g.add(dock);
+    box(g, M.black, 0.08, 1.1, 0.8, 1.52, Y1 + 0.75, 0);                        // hatch
+    for (const t of [-0.55, 0.55]) box(g, M.glass, 0.06, 0.32, 0.42, 1.47, Y1 + 1.75, t, -t * 0.6);
+    // Radiators and a dish.
+    for (const t of [-1, 1]) box(g, M.white, 0.06, 1.6, 1.1, -0.2, Y1 + 1.3, t * 1.62, Math.PI / 2);
+    rod(g, M.silver, V(-1.0, Y1 + 2.4, 0.4), V(-1.2, Y1 + 3.4, 0.6), 0.03);
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(0.45, 18, 6, 0, Math.PI * 2, 0, 0.8), M.white);
+    dish.position.set(-1.25, Y1 + 3.5, 0.6); dish.rotation.set(0.4, 0, 0.7); g.add(dish);
+    // Porch and ladder down the forward leg.
+    box(g, M.silver, 0.8, 0.05, 1.0, 2.35, Y1 - 0.05, 0);
+    const top = V(2.7, Y1 - 0.08, 0), bot = V(3.45, 0.95 + pads[0] * 0.8, 0);
+    for (const t of [-0.24, 0.24]) rod(g, M.silver, V(top.x, top.y, t), V(bot.x, bot.y, t), 0.02, 6);
+    for (let i = 1; i < 8; i++) {
+      const f = i / 8;
+      rod(g, M.silver, V(top.x + (bot.x - top.x) * f, top.y + (bot.y - top.y) * f, -0.24), V(top.x + (bot.x - top.x) * f, top.y + (bot.y - top.y) * f, 0.24), 0.012, 5);
+    }
+    for (const m of g.children) m.castShadow = m.receiveShadow = true;
+    return g;
+  }
+
+  /* What each kind stands on and how big it is to walk into: pads (or
+     a ring's sample points) at footR, n of them; a body of radius bodyR
+     up to height top. */
+  const KINDS = {
+    lm: { n: 4, footR: 4.72, bodyR: 2.3, top: 6.5, padR: 0.5, build: buildLM },
+    viking: { n: 3, footR: 1.15, bodyR: 0.85, top: 1.8, padR: 0.16, build: buildViking },
+    venera: { n: 6, footR: 1.0, bodyR: 1.15, top: 2.4, padR: 0, build: buildVenera },
+    generic: { n: 4, footR: 3.9, bodyR: 2.1, top: 6.3, padR: 0.45, build: buildGeneric },
+  };
+  const padAngle = (k) => (K.n === 3 ? k * 2 * Math.PI / 3 + Math.PI / 3 : k * 2 * Math.PI / K.n);
+
   function mergeByMaterial(g) {
     const byMat = new Map();
     g.updateMatrixWorld(true);
@@ -5201,21 +5376,32 @@ const lander = (() => {
       for (const m of group.children) m.traverse((o) => o.geometry && o.geometry.dispose());
       group.clear();
       site = WORLD.lander || null;
+      K = KINDS[world.lander || 'lm'];
       if (!site) return;
-      // Facing south-west: the porch and ladder turned toward the
-      // landing site, three-quarters on.
-      yaw = -2.443;
       const [x, z] = site;
-      const h = [0, 1, 2, 3].map((k) => {
-        const a = yaw + k * Math.PI / 2;
-        return terrainHeight(x + Math.cos(a) * FOOT_R, z - Math.sin(a) * FOOT_R) - 0.04;   // pads sink a few cm
-      });
-      // The plane through the pads: its centre, and its tilt fore-aft and across.
-      const hc = (h[0] + h[1] + h[2] + h[3]) / 4;
-      const pitch = Math.atan((h[0] - h[2]) / (2 * FOOT_R)), roll = Math.atan((h[1] - h[3]) / (2 * FOOT_R));
-      const res = (h[0] + h[2] - h[1] - h[3]) / 4;
-      const lm = mergeByMaterial(build([res, -res, res, -res]));
-      lm.rotation.set(roll, 0, pitch, 'YXZ');
+      // The LM faces south-west, porch and ladder turned toward the
+      // landing site, three-quarters on; the others turn the same way
+      // toward wherever the site is from them.
+      yaw = WORLD.id === 'moon' ? -2.443 : Math.atan2(z, -x) + 0.5;
+      const lp = [], h = [];
+      for (let k = 0; k < K.n; k++) {
+        const a = padAngle(k), lx = Math.cos(a) * K.footR, lz = -Math.sin(a) * K.footR;
+        const wa = yaw + a;
+        lp.push([lx, lz]);
+        h.push(terrainHeight(x + Math.cos(wa) * K.footR, z - Math.sin(wa) * K.footR) - 0.04);   // pads sink a few cm
+      }
+      // The plane through the pads, by least squares: its centre and its
+      // tilt fore-aft and across; what is left over the struts take up.
+      let hc = 0, sx = 0, sz = 0, sxx = 0, szz = 0;
+      for (let k = 0; k < K.n; k++) hc += h[k] / K.n;
+      for (let k = 0; k < K.n; k++) {
+        sx += lp[k][0] * (h[k] - hc); sz += lp[k][1] * (h[k] - hc);
+        sxx += lp[k][0] * lp[k][0]; szz += lp[k][1] * lp[k][1];
+      }
+      const bx = sx / sxx, bz = sz / szz;
+      const res = h.map((hk, k) => hk - (hc + bx * lp[k][0] + bz * lp[k][1]));
+      const lm = mergeByMaterial(K.build(res));
+      lm.rotation.set(-Math.atan(bz), 0, Math.atan(bx), 'YXZ');
       const holder = new THREE.Group();
       holder.rotation.y = yaw;
       holder.add(lm);
@@ -5231,7 +5417,7 @@ const lander = (() => {
     push(p, r, feetY, n) {
       if (!site) return false;
       const dx = p.x - site[0], dz = p.z - site[1], d = Math.hypot(dx, dz);
-      if (d > FOOT_R + 1.5) return false;
+      if (d > K.footR + 1.5) return false;
       let hit = false;
       const out = (cx, cz, R) => {
         const ex = p.x - cx, ez = p.z - cz, e = Math.hypot(ex, ez);
@@ -5241,11 +5427,11 @@ const lander = (() => {
         }
       };
       // Physics stands on raw heights, so compare against the pads' plane.
-      if (feetY < baseH + 6.5) out(site[0], site[1], BODY_R);
-      if (feetY < baseH + 0.3) {
-        for (let k = 0; k < 4; k++) {
-          const a = yaw + k * Math.PI / 2;
-          out(site[0] + Math.cos(a) * FOOT_R, site[1] - Math.sin(a) * FOOT_R, 0.5);
+      if (feetY < baseH + K.top) out(site[0], site[1], K.bodyR);
+      if (K.padR > 0 && feetY < baseH + 0.3) {
+        for (let k = 0; k < K.n; k++) {
+          const a = yaw + padAngle(k);
+          out(site[0] + Math.cos(a) * K.footR, site[1] - Math.sin(a) * K.footR, K.padR);
         }
       }
       return hit;
