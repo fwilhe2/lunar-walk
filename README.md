@@ -12,6 +12,19 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" screen is the opening rings of terrain being built in workers — a few seconds of CPU work, not a download.
 
+## Desktop builds
+
+The desktop app wraps the same local files in Electron, so it does not need a network connection or a separate server at runtime. Install Node.js 20 or newer, then run:
+
+```sh
+npm install
+make start
+```
+
+Build an installer for the current operating system with `make build`, or choose one platform with `make build-linux`, `make build-mac` or `make build-windows`. Outputs go in `dist/` (Linux AppImage, macOS DMG and Windows installer). macOS and Windows releases are unsigned by default, so those operating systems may show their usual first-run security prompt.
+
+GitHub Actions builds all three platforms on their native runners for pushes to `main`, version tags (`v*`), pull requests and manual runs. Each run uploads the installers as downloadable workflow artifacts for 30 days.
+
 ## Controls
 
 | Key | |
