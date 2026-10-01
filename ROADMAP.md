@@ -256,19 +256,21 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 **Candidates**
 - **Io** ✅: Jupiter about 19° across overhead, active plumes, sulphur colours.
 - **Mercury** ✅: sun about 1.4° across at 6.7× the Moon's flux, hollows, lobate scarps. It could be a variant of the lunar kernel.
-- **Enceladus or Mimas** with Saturn and its rings.
+- **Enceladus** ✅ with Saturn and its rings.
 
 **Recipe** (as Charon was added in `52b06c3`)
-- [ ] A `WORLDS` row and an `hX()` height function of a new kind, dispatched in `terrainHeight()`.
-- [ ] A `VIEW` row: light units, Hapke set, eye range, tone mapping, levels, companions, landmark.
-- [ ] Regolith texture parameters.
-- [ ] `WORLD_IDS`, `G_LIST` and key `9`.
-- [ ] Site placement checked in Node (skyline toward the companion).
-- [ ] README and `CLAUDE.md`.
-- [ ] For Saturn, rings as a new companion capability: a ring shader, the planet's shadow on the rings, the rings' shadow on the globe, and the lit and unlit faces of the rings.
+- [x] A `WORLDS` row and an `hX()` height function of a new kind, dispatched in `terrainHeight()`.
+- [x] A `VIEW` row: light units, Hapke set, eye range, tone mapping, levels, companions, landmark.
+- [x] Regolith texture parameters.
+- [x] `WORLD_IDS`, `G_LIST` and keys: `1`–`9`, `-`, `=` along the number row.
+- [x] Site placement checked in Node (skyline toward the companion).
+- [x] README and `CLAUDE.md`.
+- [x] For Saturn, rings as a new companion capability: a ring shader, the planet's shadow on the rings, the rings' shadow on the globe, and the lit and unlit faces of the rings.
 
 ---
 
 **Mercury, as built:** kind 7, keys renumbered so it is `1`. Intercrater plains with smooth-plains patches and wrinkle ridges; lobate scarps in 70 km lanes, a 1.4 km face 7 km east of the site; hollows decided per cell at the cell's centre (in craters of the classes flagged `hol`, inside a province field) and cached, so a hollow is a pure function of its cell; a clumped class of close secondaries. Venus and Earth hang as two stars. About 1.2× the Moon's cost per height query, after caching the hollow cells and the scarp lane's hashes (1.4× before). The opening screen's world buttons are now a two-row grid.
 
 **Io, as built:** kind 8, no craters. Plains with layered benches and lava flows, one patera per 56 km cell (black floor, red or white fallout halo) and one tilted-block mountain per 110 km cell, each kept inside its cell. The site near Kanehekili Fluctus has Jupiter 19.5° across over a 7 km mountain, with the three other Galileans in Io's own frame. Two plumes (a new sky object) stand over the horizon, scattering forward. Night is Jupiter-lit, the dose is 36 Sv a day, and the tone mapping is ACES for the yellow. Keys now run along the number row: `1`–`9`, then `-` (and `=` next).
+
+**Enceladus, as built:** kind 9. Tiger stripes in 35 km lanes with funiscular ridges between, a snow mantle, ice blocks from a new `blocks` rock option, and a short level set (±14 km). The site is 5 km from Baghdad Sulcus. The jet curtain is a ribbon on the stripe's trough, built from the kernel, forward-scattering, with the moon's shadow climbing it after sunset. Saturn is 29° across with rings as a companion capability: profiled annulus, single-scattering lit and unlit faces, the planet's shadow on them, their shadow on the globe. From Enceladus they are edge-on, so the shadow band is what shows. Tethys, Dione, Rhea, Titan and Mimas move along the ring plane. The suit has jets, and there is no rover.
