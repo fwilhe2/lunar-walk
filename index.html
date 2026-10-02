@@ -5575,11 +5575,33 @@ const starPoints = (() => {
    0.53° from the Moon; 0.35° from Mars and its two moons, at 1.52
    AU, where the disc delivers 43% of the flux it does at Earth.
    Base geometry is the lunar size, scaled per world. */
+
+/* Sky depth. The sun and the companions stand a few kilometres off,
+   in for bodies hundreds of thousands of kilometres away, so by their
+   true depth anything in the scene beyond them — a jet curtain, a
+   plume, a far ridge — would hide behind them. These vertex lines move
+   them into the last ten-thousandth of the far range, behind all of
+   the scene out to 89 km, ordered among themselves by their stand-in
+   distance (3–13 km), so a moon still crosses Jupiter's face and Saturn
+   still covers the sun. The stars, further back still, cannot fit
+   behind that: they are drawn first, and the companions after them in
+   the transparent queue (renderOrder −1.5, before the curtain and
+   plumes at −1). In the near range the companions lie past its far
+   plane and stay clipped; the test keeps it so. `dist` is the
+   vertex's distance from the camera. */
+const skyDepth = (dist) => `
+  if ( gl_Position.z < gl_Position.w )
+    gl_Position.z = gl_Position.w * ( 1.0 - 1e-4 * clamp( ( 13000.0 - ( ${dist} ) ) / 10000.0, 0.01, 1.0 ) );`;
+
 const SUN_R0 = 56;
 const sunDisc = new THREE.Mesh(
   new THREE.SphereGeometry(SUN_R0, 24, 16),
   new THREE.MeshBasicMaterial({ color: new THREE.Color(18, 16.8, 14.8), toneMapped: false, fog: false })
 );
+sunDisc.material.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
+    '#include <project_vertex>' + skyDepth('length( mvPosition.xyz )'));
+};
 scene.add(sunDisc);
 
 const corona = (() => {
@@ -5619,6 +5641,8 @@ const corona = (() => {
   // does not balloon when the eye opens or vanish when it closes.
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tEye = EYE_TEX;
+    shader.vertexShader = shader.vertexShader.replace('#include <logdepthbuf_vertex>',
+      '#include <logdepthbuf_vertex>' + skyDepth('length( mvPosition.xyz )'));
     shader.fragmentShader = 'uniform sampler2D tEye;\n' + shader.fragmentShader
       .replace('#include <map_fragment>', 'vec4 gT = texture2D( map, vMapUv ); diffuseColor.rgb *= gT.rgb * gT.rgb;')
       .replace('#include <tonemapping_fragment>',
@@ -7200,7 +7224,7 @@ function makeCompanion(spec) {
           vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
           vC = ( modelMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
           vP = normalize( M * vec3( 0.0, 1.0, 0.0 ) );
-          gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
+          gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );${skyDepth('length( vW - cameraPosition )')}
         }`,
       fragmentShader: decl + (spec.relief || spec.detail ? noiseLib : '') + `
         varying vec3 vN; varying vec3 vW; varying vec2 vUv; varying vec3 vNo;
@@ -7331,6 +7355,10 @@ function makeCompanion(spec) {
     })
   );
   if (spec.oblate) globe.scale.y = spec.oblate;
+  // After the stars, in the transparent queue: sky depth (§7) puts it
+  // behind them, so it covers them by order. Still opaque in effect.
+  globe.material.transparent = true;
+  globe.renderOrder = -1.5;
   if (spec.face) {
     // A locked body keeps one face to its partner. Turn the globe on
     // its pole until the middle of the map (u = 0.5, where the maps
@@ -7363,7 +7391,7 @@ function makeCompanion(spec) {
           vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
           vC = ( modelMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
           vP = normalize( mat3( modelMatrix ) * vec3( 0.0, 1.0, 0.0 ) );
-          gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
+          gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );${skyDepth('length( vW - cameraPosition )')}
         }`,
       fragmentShader: skyDome.glsl + `
         uniform sampler2D ringMap; uniform vec3 sunDir; uniform float uBright;
@@ -7389,7 +7417,7 @@ function makeCompanion(spec) {
           #include <colorspace_fragment>
         }`,
     }));
-    ring.renderOrder = 1;
+    ring.renderOrder = -1.4;
     group.add(ring);
   }
 
@@ -7407,7 +7435,7 @@ function makeCompanion(spec) {
           void main() {
             vN = normalize( mat3( modelMatrix ) * normal );
             vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
-            gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
+            gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );${skyDepth('length( vW - cameraPosition )')}
           }`,
         // Additive, so it takes only the dimming: the globe under it
         // has already laid the sky down once.
@@ -7428,6 +7456,7 @@ function makeCompanion(spec) {
       })
     );
     if (spec.oblate) atmo.scale.y = spec.oblate;
+    atmo.renderOrder = -1.45;
     group.add(atmo);
   }
 
