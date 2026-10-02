@@ -125,6 +125,8 @@ Boot builds the opening rings in workers (a few seconds on real hardware); after
 - The ground shader skips the fine regolith octave past ~140 m, where it would only mip-average to its mean (`rgMeanC`).
 - Europa's talus rocks (`world.talus`) sample slope with three `terrainHeight()` calls per candidate on the main thread; the count is what keeps a rock chunk inside the lunar budget.
 
+**Switching worlds is two-phase.** `applyWorld(id)` first prepares what is costly the first time — the regolith set and the companions' maps — while the loading screen shows and the page stays live, then calls `applyWorldNow(id)`, which does everything at once as before; it returns a promise, and `goTo()` and the probe's `at()` wait on it. Texture generators that are pure pixel loops (`regolithData`, `jupiterPixels`, `galileanPixels`, `charonPixels`, `plutoPixels`) run in a worker via `offThread()`: they must not touch `THREE`, the DOM or module constants (they get `TERRAIN_SOURCE` for `hash2()`, `fbm()` and friends), and are listed in `OFF_THREAD` and, for companions, `TEXGEN_OFF`. The rest still draws on canvases on the main thread, one body per task after the picker's zoom (`companionsAsync()`). A new body's map generator should be written the pure way and registered there, or it freezes the page the first time someone visits.
+
 Profile in Node rather than guessing — `node tools/check.mjs` extracts `TERRAIN_SOURCE`, evals it and times `terrainHeight()` per world against a baseline; for anything finer, do the same by hand (warm up first: the first few thousand calls run unoptimised and mislead).
 
 ## Three.js r160 specifics

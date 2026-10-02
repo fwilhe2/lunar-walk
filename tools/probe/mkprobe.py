@@ -25,7 +25,7 @@ def rep(a, b):
 
 rep("  composer.render();\n",
     "  composer.render();\n  if (window.__afterRender) window.__afterRender();\n")
-rep("      if (!everStarted) overlay.hidden = false;",
+rep("      if (!everStarted) { overlay.hidden = false; hud.classList.add('lift'); }",
     "      if (!window.__probeStarted) { window.__probeStarted = 1; everStarted = true; setTimeout(__probeMain, 0); }")
 
 hooks = """<script>
