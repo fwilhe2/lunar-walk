@@ -7471,10 +7471,12 @@ function makeCompanion(spec) {
   // Its own light, scaled by the night units (updateKey).
   group.userData.bright = uni.uBright;
   group.userData.bright0 = uni.uBright.value;
-  // The sun sits far enough away that the parallax between it and
-  // the observer matters: that offset is what sets the phase.
+  // The sun is so far off that it lights the companion from the same
+  // direction it lights you (0.01° apart for Saturn from Enceladus).
+  // The phase comes from where the companion stands, not from moving
+  // the sun: a stand-in sun at a finite distance tilted it by up to 6°.
   group.userData.sync = () => {
-    uni.sunDir.value.copy(SUN_DIR).multiplyScalar(60000).sub(pos).normalize();
+    uni.sunDir.value.copy(SUN_DIR);
   };
   // A moon of Jupiter seen from another (Europa, or Io — kepler.frame):
   // both orbits in one plane, so its offset from the observer's moon is
