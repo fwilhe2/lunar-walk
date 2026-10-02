@@ -7563,6 +7563,13 @@ const plumes = (() => {
       vUv = uv;
       vW = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
       gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
+      // A wide canopy reaches past the far plane (90 km) toward its
+      // edges, which cut it along a straight line. Hold its depth just
+      // inside the far range, still in front of the companions' sky
+      // depth and behind all the ground. Not in the near range, whose
+      // far plane is DEPTH_SPLIT: there the sheet must stay clipped.
+      float far = projectionMatrix[ 3 ][ 2 ] / ( projectionMatrix[ 2 ][ 2 ] + 1.0 );
+      if ( far > 1000.0 ) gl_Position.z = min( gl_Position.z, gl_Position.w * ( 1.0 - 2e-4 ) );
     }`;
   const fs = `
     uniform vec3 uSun, uCol;
