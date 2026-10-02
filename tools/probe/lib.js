@@ -23,7 +23,7 @@ const probe = (() => {
     // Loading done, nothing left to stream, then a few frames for the
     // terrain-shadow pass, which is spread over five.
     async idle(extra = 8) {
-      while (loading || chunkStreamer.pending() > 0) await sleep(50);
+      while (preparing || loading || chunkStreamer.pending() > 0) await sleep(50);
       await api.frames(extra);
     },
     // Snap the eye to the scene first: at a frame every second or so,
@@ -38,7 +38,8 @@ const probe = (() => {
     },
     // Put the viewer somewhere: { world, x, z, h (above ground), yaw, pitch, mode, sun (rad) }.
     async at(o) {
-      if (o.world && o.world !== worldId) { applyWorld(o.world); await api.idle(2); }
+      // applyWorld() prepares textures first, then applies: wait for both.
+      if (o.world && o.world !== worldId) { await applyWorld(o.world); await api.idle(2); }
       if (o.sun !== undefined) { sunElev = o.sun; updateSunDir(); updateSkyColors(); }
       if (o.mode) setMode(o.mode);
       const x = o.x ?? player.pos.x, z = o.z ?? player.pos.z;
