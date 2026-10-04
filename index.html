@@ -9769,22 +9769,25 @@ const sound = (() => {
   // A boot on the ground: the strike, carried up the leg as a dead
   // low thud, and the grit under the sole — which in vacuum only the
   // boot can carry, and which on Mars and Venus the air carries too.
-  function thump(k, t0) {
+  // A boot on soil is a dull thud that the regolith soaks up; on rock
+  // nothing gives, and it comes through the bones as a sharper knock,
+  // higher and shorter, with a click and no grit.
+  function thump(k, t0, hard = false) {
     k = Math.max(0.02, Math.min(1.5, k));
     const o = ctx.createOscillator(), g = ctx.createGain();
-    o.frequency.setValueAtTime(75, t0);
-    o.frequency.exponentialRampToValueAtTime(38, t0 + 0.14);
+    o.frequency.setValueAtTime(hard ? 150 : 75, t0);
+    o.frequency.exponentialRampToValueAtTime(hard ? 70 : 38, t0 + (hard ? 0.07 : 0.14));
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.45 * k, t0 + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+    g.gain.exponentialRampToValueAtTime(0.45 * k, t0 + (hard ? 0.002 : 0.006));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + (hard ? 0.12 : 0.22));
     chain(o, g, suitIn);
     o.start(t0); o.stop(t0 + 0.25);
     const n = ctx.createBufferSource(), gg = ctx.createGain();
     n.buffer = noise;
     gg.gain.setValueAtTime(0.0001, t0);
-    gg.gain.exponentialRampToValueAtTime(0.16 * k, t0 + 0.004);
-    gg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.1);
-    chain(n, filt('bandpass', 1800 + Math.random() * 900, 0.9), gg);
+    gg.gain.exponentialRampToValueAtTime((hard ? 0.1 : 0.16) * k, t0 + 0.004);
+    gg.gain.exponentialRampToValueAtTime(0.0001, t0 + (hard ? 0.035 : 0.1));
+    chain(n, filt('bandpass', hard ? 3800 + Math.random() * 1200 : 1800 + Math.random() * 900, hard ? 2 : 0.9), gg);
     gg.connect(suitIn); gg.connect(airIn);
     n.start(t0, Math.random() * 1.5); n.stop(t0 + 0.12);
   }
@@ -9827,7 +9830,7 @@ const sound = (() => {
         : { air: 0, lp: 20000, wind: 0, windLP: 400 };                         // vacuum
       applyMedium();
     },
-    step(k) { if (live()) thump(k, ctx.currentTime); },
+    step(k, hard) { if (live()) thump(k, ctx.currentTime, hard); },
     quindar() { if (live()) { beep(2525, ctx.currentTime, 0.25); beep(2475, ctx.currentTime + 1.1, 0.25); } },
     /* Once a frame. work: 0–1, how hard you are going; jets: axes
        firing; rover: null, or { v, drive }. */
@@ -9972,7 +9975,12 @@ const gait = (() => {
     const ax = hs > 0.01 ? p.vel.x / hs : 0, az = hs > 0.01 ? p.vel.z / hs : 0;
     foot.x = p.pos.x + ax * ahead; foot.z = p.pos.z + az * ahead; foot.n++;
     prints.place(foot.x, foot.z, yawObj.rotation.y);
-    sound.step(k);
+    let hard = p.lift > 0.01;
+    if (!hard) {
+      const t = terrainHeight(foot.x, foot.z) + 0.02;
+      for (const r of rockSystem.solidsAt(foot.x, foot.z, _solids)) if (rockHeight(r, foot.x, foot.z) > t) { hard = true; break; }
+    }
+    sound.step(k, hard);
     // The other boot, leaving the ground behind this one, kicks.
     if (hs > 0.15) dust.kick(p.pos.x - ax * 0.15, terrainHeight(p.pos.x, p.pos.z), p.pos.z - az * 0.15, ax, az, hs);
   };
@@ -10922,7 +10930,7 @@ function stepEVA(dt) {
       else if (hsL < 0.3 && impact > 0.9 * pushSpeed(1, SUIT.crouch, gl) && Math.random() < 0.15) startFall(p, -1, gl);
       if (impact > 0.9) dust.burst(p.pos.x, gh, p.pos.z, Math.min(1.6, impact * 0.35));
       if (impact > 0.3) prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
-      if (impact > 0.15) sound.step(0.2 + impact * 0.5);
+      if (impact > 0.15) sound.step(0.2 + impact * 0.5, lift > 0.01);
       p.crouch = Math.max(p.crouch, Math.min(SUIT.crouch, impact * impact / (2 * SUIT.k * SUIT.F0 / SUIT.m)));
       p.onGround = true;
       v.y = 0;
