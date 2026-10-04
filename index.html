@@ -610,7 +610,7 @@ var WORLDS = {
   titan: {
     id: 'titan', kind: 10, seed: 20050114,
     g: 1.352, R: 2574700, Rc: 3060000,
-    lander: [26, 12],
+    lander: [19, -33],
     craters: [],
     craterAmp: 0, depthK: 0, rampart: 0, halo: 0,
   },
@@ -2098,9 +2098,10 @@ function hEnceladus(x0, z0) {
    flood where they run below sea level, and depressions one per
    6 km cell at most, each a pure function of its cell. Few craters:
    the air stops small impactors and rain and sediment bury the rest.
-   TI_OX/TI_OZ put the landing site on the plain 400 m south of the
-   shore. Height 0 is the sea's surface.                           */
-var TI_OX = 0, TI_OZ = 0, TI_CELL = 6000;
+   TI_OX/TI_OZ put the landing site on a low point of the coastal
+   plain, 135 m from a bay, looking south across it to a plateau 250 m
+   high. Height 0 is the sea's surface.                           */
+var TI_OX = 8750, TI_OZ = -3750, TI_CELL = 6000;
 
 // Depressions: the nearest one's contribution to the height, given
 // the ground it is cut into. Floors sit at a level of their own.
@@ -3082,14 +3083,15 @@ const VIEW = {
      term is the last few per cent of direct beam.
 
      Ligeia Mare's southern shore, at 78° N in the summer the northern
-     seas were seen in: the sun stands low, here 16°, the sea to the
-     north. The liquid level is height 0; see hTitan(). */
+     seas were seen in: the sun stands low, here 16°. You land at the
+     head of a bay, with a plateau across it. The liquid level is
+     height 0; see hTitan(). */
   titan: {
     name: 'TITAN', site: 'Ligeia Mare', gTxt: '1.35 m/s²',
     title: 'Titan Walk', sub: 'Ligeia Mare · 0.138 g · surface unbounded',
     fine: 'One and a half bar of nitrogen at −179 °C, under a haze that lets through a thousandth<br>' +
-          'of Earth\'s daylight, all of it orange and none of it from a visible sun. The sea to the<br>' +
-          'north is liquid methane. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'of Earth\'s daylight, all of it orange and none of it from a visible sun. The bay in<br>' +
+          'front of you is liquid methane: walk in. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: true, stars: 0, noSun: true, shadows: false, skyLit: true,
     sunColor: 0xffb46a, sunPower: 0.05, sunSize: 5.9, sunHDR: [1, 1, 1],
     corona: 1, coronaColor: [1, 1, 1],
@@ -3122,7 +3124,7 @@ const VIEW = {
     exposure: 1.0, eye: [0.16, 0.3, 14], tone: 'aces', bloom: [0.2, 0.75, 3.0],
     companions: [],
     sea: 0,
-    look: [0.25, -0.04],
+    look: [Math.PI, -0.03],
   },
 
   enceladus: {
