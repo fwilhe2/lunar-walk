@@ -207,6 +207,7 @@
     <dl>
       <div class="row"><dt>Gravity</dt><dd id="r-g">1.62 m/s²</dd></div>
       <div class="row"><dt>Velocity</dt><dd id="r-v">0.00 m/s</dd></div>
+      <div class="row"><dt>Effort</dt><dd id="r-met">140 W · 72 bpm</dd></div>
       <div class="row"><dt>Altitude</dt><dd id="r-a">0.00 m</dd></div>
       <div class="row"><dt>Heading</dt><dd id="r-hdg">000°</dd></div>
       <div class="row"><dt>Home</dt><dd id="r-home"></dd></div>
@@ -9948,6 +9949,8 @@ const gait = (() => {
   };
   return {
     get mode() { return mode; },
+    // Footfalls a second while moving, for the metabolic cost.
+    get rate() { return env > 0 ? (mode === 'walk' ? 1 : 2) / T : 0; },
     reset() { ph = 0; env = 0; oy = 0; ox = 0; n = 0; },
     step(p, hs, gl, dt, running) {
       const L = SUIT.L;
@@ -9998,6 +10001,36 @@ const gait = (() => {
   };
 })();
 
+/* ── Effort ────────────────────────────────────────────────────
+   What moving costs you, as metabolic power. A pressurised suit costs
+   about 140 W just to stand in. Each step then costs work against the
+   suit's own joints, which does not care about gravity, and a share
+   of your weight carried along, which does: net cost of transport is
+   about 0.2 of weight per metre walking and 0.35 loping, as on Earth.
+   Climbing is weight times rate of climb, through muscle at 25%. On
+   the Moon that comes to ~280 W walking and ~400 W loping, the span
+   the Apollo crews' metabolic telemetry ran over (Waligora & Horrigan
+   1975: 200–300 kcal/h, 230–350 W, averaged over whole EVAs, and well
+   above that hauling up Cone crater's flank); heart rate follows at about 0.2 beat a
+   minute per watt, lagging by tens of seconds as it does. */
+const EFFORT = { rest: 140, step: 75, walk: 0.2, lope: 0.35, eff: 0.25 };
+const effort = {
+  W: EFFORT.rest, Wf: EFFORT.rest, hr: 72, kick: 0,
+  // Energy spent at once — a push — joins the next second's rate.
+  spend(J) { this.kick += J; },
+  update(dt, P) {
+    const kick = Math.min(this.kick, 1500 * dt);   // a push is paid off over a second or so
+    this.kick -= kick;
+    // A fit astronaut's aerobic ceiling is about 4 L of O₂ a minute,
+    // 1.4 kW; past it the rest is borrowed, and shows as heart rate.
+    const inst = Math.min(1400, P + kick / Math.max(dt, 1e-3));
+    this.Wf += (inst - this.Wf) * (1 - Math.exp(-dt / 2));       // for the breath, which answers fast
+    this.W += (inst - this.W) * (1 - Math.exp(-dt / 12));        // what the readout shows
+    const hrT = Math.min(185, 72 + 0.2 * (this.W - EFFORT.rest));
+    this.hr += (hrT - this.hr) * (1 - Math.exp(-dt / (hrT > this.hr ? 15 : 40)));
+  },
+};
+
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
   vel: new THREE.Vector3(),
@@ -10019,6 +10052,7 @@ const keys = Object.create(null);
 const el = {
   mode: document.getElementById('r-mode'),
   g: document.getElementById('r-g'), body: document.getElementById('r-body'),
+  met: document.getElementById('r-met'),
   v: document.getElementById('r-v'), a: document.getElementById('r-a'),
   p: document.getElementById('r-p'), s: document.getElementById('r-s'),
   world: document.getElementById('r-world'), site: document.getElementById('r-site'),
@@ -10850,6 +10884,16 @@ function stepEVA(dt) {
     p.leanS += (THREE.MathUtils.clamp(tS, -0.5, 0.5) - p.leanS) * k;
   }
   p.pvx = v.x; p.pvz = v.z;
+  // What it is costing you.
+  let P = EFFORT.rest;
+  if (p.onGround && gait.rate > 0) {
+    P += EFFORT.step * gait.rate + SUIT.m * gl * hs * (gait.mode === 'walk' ? EFFORT.walk : EFFORT.lope);
+    P += Math.max(0, SUIT.m * gl * v.y) / EFFORT.eff;
+  }
+  if (world.drag && p.onGround) P += SUIT.m * world.drag * hs * hs * hs / EFFORT.eff;
+  if (tookOff > 0) effort.spend(0.5 * SUIT.m * tookOff * tookOff / EFFORT.eff + EFFORT.step * 2);
+  if (p.charge > 0) P += 120;    // holding a crouch in a stiff suit
+  effort.update(dt, P);
   camera.rotation.set(-p.leanF * 0.5, 0, -p.leanS * 0.35);
   // Looking down past what the neck manages inside the helmet means
   // bending at the hips, and looking up, leaning back: the eye swings
@@ -11127,8 +11171,7 @@ let roverAir = 0;
 function stepSound(dt) {
   let work = 0.05, jets = 0, rv = null;
   if (mode === 'EVA') {
-    const vRun = Math.sqrt(SUIT.frRun * player.gravity * SUIT.L);
-    work = Math.min(1, 0.85 * hudSpeed / Math.max(vRun, 0.2) + (player.charge > 0 || player.pushing ? 0.35 : 0));
+    work = Math.min(1, Math.max(0, (effort.Wf - EFFORT.rest) / 500));
     if (world.jets && player.gas > 0) {
       jets = Math.abs(input.fwd) + Math.abs(input.side) + (input.jump && !player.onGround ? 1 : 0) + (input.down ? 1 : 0);
     }
@@ -11150,6 +11193,7 @@ function step(dt, t) {
   demo.update(dt);
   readInput(dt);
   const gh = mode === 'EVA' ? stepEVA(dt) : mode === 'FLY' ? stepFLY(dt) : stepROVER(dt);
+  if (mode !== 'EVA') effort.update(dt, mode === 'ROVER' ? EFFORT.rest + 30 : EFFORT.rest);
   // A parked rover, brake on, still settles on its springs — and one
   // you bailed out of mid-jump still comes down.
   if (mode !== 'ROVER' && rover.state.spawned) rover.step(dt, NO_KEYS, player.gravity, true);
@@ -11202,6 +11246,7 @@ function step(dt, t) {
   if (hudTimer <= 0) {
     hudTimer = 0.1;
     el.v.textContent = hudSpeed.toFixed(2) + ' m/s';
+    el.met.textContent = Math.round(effort.W / 10) * 10 + ' W · ' + Math.round(effort.hr) + ' bpm';
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
     drawCompass();
