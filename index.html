@@ -10970,6 +10970,17 @@ function stepEVA(dt) {
     }
   }
   p.fallAmt = fa;
+  // The legs ride the bumps, not the head: the hip follows the ground
+  // the feet are on, which over a step's length averages away relief
+  // shorter than a stride. A triangle filter over ±0.4 m along the way
+  // you are going keeps any slope exact and halves the jolting the
+  // metre-scale lunar roughness would otherwise put in the eye.
+  let smooth = 0;
+  if (p.onGround && p.lift === 0 && hs > 0.05) {
+    const ux = v.x / hs * 0.4, uz = v.z / hs * 0.4;
+    const avg = (terrainHeight(p.pos.x - ux, p.pos.z - uz) + 2 * th + terrainHeight(p.pos.x + ux, p.pos.z + uz)) / 4;
+    smooth = (avg - th) * Math.min(1, hs / 0.3);
+  }
   // The body pivots about the feet, and the eye rides the helmet's arc:
   // onto hands and knees going forward, onto the backpack going back.
   const fDir = p.fall ? p.fall.dir : 1, fTh = fa * (fDir > 0 ? 1.2 : 1.25);
@@ -11006,12 +11017,12 @@ function stepEVA(dt) {
   const bendT = pit < -NECK ? Math.min(1.0, -pit - NECK) : pit > NECK ? -Math.min(0.45, pit - NECK) : 0;
   p.bend += (bendT - p.bend) * (1 - Math.exp(-dt / 0.35));
   const bf = 0.67 * Math.sin(p.bend), bd = 0.67 * (1 - Math.cos(p.bend));
-  yawObj.position.set(p.pos.x + right.x * g8.x + fwd.x * (bf + fOut), p.pos.y + g8.y + p.eyeOff - bd - fDrop, p.pos.z + right.z * g8.x + fwd.z * (bf + fOut));
+  yawObj.position.set(p.pos.x + right.x * g8.x + fwd.x * (bf + fOut), p.pos.y + g8.y + p.eyeOff + smooth - bd - fDrop, p.pos.z + right.z * g8.x + fwd.z * (bf + fOut));
   if (fa > 0) {   // lying on uneven ground, the helmet stays on top of it
     const under = terrainHeight(yawObj.position.x, yawObj.position.z) + 0.3;
     if (yawObj.position.y < under) yawObj.position.y = under;
   }
-  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF + p.bend * 0.6 + fTh * fDir, p.leanS);
+  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff + smooth, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF + p.bend * 0.6 + fTh * fDir, p.leanS);
   hudSpeed = hs;
   return gh;
 }
