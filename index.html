@@ -10005,6 +10005,7 @@ const player = {
   gravity: G_LIST.moon,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
+  leanF: 0, leanS: 0, pvx: 0, pvz: 0,   // rad leaned forward and to the right; last velocity
   lift: 0, eyeOff: 0,             // m a rock holds you above the soil; the eye's lag behind a step
   gas: JET.dv,                    // m/s of Δv left in the jets
 };
@@ -10078,6 +10079,8 @@ function setMode(next) {
   if (next === 'EVA') player.onGround = false;
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
   player.lift = 0; player.eyeOff = 0;
+  player.leanF = player.leanS = 0; player.pvx = player.vel.x; player.pvz = player.vel.z;
+  camera.rotation.set(0, 0, 0);
   mode = next;
   el.mode.textContent = mode === 'EVA' ? 'EVA' : mode === 'FLY' ? 'FLIGHT' : 'ROVER LRV';
   updateKeysHelp();
@@ -10450,10 +10453,14 @@ const body = (() => {
   g.visible = false;
   scene.add(g);
   return {
-    update(x, y, z, yaw, phase, amt) {
+    update(x, y, z, yaw, phase, amt, leanF = 0, leanS = 0) {
       g.visible = true;
       g.position.set(x, y, z);
-      g.rotation.y = yaw;
+      // Pitched forward about the feet: the backpack pulls the body's
+      // centre of mass back, and Apollo crews stood and walked leaning
+      // into it — 16° on average in video (Chiou-Tan et al. 2026) —
+      // more while speeding up.
+      g.rotation.set(-(0.2 + leanF), yaw, -leanS, 'YXZ');
       const sw = Math.sin(phase) * amt;
       legs[0].rotation.x = sw * 0.5; legs[1].rotation.x = -sw * 0.5;
       arms[0].rotation.x = -sw * 0.35; arms[1].rotation.x = sw * 0.35;
@@ -10829,8 +10836,23 @@ function stepEVA(dt) {
   const hs = Math.hypot(v.x, v.z);
   // The gait: where the eye rides over the feet, and when they strike.
   const g8 = gait.step(p, hs, gl, dt, running);
+  // Leaning into it. To speed up or slow down on legs, the body must
+  // lean until the ground's push passes through its centre of mass:
+  // tan φ = a/g. On the Moon friction allows a sixth of what it does
+  // at home, but gravity is a sixth too, so the lean is as steep — up
+  // to 30° — and, the body falling into it at √(g/L), far slower to
+  // come and go. The head inside the helmet takes back half of it.
+  if (p.onGround && dt > 0) {
+    const ax = (v.x - p.pvx) / dt, az = (v.z - p.pvz) / dt;
+    const tF = Math.atan((ax * fwd.x + az * fwd.z) / gl), tS = Math.atan((ax * right.x + az * right.z) / gl);
+    const k = 1 - Math.exp(-dt / (0.5 * Math.sqrt(SUIT.L / gl)));
+    p.leanF += (THREE.MathUtils.clamp(tF, -0.6, 0.6) - p.leanF) * k;
+    p.leanS += (THREE.MathUtils.clamp(tS, -0.5, 0.5) - p.leanS) * k;
+  }
+  p.pvx = v.x; p.pvz = v.z;
+  camera.rotation.set(-p.leanF * 0.5, 0, -p.leanS * 0.35);
   yawObj.position.set(p.pos.x + right.x * g8.x, p.pos.y + g8.y + p.eyeOff, p.pos.z + right.z * g8.x);
-  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt);
+  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF, p.leanS);
   hudSpeed = hs;
   return gh;
 }
@@ -11456,6 +11478,7 @@ function applyWorldNow(id) {
   player.vel.set(0, 0, 0);
   player.onGround = true;
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset(); player.lift = 0; player.eyeOff = 0;
+  player.leanF = player.leanS = 0; player.pvx = player.pvz = 0;
   player.gas = JET.dv;
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
