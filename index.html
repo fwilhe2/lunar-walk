@@ -9929,9 +9929,11 @@ const gait = (() => {
   let mode = 'walk', ph = 0, side = 1, n = 0;   // phase 0–1 within the step (walk) or cycle (lope)
   let T = 1, s = 0.5, td = 0, vy = 0, second = false, env = 0;
   let oy = 0, ox = 0;
+  const foot = { x: 0, z: 0, n: 0 };   // the last foot down, and a count of them
   const strike = (p, k, ahead, hs) => {
     const ax = hs > 0.01 ? p.vel.x / hs : 0, az = hs > 0.01 ? p.vel.z / hs : 0;
-    prints.place(p.pos.x + ax * ahead, p.pos.z + az * ahead, yawObj.rotation.y);
+    foot.x = p.pos.x + ax * ahead; foot.z = p.pos.z + az * ahead; foot.n++;
+    prints.place(foot.x, foot.z, yawObj.rotation.y);
     sound.step(k);
   };
   // A cycle's shape, fixed at its start so the arcs join up.
@@ -9949,13 +9951,14 @@ const gait = (() => {
   };
   return {
     get mode() { return mode; },
+    foot,
     // Footfalls a second while moving, for the metabolic cost.
     get rate() { return env > 0 ? (mode === 'walk' ? 1 : 2) / T : 0; },
     reset() { ph = 0; env = 0; oy = 0; ox = 0; n = 0; },
     step(p, hs, gl, dt, running) {
       const L = SUIT.L;
       const vRun = Math.sqrt(SUIT.frRun * gl * L);
-      const moving = p.onGround && !p.pushing && p.charge === 0 && hs > 0.08 && hs < 1.6 * vRun;
+      const moving = p.onGround && !p.pushing && !p.fall && p.charge === 0 && hs > 0.08 && hs < 1.6 * vRun;
       if (!moving) {
         // Coming to rest: the body settles over both feet.
         env = Math.max(0, env - dt / 0.25);
@@ -10038,7 +10041,8 @@ const player = {
   gravity: G_LIST.moon,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
-  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0,   // rad leaned forward and to the right; last velocity
+  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0,
+  fall: null, fallAmt: 0, footN: 0,     // a fall in progress: { t, dir: 1 forward, −1 back }   // rad leaned forward and to the right; last velocity
   lift: 0, eyeOff: 0,             // m a rock holds you above the soil; the eye's lag behind a step
   gas: JET.dv,                    // m/s of Δv left in the jets
 };
@@ -10114,6 +10118,7 @@ function setMode(next) {
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
   player.lift = 0; player.eyeOff = 0;
   player.leanF = player.leanS = 0; player.pvx = player.vel.x; player.pvz = player.vel.z;
+  player.fall = null; player.fallAmt = 0;
   camera.rotation.set(0, 0, 0);
   mode = next;
   el.mode.textContent = mode === 'EVA' ? 'EVA' : mode === 'FLY' ? 'FLIGHT' : 'ROVER LRV';
@@ -10684,6 +10689,22 @@ function rockPush(pos, feet, rad, n) {
   return hit;
 }
 
+/* Falling down. Every Apollo crew that went far on foot fell: Young
+   and Cernan tripping at a lope, Duke after his highest jump, when his
+   backpack carried him over backwards. A fall here comes only from
+   something that would do it: running square into a boulder, a toe
+   caught on a stone mid-lope, landing a jump too fast on a downslope,
+   and now and then a full-effort straight-up jump, Duke's way. You
+   topple at the pace your height and gravity allow, √(L/g) — slow and
+   strangely gentle on the Moon — lie a moment, then push yourself back
+   up, which is hard work in a stiff suit. None of it on the moonlets,
+   where you are hardly standing to begin with. */
+const FALL = { hold: 1.2, up: 2.6, getUp: 1800 };   // s down, s getting up, J it costs
+function startFall(p, dir, gl) {
+  if (p.fall || world.jets) return;
+  p.fall = { t: 0, dir, topple: 1.5 * Math.sqrt(SUIT.L / gl), hit: false };
+}
+
 const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3();
 const _hitN = new THREE.Vector3();
 function stepEVA(dt) {
@@ -10702,6 +10723,7 @@ function stepEVA(dt) {
   // part-way makes a part-length wish, and so a slower pace.
   wish.copy(fwd).multiplyScalar(kf).addScaledVector(right, kr);
   if (wish.lengthSq() > 1) wish.normalize();
+  if (p.fall) wish.set(0, 0, 0);    // down: the legs are not under you
   const running = input.run;
 
   // The slope under you, as a gradient.
@@ -10715,7 +10737,7 @@ function stepEVA(dt) {
   if (p.onGround) {
     // Winding up: SPACE sinks you into the crouch, and how long you
     // hold it is how hard you will push. Letting go pushes.
-    if (input.jump && !p.pushing) {
+    if (input.jump && !p.pushing && !p.fall) {
       // A trigger part-way down caps the effort; SPACE does not.
       p.charge = Math.min(input.pushCap, p.charge + dt / SUIT.charge);
       const t = p.charge * SUIT.crouch - p.crouch;
@@ -10813,6 +10835,7 @@ function stepEVA(dt) {
     const vn = v.x * _hitN.x + v.z * _hitN.z;
     if (vn < 0) {
       if (vn < -0.5) sound.step(Math.min(1, -vn * 0.6));
+      if (vn < -0.9 && p.onGround) startFall(p, -1, gl);   // knocked back off it
       v.x -= vn * _hitN.x; v.z -= vn * _hitN.z;
       // Glove and boot on rock grip: what slides along it loses μ of
       // the blow, so a push square on stops you instead of steering
@@ -10837,6 +10860,13 @@ function stepEVA(dt) {
       // Landing: the legs take it, sinking as far as they must to
       // stop you at the force they can make.
       const impact = -v.y;
+      const hsL = Math.hypot(v.x, v.z), vRunL = Math.sqrt(SUIT.frRun * gl * SUIT.L);
+      // Too fast down a slope to get the feet back under you.
+      const down = hsL > 0.01 ? -(gx * v.x + gz * v.z) / hsL : 0;
+      if (hsL > 1.4 * vRunL && down > 0.2) startFall(p, 1, gl);
+      // Duke's fall: a full push straight up, and the backpack's weight
+      // turns you over backwards on the way down.
+      else if (hsL < 0.3 && impact > 0.9 * pushSpeed(1, SUIT.crouch, gl) && Math.random() < 0.15) startFall(p, -1, gl);
       if (impact > 0.9) dust.burst(p.pos.x, gh, p.pos.z, Math.min(1.6, impact * 0.35));
       if (impact > 0.3) prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
       if (impact > 0.15) sound.step(0.2 + impact * 0.5);
@@ -10870,6 +10900,40 @@ function stepEVA(dt) {
   const hs = Math.hypot(v.x, v.z);
   // The gait: where the eye rides over the feet, and when they strike.
   const g8 = gait.step(p, hs, gl, dt, running);
+  // A toe caught on a stone at a lope.
+  if (gait.foot.n !== p.footN) {
+    p.footN = gait.foot.n;
+    const f = gait.foot;
+    if (gait.mode === 'lope' && hs > 0.6 * Math.sqrt(SUIT.frRun * gl * SUIT.L)) {
+      for (const r of rockSystem.solidsAt(f.x, f.z, _solids)) {
+        if (rockHeight(r, f.x, f.z) - terrainHeight(f.x, f.z) > 0.08 && Math.random() < 0.5) { startFall(p, 1, gl); break; }
+      }
+    }
+  }
+  // Going down, lying there, getting up.
+  let fa = 0;
+  if (p.fall) {
+    const F = p.fall;
+    F.t += dt;
+    if (F.t < F.topple) fa = (F.t / F.topple) ** 2;              // a topple speeds up as it goes
+    else {
+      if (!F.hit) {
+        F.hit = true;
+        sound.step(1.1);
+        dust.burst(p.pos.x + fwd.x * F.dir, gh, p.pos.z + fwd.z * F.dir, 0.7);
+        prints.place(p.pos.x + fwd.x * F.dir * 0.8, p.pos.z + fwd.z * F.dir * 0.8, yawObj.rotation.y);
+        effort.spend(FALL.getUp);
+      }
+      const u = (F.t - F.topple - FALL.hold) / FALL.up;
+      fa = u <= 0 ? 1 : 1 - u * u * (3 - 2 * u);
+      if (u >= 1) { p.fall = null; fa = 0; }
+    }
+  }
+  p.fallAmt = fa;
+  // The body pivots about the feet, and the eye rides the helmet's arc:
+  // onto hands and knees going forward, onto the backpack going back.
+  const fDir = p.fall ? p.fall.dir : 1, fTh = fa * (fDir > 0 ? 1.2 : 1.25);
+  const fDrop = EYE * (1 - Math.cos(fTh)), fOut = EYE * Math.sin(fTh) * fDir;
   // Leaning into it. To speed up or slow down on legs, the body must
   // lean until the ground's push passes through its centre of mass:
   // tan φ = a/g. On the Moon friction allows a sixth of what it does
@@ -10894,7 +10958,7 @@ function stepEVA(dt) {
   if (tookOff > 0) effort.spend(0.5 * SUIT.m * tookOff * tookOff / EFFORT.eff + EFFORT.step * 2);
   if (p.charge > 0) P += 120;    // holding a crouch in a stiff suit
   effort.update(dt, P);
-  camera.rotation.set(-p.leanF * 0.5, 0, -p.leanS * 0.35);
+  camera.rotation.set(-p.leanF * 0.5 - fa * (fDir > 0 ? 0.7 : -0.6), 0, -p.leanS * 0.35 + fa * 0.15);
   // Looking down past what the neck manages inside the helmet means
   // bending at the hips, and looking up, leaning back: the eye swings
   // about the hips, 0.67 m below it, as stiffly as the suit allows.
@@ -10902,8 +10966,12 @@ function stepEVA(dt) {
   const bendT = pit < -NECK ? Math.min(1.0, -pit - NECK) : pit > NECK ? -Math.min(0.45, pit - NECK) : 0;
   p.bend += (bendT - p.bend) * (1 - Math.exp(-dt / 0.35));
   const bf = 0.67 * Math.sin(p.bend), bd = 0.67 * (1 - Math.cos(p.bend));
-  yawObj.position.set(p.pos.x + right.x * g8.x + fwd.x * bf, p.pos.y + g8.y + p.eyeOff - bd, p.pos.z + right.z * g8.x + fwd.z * bf);
-  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF + p.bend * 0.6, p.leanS);
+  yawObj.position.set(p.pos.x + right.x * g8.x + fwd.x * (bf + fOut), p.pos.y + g8.y + p.eyeOff - bd - fDrop, p.pos.z + right.z * g8.x + fwd.z * (bf + fOut));
+  if (fa > 0) {   // lying on uneven ground, the helmet stays on top of it
+    const under = terrainHeight(yawObj.position.x, yawObj.position.z) + 0.3;
+    if (yawObj.position.y < under) yawObj.position.y = under;
+  }
+  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF + p.bend * 0.6 + fTh * fDir, p.leanS);
   hudSpeed = hs;
   return gh;
 }
@@ -11531,6 +11599,7 @@ function applyWorldNow(id) {
   player.onGround = true;
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset(); player.lift = 0; player.eyeOff = 0;
   player.leanF = player.leanS = 0; player.pvx = player.pvz = 0;
+  player.fall = null; player.fallAmt = 0;
   player.gas = JET.dv;
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
