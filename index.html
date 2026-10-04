@@ -645,6 +645,33 @@ var WORLDS = {
     Dtr: 3000, pitD: 30000,
   },
 
+  /* Ganymede, the largest moon in the solar system: two terrains. A
+     third of it is ancient dark terrain, cratered nearly as densely as
+     Callisto; the rest was torn open and resurfaced as bright grooved
+     terrain, which is younger and carries a few times fewer craters
+     (Zahnle et al. 2003). The classes flagged old only stand on the
+     dark terrain. Small craters are not as depleted as on Callisto.
+     Transition a little under Callisto's — more gravity — and central
+     pits again past ~30 km. See hGanymede(). Seed: 7 January 1610, the
+     first night Galileo turned a telescope on Jupiter and saw three of
+     its moons, Ganymede among them. */
+  ganymede: {
+    id: 'ganymede', kind: 12, seed: 16100107,
+    g: 1.428, R: 2634100,
+    lander: [24.6, -17.2],
+    craters: [
+      { cell: 65536, salt:  7, rMin: 8000, rMax: 30000, count: 1, prob: 0.35, ageK: 1.1, old: 1 },
+      { cell: 16384, salt: 23, rMin: 2000, rMax:  8000, count: 1, prob: 0.60, ageK: 1.2, rays: 1 },
+      { cell:  4096, salt: 47, rMin:  500, rMax:  2000, count: 2, prob: 0.60, ageK: 2.0, old: 1, knob: 1 },
+      { cell:  4096, salt: 31, rMin:  500, rMax:  2000, count: 1, prob: 0.25, ageK: 1.5 },
+      { cell:  1024, salt: 41, rMin:  120, rMax:   500, count: 1, prob: 0.45, ageK: 2.2, rocks: 1 },
+      { cell:   256, salt: 53, rMin:   25, rMax:   120, count: 1, prob: 0.30, ageK: 2.4, rocks: 1 },
+      { cell:    48, salt: 61, rMin:    4, rMax:    20, count: 1, prob: 0.25, ageK: 2.5, rocks: 1 },
+    ],
+    craterAmp: 1, depthK: 0.85, rampart: 0, halo: 0.55,
+    Dtr: 2500, pitD: 30000, knobP: 0.5,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -751,6 +778,10 @@ function cellCraters(li, cx, cz) {
     var age = Math.pow(cellRnd(cx, cz, L.salt, k * 6 + 2), L.ageK || 2.2);
     var px = (cx + 0.08 + cellRnd(cx, cz, L.salt, k * 6 + 3) * 0.84) * L.cell;
     var pz = (cz + 0.08 + cellRnd(cx, cz, L.salt, k * 6 + 4) * 0.84) * L.cell;
+    // Classes flagged old predate Ganymede's grooved terrain, which
+    // wiped them where it formed: decided at the crater's centre, so
+    // still a function of the cell.
+    if (L.old && WK === 12) { gaSulcus(px + GA_OX, pz + GA_OZ); if (GA_M > 0.5) continue; }
     // Simple-crater morphometry (Pike 1977): a fresh bowl is 1:5 of
     // its diameter deep — 0.4 r — under a rim standing 0.036 D, and
     // degradation takes both down toward a shallow dimple with no
@@ -2308,7 +2339,9 @@ function knobCell(ix, iz) {
   var out = false;
   var px = (ix + 0.2 + cellRnd(ix, iz, 71, 2) * 0.6) * CA_KCELL;
   var pz = (iz + 0.2 + cellRnd(ix, iz, 71, 3) * 0.6) * CA_KCELL;
-  var p = 0.015 + 0.06 * sstep(0.5, 0.72, fbm(px * 0.00009 + 3.3, pz * 0.00009 - 1.7, 2)) + 0.4 * knobRim(px, pz);
+  var p = (0.015 + 0.06 * sstep(0.5, 0.72, fbm(px * 0.00009 + 3.3, pz * 0.00009 - 1.7, 2)) + 0.4 * knobRim(px, pz)) * (WORLD.knobP || 1);
+  // Ganymede's knobs are on its dark terrain only.
+  if (WK === 12 && p > 0) { gaSulcus(px + GA_OX, pz + GA_OZ); p *= 1 - GA_M; }
   if (cellRnd(ix, iz, 71, 0) <= p) {
     var u = cellRnd(ix, iz, 71, 1);
     var r = 60 + Math.pow(u, 1.4) * 140;
@@ -2362,6 +2395,104 @@ function hCallisto(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Ganymede ───────────────────────────────────────────────────
+   Dark terrain and bright terrain. The dark is the old crust: heavily
+   cratered, dark lag in the lows and frost on the crests as on
+   Callisto, a few knobs, and furrows — troughs kilometres wide with
+   raised rims, running for hundreds of kilometres in great arcs,
+   the oldest tectonics on the moon. The bright terrain is where the
+   crust pulled apart and was resurfaced, in sulci — bands tens of
+   kilometres wide, set a few hundred metres below the dark terrain
+   they cut through, and grooved along their length: ridges and troughs
+   at a wavelength of 3–10 km and a few hundred metres of relief, often
+   tilted blocks, sawtooth in section, with finer grooves a kilometre
+   apart on them (Pappalardo et al. 1998, 2004). Inside a sulcus the
+   grooves come in sets, each a domain with its own trend, cut off
+   sharply where the next begins.
+
+   Sulci are drawn in lanes, one band at most per lane and all of it
+   kept inside, groove sets in patches along the band. GA_M is how
+   much sulcus there is at the last query point, GA_GT where on a
+   groove (0 trough, 1 crest), for the colour pass. GA_OX/OZ put the
+   site in a sulcus three kilometres inside its western margin, the
+   grooves running across the view east toward Jupiter and the dark
+   terrain's edge behind. */
+var GA_A = 1.75, GA_C = Math.cos(GA_A), GA_S = Math.sin(GA_A), GA_LANE = 110000, GA_PL = 22000;
+var GA_OX = 270900, GA_OZ = 500;
+var GA_M = 0, GA_GT = 0.5;
+// One groove set: the height it makes at (sl, tt), which are along
+// and across the band, local to the patch and so never large.
+function gaGrooves(pi, li, sl, tt) {
+  var b = (cellRnd(pi, li, 69, 0) - 0.5) * 1.1;
+  var u = tt * Math.cos(b) + sl * Math.sin(b);
+  var lam = 3000 + cellRnd(pi, li, 69, 1) * 6000, A = 150 + cellRnd(pi, li, 69, 2) * 300;
+  var f = u / lam + cellRnd(pi, li, 69, 3) * 7; f -= Math.floor(f);
+  // Tilted blocks: a long back slope and a steep face; or symmetric.
+  var tb = cellRnd(pi, li, 69, 4);
+  var p1 = tb < 0.55 ? (f < 0.78 ? smoothT(f / 0.78) : 1 - smoothT((f - 0.78) / 0.22))
+                     : 1 - smoothT(Math.abs(f * 2 - 1));
+  var lam2 = 700 + cellRnd(pi, li, 69, 5) * 800;
+  var f2 = u / lam2; f2 -= Math.floor(f2);
+  var p2 = 1 - Math.abs(f2 * 2 - 1); p2 = p2 * p2 * (3 - 2 * p2);
+  var am = 0.55 + 0.45 * valueNoise(sl * 0.00018 + pi * 3.1, tt * 0.00011 + li);
+  GA_GT = p1 * 0.7 + p2 * 0.3;
+  return (A * (p1 - 0.5) + (30 + A * 0.25) * (p2 - 0.5)) * am;
+}
+function gaSulcus(x, z) {
+  GA_M = 0; GA_GT = 0.5;
+  var s = x * GA_C + z * GA_S, t = z * GA_C - x * GA_S;
+  var li = Math.floor(t / GA_LANE);
+  if (cellRnd(li, 0, 67, 0) > 0.8) return 0;
+  var hw = 9000 + cellRnd(li, 0, 67, 1) * 11000;
+  // The band wanders a little; its widest reach, 20 + 6 + 2 + 1.5 km,
+  // stays inside the 55 km half-lane.
+  var cen = (li + 0.5) * GA_LANE + Math.sin(s * 0.00004 + li * 2.1) * 6000 + (valueNoise(s * 0.00002, li * 1.3) - 0.5) * 4000;
+  var tt = t - cen, at = tt < 0 ? -tt : tt;
+  if (at > hw + 1500) return 0;
+  // A sharp margin, with a boundary trough just inside it.
+  var m = 1 - sstep(hw - 900, hw + 400, at);
+  GA_M = m;
+  var e = (at - hw + 600) / 700;
+  var h = -260 * m - 90 * Math.exp(-e * e);
+  if (m <= 0) return h;
+  var pf = s / GA_PL, pi = Math.floor(pf), fr = pf - pi;
+  var g = gaGrooves(pi, li, s - (pi + 0.5) * GA_PL, tt), gt = GA_GT;
+  // Where one set meets the next, the younger cuts the older off over
+  // a few hundred metres.
+  if (fr > 0.97) { var w1 = sstep(0.97, 1, fr); var g1 = gaGrooves(pi + 1, li, s - (pi + 1.5) * GA_PL, tt); g += (g1 - g) * w1; gt += (GA_GT - gt) * w1; }
+  else if (fr < 0.03) { var w0 = 1 - sstep(0, 0.03, fr); var g0 = gaGrooves(pi - 1, li, s - (pi - 0.5) * GA_PL, tt); g += (g0 - g) * w0 * 0.5; gt += (GA_GT - gt) * w0 * 0.5; }
+  GA_GT = gt;
+  // Grooves fade out into the margin.
+  return h + g * sstep(hw + 200, hw - 2500, at);
+}
+// Furrows on the dark terrain: arcuate troughs a few kilometres wide
+// with raised rims, one at most per 60 km lane.
+var GA_FC = Math.cos(0.35), GA_FS = Math.sin(0.35);
+function gaFurrow(x, z) {
+  var s = x * GA_FC + z * GA_FS, t = z * GA_FC - x * GA_FS + s * s * 1.2e-7;
+  var li = Math.floor(t / 60000);
+  if (cellRnd(li, 0, 73, 0) > 0.5) return 0;
+  var cen = (li + 0.5) * 60000 + (valueNoise(s * 0.00003, li * 2.7) - 0.5) * 16000;
+  var w = 2000 + cellRnd(li, 0, 73, 1) * 2500, d = 180 + cellRnd(li, 0, 73, 2) * 250;
+  var a = (t - cen) / w; if (a < 0) a = -a;
+  if (a > 2.2) return 0;
+  return -d * (1 - sstep(0.5, 1.05, a)) + d * 0.3 * Math.exp(-(a - 1.25) * (a - 1.25) * 9);
+}
+
+function hGanymede(x0, z0) {
+  var x = x0 + GA_OX, z = z0 + GA_OZ;
+  var h = (fbm(x * 0.00003 + 2, z * 0.00003, 4) - 0.5) * 800;
+  var sul = gaSulcus(x, z), m = GA_M, dk = 1 - m;
+  h += sul;
+  h += (fbm(x * 0.0003 - 5, z * 0.0003 + 1, 3) - 0.5) * (25 + 40 * dk);
+  h += (fbm(x * 0.003 + 7, z * 0.003 - 2, 2) - 0.5) * 6;
+  h += (fbm(x * 0.03, z * 0.03, 2) - 0.5) * 0.9;
+  h += (fbm(x * 0.15 + 2, z * 0.15, 2) - 0.5) * 0.15;
+  if (dk > 0) h += gaFurrow(x, z) * dk;
+  h += callistoKnobs(x0, z0);
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2371,7 +2502,7 @@ function terrainHeight(x, z) {
        : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z)
        : WK === 7 ? hMercury(x, z) : WK === 8 ? hIo(x, z)
        : WK === 9 ? hEnceladus(x, z) : WK === 10 ? hTitan(x, z)
-       : WK === 11 ? hCallisto(x, z) : hSmall(x, z);
+       : WK === 11 ? hCallisto(x, z) : WK === 12 ? hGanymede(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -2668,6 +2799,28 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     out[0] = v * 1.06; out[1] = v; out[2] = v * 0.90;
     var fv = 2.1 + (n2 - 0.5) * 0.3;
     out[0] += (fv - out[0]) * fr; out[1] += (fv - out[1]) * fr; out[2] += (fv * 1.02 - out[2]) * fr;
+
+  } else if (WK === 12) {
+    // Ganymede's dark terrain is Callisto's lag, a little brighter —
+    // about 0.3 — with the same frost on crests and poleward slopes. The
+    // bright terrain is cleaner ice, about 0.5, and in the grooves the
+    // dark material has slid off the crests and walls into the troughs,
+    // so the ridges read bright and the troughs grey (Prockter et al.
+    // 1998). Bright rays and halos round fresh craters, on both.
+    gaSulcus(x + GA_OX, z + GA_OZ);
+    var m = GA_M, gt = GA_GT;
+    callistoKnobs(x, z, true);
+    var n1 = valueNoise(x * 0.0007 + 1.3, z * 0.0007 - 4.4), n2 = valueNoise(x * 0.045, z * 0.045);
+    var cl = fresh * WORLD.halo + rayBrightness(x, z);
+    var fz = sstep(0.06, 0.32, TN_Z + (n2 - 0.5) * 0.12) * (0.5 + 0.5 * n1);
+    var dkv = (0.85 + (n1 - 0.5) * 0.2) * (0.93 + n2 * 0.14) * (1 - CA_AP * 0.2);
+    var brv = (1.75 + (n1 - 0.5) * 0.2 + (gt - 0.5) * 0.5 + slope * 0.4) * (0.95 + n2 * 0.1);
+    v = dkv + (brv - dkv) * m;
+    out[0] = v * (1.05 - m * 0.06); out[1] = v; out[2] = v * (0.91 + m * 0.10);
+    var fr = (fz + sstep(0.4, 0.75, CA_KN + (n2 - 0.5) * 0.25) * 0.9 + sstep(0.3, 0.6, slope) * 0.3) * (1 - m * 0.6) + cl;
+    fr = fr > 1 ? 1 : fr;
+    var fv = 2.1 + (n2 - 0.5) * 0.3;
+    out[0] += (fv - out[0]) * fr; out[1] += (fv - out[1]) * fr; out[2] += (fv * 1.03 - out[2]) * fr;
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -3038,6 +3191,48 @@ const VIEW = {
     // trailing one takes, so here it is if anything an overestimate.
     dose: 5.4,
   },
+  /* Ganymede has Europa's sun in Europa's units, on ground between
+     Callisto's and Europa's: dark terrain about 0.3, bright grooved
+     terrain about 0.5. Jupiter is 7.6° across, fifteen full Moons, 34°
+     over the eastern horizon from the site (15°S, 55° west of the point
+     beneath it), above the sulcus. Io and Europa orbit inside Ganymede
+     and cross Jupiter's face; Callisto, outside, goes behind it.
+
+     Ganymede is the only moon with a magnetic field of its own, and
+     the field shelters its low latitudes: the commonly quoted surface
+     dose, 0.08 Sv a day, is for the poles, where Jupiter's particles
+     come down the open field lines; here it is an upper bound. */
+  ganymede: {
+    name: 'GANYMEDE', site: 'Nicholson Regio', gTxt: '1.43 m/s²',
+    title: 'Ganymede Walk', sub: 'Nicholson Regio · 0.146 g · surface unbounded',
+    fine: 'The largest moon in the solar system: old dark crust, torn open in bands of bright<br>' +
+          'grooved ice that run to the horizon. Jupiter hangs 8° wide over the grooves to the<br>' +
+          'east, and never moves. <b>Esc</b> picks another world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 1.26, sunSize: 10.7, sunHDR: [60, 57, 52],
+    corona: 2000, coronaColor: [0.68, 0.66, 0.62],
+    hemi: [0x181716, 0x45464a, 4.0], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 150, mapTint: [1.02, 1.0, 0.97], pits: 26, grain: 0.65, clods: 0.55, pebbles: 70,
+    // Ganymede's photometry (Domingue & Verbiscer 1997): brighter grains
+    // than Callisto's, a narrower surge, and nearly as rough.
+    hapke: { w: 0.70, b: 0.30, c: 0.65, B0: 0.7, h: 0.03, theta: 28, Bc0: 0.3, hc: 0.005 },
+    micro: [0.45, 0.35, 0.45], sparkle: 1.8,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.55,
+    dustColor: 0x7a7672, dustDrag: 0, stampColor: 0x625e5a, soil: 0x77736e,
+    rockTint: [1.0, 1.0, 1.0], rockAlb: [0.35, 0.18], rockN: 0.5,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
+    exposure: 1.0, eye: [0.30, 0.05, 15], starGain: 0.005, bloom: [0.5, 0.65, 3.0],
+    companions: ['jupiter-gan', 'io-gan', 'europa-gan', 'callisto-gan'],
+    // Night: Jupiter, 7.64° across at albedo 0.52 — 0.23% of the sun.
+    night: { ratio: 0.0023, radius: 0.0667, color: 0xfff0dc, label: 'JUPITERLIT', stars: 30 },
+    relay: 0.14,
+    dose: 0.08,
+    look: [-1.392, 0.3],
+  },
+
   /* Callisto is at Jupiter's distance from the sun, so the light is
      Europa's and in Europa's units, ten times the Moon's. It falls on
      ground a third as reflective as Europa's ice — a dark lag, about
@@ -3419,7 +3614,7 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'callisto', 'enceladus', 'titan', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'ganymede', 'callisto', 'enceladus', 'titan', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
@@ -7743,6 +7938,14 @@ const ENC = (() => {
    Valhalla's outer rings: Jupiter 1.88 million km off, 4.35° across,
    14° above the eastern horizon. Io, Europa and Ganymede all circle
    inside Callisto's orbit, so each transits Jupiter from here. */
+/* From Ganymede, 15°S, 55° west of the point beneath Jupiter, in
+   Nicholson Regio: Jupiter 1.07 million km off, 7.64° across, 34° up
+   in the east. */
+const GAN = (() => {
+  const F = siteFrame(-15, -55);
+  return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 1070400 };
+})();
+
 const CAL = (() => {
   const F = siteFrame(15, -75);
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 1882700 };
@@ -7957,12 +8160,26 @@ const COMPANIONS = {
     kepler: { a: 1882700, R: 2410.3, rate: -0.0187, phase: 4.1, frame: IOJ },
   },
 
+  /* Jupiter from Ganymede: 7.64° across, at true size. Io and Europa
+     inside, Callisto outside. */
+  'jupiter-gan': {
+    tex: 'jupiter', r: COMPANION_DIST * (71492 / 1070400), dir: GAN.J, pole: GAN.Z, oblate: 0.9351, spin: 0.012,
+    gain: 1.0, bright: 0.5, limb: 0.85,
+    atmo: [0.50, 0.55, 0.70], atmoK: 0.10, atmoR: 1.006,
+  },
+  'io-gan': { tex: 'io', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 421700, R: 1821.6, rate: 0.0157, phase: 1.3, frame: GAN } },
+  'europa-gan': { tex: 'europa', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 671100, R: 1560.8, rate: 0.00525, phase: 3.6, frame: GAN } },
+  'callisto-gan': { tex: 'callisto', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 1882700, R: 2410.3, rate: -0.00296, phase: 5.1, frame: GAN } },
+
   /* Jupiter from Callisto: 4.35° across, eight full Moons, at true
      size; the same sunlight on the same clouds as from Europa. The other
      three are all inside Callisto's orbit and cross its face. Their
      synodic rates about Callisto, compressed as from Europa. */
   'jupiter-cal': {
-    tex: 'jupiter', r: COMPANION_DIST * Math.sin(Math.asin(71492 / 1882700)), dir: CAL.J, pole: CAL.Z, oblate: 0.9351, spin: 0.012,
+    tex: 'jupiter', r: COMPANION_DIST * (71492 / 1882700), dir: CAL.J, pole: CAL.Z, oblate: 0.9351, spin: 0.012,
     gain: 1.0, bright: 0.5, limb: 0.85,
     atmo: [0.50, 0.55, 0.70], atmoK: 0.10, atmoR: 1.006,
   },
@@ -10612,7 +10829,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
