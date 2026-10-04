@@ -4861,6 +4861,7 @@ const rockSystem = (() => {
   let shapes = 99;            // prototypes per class: each is a draw call per chunk
   const live = new Map();   // "cx:cz" → Group of InstancedMeshes
   let lastCell = null;
+  let version = 0;          // bumped whenever the set of live chunks changes
 
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
   const scl = new THREE.Vector3(), p = new THREE.Vector3(), zero = new THREE.Vector3();
@@ -5045,6 +5046,7 @@ const rockSystem = (() => {
   }
 
   function drop(group) {
+    version++;
     scene.remove(group);
     for (const mesh of group.children) mesh.dispose();
   }
@@ -5052,6 +5054,7 @@ const rockSystem = (() => {
   return {
     hapke: rockHapke,
     soil: ROCK_U.rkSoil,
+    get version() { return version; },
     material: rockMat,
     // Pebble density, and whether pebbles cast shadows: thousands of
     // tiny casters in two shadow maps are a real cost on an iGPU.
@@ -5124,6 +5127,7 @@ const rockSystem = (() => {
         if (live.has(key)) continue;
         const [cx, cz] = key.split(':').map(Number);
         const g = buildChunk(cx, cz);
+        version++;
         live.set(key, g);
         scene.add(g);
       }
@@ -9252,11 +9256,31 @@ const rover = (() => {
     .map(([d, l]) => [d, l, WHEEL_R - Math.sqrt(WHEEL_R * WHEEL_R - d * d)]);
   // Where the bottom of a tyre heading (fx, fz) comes to rest at (x, z),
   // on ground drawn with lattice step s.
+  // Stones from §6 are ground to a tyre too: it climbs one where the
+  // contact patch meets it, as on the mesh. Their lists are cached on
+  // half-metre cells around the wheel, eight cells direct-mapped.
+  const rkX = new Int32Array(8).fill(0x7fffffff), rkZ = new Int32Array(8), rkV = new Int32Array(8);
+  const rkL = Array.from({ length: 8 }, () => []);
+  function rocksNear(x, z) {
+    const ix = Math.floor(x * 2), iz = Math.floor(z * 2), k = (ix * 3 + iz * 5) & 7;
+    if (rkX[k] !== ix || rkZ[k] !== iz || rkV[k] !== rockSystem.version) {
+      rkX[k] = ix; rkZ[k] = iz; rkV[k] = rockSystem.version;
+      rockSystem.solidsAt((ix + 0.5) / 2, (iz + 0.5) / 2, rkL[k], 1.1);
+    }
+    return rkL[k];
+  }
   function wheelGround(x, z, fx, fz, s) {
     let h = -Infinity;
+    const rocks = rocksNear(x, z);
     for (const [d, l, up] of FOOT) {
-      const g = meshHeight(x + fx * d - fz * l, z + fz * d + fx * l, s, gvtx) - up;
-      if (g > h) h = g;
+      const px = x + fx * d - fz * l, pz = z + fz * d + fx * l;
+      let g = meshHeight(px, pz, s, gvtx);
+      // A tyre climbs a step of about its own radius less a little —
+      // the LRV was specified for 0.3 m — and anything taller it meets
+      // as a wall, which is the chassis' business (stepROVER).
+      const g0 = g;
+      for (let i = 0; i < rocks.length; i++) { const r = rockHeight(rocks[i], px, pz); if (r > g && r < g0 + STEP_UP) g = r; }
+      if (g - up > h) h = g - up;
     }
     return h;
   }
@@ -10705,7 +10729,7 @@ function startFall(p, dir, gl) {
   p.fall = { t: 0, dir, topple: 1.5 * Math.sqrt(SUIT.L / gl), hit: false };
 }
 
-const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3();
+const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3(), _rvEnd = new THREE.Vector3();
 const _hitN = new THREE.Vector3();
 function stepEVA(dt) {
   const p = player, v = p.vel;
@@ -11019,6 +11043,19 @@ function stepROVER(dt) {
   if (lander.push(s.pos, 1.7, s.y - 0.5, _hitN)) {
     if (Math.abs(s.vel) > 0.3) sound.step(Math.min(1.2, Math.abs(s.vel) * 0.5));
     s.vel *= -0.15;
+  }
+  // And so is a boulder too big to climb, met by the nose or the tail
+  // — but only the end that is driving into it: backing off is free.
+  const rfx = -Math.sin(s.yaw), rfz = -Math.cos(s.yaw);
+  for (const e of [1, -1]) {
+    if (s.vel * e <= 0) continue;
+    const ex = s.pos.x + rfx * 1.3 * e, ez = s.pos.z + rfz * 1.3 * e;
+    _rvEnd.set(ex, 0, ez);
+    if (rockPush(_rvEnd, terrainHeight(ex, ez), 0.75, _hitN)) {
+      s.pos.x += _rvEnd.x - ex; s.pos.z += _rvEnd.z - ez;
+      if (Math.abs(s.vel) > 0.3) sound.step(Math.min(1.2, Math.abs(s.vel) * 0.5));
+      s.vel *= -0.15;
+    }
   }
 
   // Chase camera: orbit the rover with the same mouse look, keep
