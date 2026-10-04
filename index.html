@@ -9985,6 +9985,12 @@ const gait = (() => {
       for (const r of rockSystem.solidsAt(foot.x, foot.z, _solids)) if (rockHeight(r, foot.x, foot.z) > t) { hard = true; break; }
     }
     sound.step(k, hard);
+    // On a steep slope the loose top layer gives under the boot and
+    // runs off downhill — the sliding soil every crew saw on the
+    // flanks of craters and on Hadley Delta.
+    const e = 0.3, h0 = terrainHeight(foot.x, foot.z);
+    const sx = (terrainHeight(foot.x + e, foot.z) - h0) / e, sz = (terrainHeight(foot.x, foot.z + e) - h0) / e, sl = Math.hypot(sx, sz);
+    if (sl > 0.27) dust.kick(foot.x, h0, foot.z, -sx / sl, -sz / sl, 0.25 + sl * 0.6);
     // The other boot, leaving the ground behind this one, kicks.
     if (hs > 0.15) dust.kick(p.pos.x - ax * 0.15, terrainHeight(p.pos.x, p.pos.z), p.pos.z - az * 0.15, ax, az, hs);
   };
@@ -10101,7 +10107,7 @@ const player = {
   gravity: G_LIST.moon,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
-  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0, steadyY: null, smoothOff: 0,
+  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0, steadyY: null, smoothOff: 0, lastYaw: 0, turnAcc: 0,
   fall: null, fallAmt: 0, footN: 0,     // a fall in progress: { t, dir: 1 forward, −1 back }   // rad leaned forward and to the right; last velocity
   lift: 0, eyeOff: 0,             // m a rock holds you above the soil; the eye's lag behind a step
   gas: JET.dv,                    // m/s of Δv left in the jets
@@ -11017,6 +11023,23 @@ function stepEVA(dt) {
   const hs = Math.hypot(v.x, v.z);
   // The gait: where the eye rides over the feet, and when they strike.
   const g8 = gait.step(p, hs, gl, dt, running);
+  // Turning on the spot. The suit turns with you, so turning means
+  // stepping round: a shuffle of short steps, each a print and a
+  // footfall, about one per 35° — none of it in the view.
+  {
+    let dy = yawObj.rotation.y - p.lastYaw;
+    dy -= Math.round(dy / (2 * Math.PI)) * 2 * Math.PI;
+    p.lastYaw = yawObj.rotation.y;
+    if (p.onGround && !p.fall && !p.pushing && hs < 0.08) {
+      p.turnAcc += dy;
+      if (Math.abs(p.turnAcc) > 0.6) {
+        p.turnAcc = 0;
+        prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
+        sound.step(0.2);
+        effort.spend(EFFORT.step);
+      }
+    } else p.turnAcc = 0;
+  }
   // A toe caught on a stone at a lope.
   if (gait.foot.n !== p.footN) {
     p.footN = gait.foot.n;
