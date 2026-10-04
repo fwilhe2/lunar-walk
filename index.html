@@ -600,6 +600,21 @@ var WORLDS = {
   /* Enceladus, in its south polar terrain: the youngest ground on it,
      and almost without craters — the few there are small and softened
      under the snow that falls back from the jets. See hEnceladus(). */
+  /* Titan. See hTitan(). Rc is the curvature the ground appears to
+     have: cold nitrogen at 5.3 kg/m³ has a refractivity of 1.3e-3
+     and a 21 km scale height, which bends a level ray on a 16,000 km
+     radius — so the surface looks a fifth flatter than it is, and the
+     horizon sits that much further off. Seed: 14 January 2005, when
+     Huygens came down through the haze and sent the only pictures
+     anyone has from the surface. */
+  titan: {
+    id: 'titan', kind: 10, seed: 20050114,
+    g: 1.352, R: 2574700, Rc: 3060000,
+    lander: [26, 12],
+    craters: [],
+    craterAmp: 0, depthK: 0, rampart: 0, halo: 0,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -2063,6 +2078,111 @@ function hEnceladus(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Titan ──────────────────────────────────────────────────────
+   The only other world with liquid standing on its surface: seas and
+   lakes of methane and ethane round the north pole, under 1.5 bar of
+   nitrogen at 94 K. Ligeia Mare, the second largest, is 400 km
+   across and up to 160 m deep, and its liquid is so clear that
+   Cassini's radar saw the bottom through it (Mastrogiuseppe et al.
+   2014). Its shores are drowned river valleys — Vid Flumina runs in
+   to its western shore down canyons a few hundred metres deep, and
+   the sea has come up them — and round it is a plateau country cut
+   by those valleys and pocked with sharp-edged depressions, steep-
+   walled and raised-rimmed, some full of liquid and some dry, their
+   floors bright with what the liquid left behind when it went
+   (Hayes 2016; Birch et al. 2019). The seas share one level; a small
+   lake is full when its floor is below it.
+
+   Here that is: a gently rising coastal plain, sea to the north and
+   deepening offshore, plateaus with scarps, canyons and gullies that
+   flood where they run below sea level, and depressions one per
+   6 km cell at most, each a pure function of its cell. Few craters:
+   the air stops small impactors and rain and sediment bury the rest.
+   TI_OX/TI_OZ put the landing site on the plain 400 m south of the
+   shore. Height 0 is the sea's surface.                           */
+var TI_OX = 0, TI_OZ = 0, TI_CELL = 6000;
+
+// Depressions: the nearest one's contribution to the height, given
+// the ground it is cut into. Floors sit at a level of their own.
+function tiDepress(x, z) {
+  var cx = Math.floor(x / TI_CELL), cz = Math.floor(z / TI_CELL), out = 0;
+  for (var j = -1; j <= 1; j++) for (var i = -1; i <= 1; i++) {
+    var gx = cx + i, gz = cz + j;
+    if (hash2(gx * 7 + 3, gz * 13 - 5) > 0.55) continue;
+    var px = (gx + 0.25 + 0.5 * hash2(gx, gz + 77)) * TI_CELL;
+    var pz = (gz + 0.25 + 0.5 * hash2(gx + 31, gz)) * TI_CELL;
+    var r = 500 + 1700 * hash2(gx - 9, gz + 4);
+    var dx = x - px, dz = z - pz, d = Math.sqrt(dx * dx + dz * dz);
+    if (d > r * 1.6) continue;
+    // A scalloped outline: these grow by their walls retreating.
+    var a = Math.atan2(dz, dx);
+    var rr = r * (1 + 0.12 * Math.sin(a * 3 + gx) + 0.08 * Math.sin(a * 7 + gz) + (valueNoise(a * 2 + gx, gz) - 0.5) * 0.12);
+    var q = d / rr;
+    var dep = 90 + 160 * hash2(gx + 5, gz - 11);
+    var v;
+    if (q < 1) {
+      // Flat floor, then a steep wall — 20 to 40° — up to the rim.
+      var w = sstep(0.72, 1.0, q);
+      v = -dep * (1 - w) + 35 * w * w;
+    } else {
+      // The raised rim, falling away outside.
+      var o = (q - 1) / 0.6;
+      v = 35 * (1 - o) * (1 - o) * (o < 1 ? 1 : 0);
+    }
+    // Overlapping, the deeper cut wins; rims only add where nothing cuts.
+    out = (v < 0 || out < 0) ? (v < out ? v : out) : (v > out ? v : out);
+  }
+  return out;
+}
+
+// Valleys, as distance from a sinuous line field: width w, depth d.
+function tiValley(x, z, f, w, salt) {
+  var wx = (valueNoise(x * f * 0.5 + salt, z * f * 0.5) - 0.5) * 1.6;
+  var wz = (valueNoise(x * f * 0.5, z * f * 0.5 - salt) - 0.5) * 1.6;
+  var n = fbm(x * f + wx, z * f + wz, 2);
+  var t = (n - 0.5) / w;
+  return t * t < 1 ? (1 - t * t) * (1 - t * t) : 0;
+}
+
+// The plateau country: how much of the upland stands at a point.
+function tiPlateau(x, z) {
+  return sstep(0.50, 0.56, fbm(x * 0.00011 + 4.1, z * 0.00011 - 7.3, 4) + (z + 3000) * 0.000025);
+}
+
+// Where liquid has run: channel floors and the strip along the shore,
+// 0–1. Gravel lies there — the Huygens site was a field of rounded
+// ice cobbles on an outwash plain (Tomasko et al. 2005).
+function tiGravel(x0, z0, h) {
+  var x = x0 + TI_OX, z = z0 + TI_OZ;
+  var c = tiValley(x, z, 0.00035, 0.035, 2.1) + tiValley(x + 900, z - 400, 0.0021, 0.05, 5.3);
+  var sh = h > 0 && h < 3 ? 1 - sstep(0.5, 3, h) : 0;
+  c = c + sh;
+  return c > 1 ? 1 : c;
+}
+
+function hTitan(x0, z0) {
+  var x = x0 + TI_OX, z = z0 + TI_OZ;
+  // The coast: land rising southward, sea deepening to the north.
+  var b = (z + 420) * 0.006 + 10 + (fbm(x * 0.00005 + 1.7, z * 0.00005 - 2.9, 4) - 0.5) * 260
+        + (fbm(x * 0.0006, z * 0.0006 + 5.5, 3) - 0.5) * 28;
+  var h = b < 0 ? b * (1.6 + 0.8 * sstep(-30, -200, b)) : b;
+  // Plateaus, 120–200 m up, behind scarps.
+  var pl = tiPlateau(x, z);
+  h += pl * (120 + 80 * valueNoise(x * 0.0002, z * 0.0002 + 3.3)) * sstep(-5, 25, b);
+  // Canyons, deep in the uplands and shallow on the plain; gullies.
+  var cv = tiValley(x, z, 0.00035, 0.035, 2.1);
+  h -= cv * (14 + pl * 190);
+  h -= tiValley(x + 900, z - 400, 0.0021, 0.05, 5.3) * (2.5 + pl * 18);
+  // The depressions.
+  h += tiDepress(x, z);
+  // Sediment on the plains: soft swells and hummocks, little else —
+  // rain and the haze's fallout fill everything small in.
+  h += (fbm(x * 0.0035 + 2, z * 0.0035, 3) - 0.5) * 7;
+  h += (fbm(x * 0.03, z * 0.03 - 1, 2) - 0.5) * 0.9;
+  h += (fbm(x * 0.16 + 4, z * 0.16, 2) - 0.5) * 0.12;
+  return h;
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2071,7 +2191,7 @@ function terrainHeight(x, z) {
        : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z)
        : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z)
        : WK === 7 ? hMercury(x, z) : WK === 8 ? hIo(x, z)
-       : WK === 9 ? hEnceladus(x, z) : hSmall(x, z);
+       : WK === 9 ? hEnceladus(x, z) : WK === 10 ? hTitan(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -2319,6 +2439,32 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     v = (0.97 + (n1 - 0.5) * 0.06 + (n2 - 0.5) * 0.04) * (1 - ic * 0.12);
     out[0] = v * (0.985 - ic * 0.12); out[1] = v * (0.995 - ic * 0.03); out[2] = v;
 
+  } else if (WK === 10) {
+    // Titan's ground is organic sediment — what the haze rains out,
+    // sorted and moved by liquid — over water-ice bedrock. Through the
+    // infrared windows the plains are dark and brownish, the uplands
+    // brighter where ice shows through; channel floors are brighter
+    // still with rounded ice gravel, as at the Huygens site; the floors
+    // of dry lakes are the brightest thing on Titan, the evaporites the
+    // liquid left behind (Barnes et al. 2011); and the shore within a
+    // metre or two of the sea, and everything under it, is wet and dark.
+    var x1 = x + TI_OX, z1 = z + TI_OZ;
+    var n1 = valueNoise(x * 0.0009 + 3.1, z * 0.0009 - 1.4), n2 = valueNoise(x * 0.04, z * 0.04);
+    var pl = tiPlateau(x1, z1);
+    var ch = tiValley(x1, z1, 0.00035, 0.035, 2.1) * 0.6 + tiValley(x1 + 900, z1 - 400, 0.0021, 0.05, 5.3);
+    ch = ch > 1 ? 1 : ch;
+    var ev = h > 0.5 ? sstep(-55, -85, tiDepress(x1, z1)) : 0;
+    v = (0.80 + (n1 - 0.5) * 0.30 + (n2 - 0.5) * 0.12) * (1 + pl * 0.45 + slope * 0.35 + ch * 0.30);
+    var wet = h < 1.5 ? 1 - sstep(-0.5, 1.5, h) : 0;
+    v *= 1 - wet * 0.38;
+    out[0] = v * 1.0; out[1] = v * (0.92 + pl * 0.03); out[2] = v * (0.82 + pl * 0.06 + ch * 0.05);
+    if (ev > 0) {
+      var ew = 1.9 + (n2 - 0.5) * 0.3;
+      out[0] += (ew - out[0]) * ev;
+      out[1] += (ew * 0.97 - out[1]) * ev;
+      out[2] += (ew * 0.90 - out[2]) * ev;
+    }
+
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
     // has two units, a redder one over most of the body and a bluer
@@ -2452,7 +2598,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -2500,7 +2646,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a full push would be a launch,<br>' +
           'so you push gently and drift, and steer on the jets. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'the sky and never moves. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -2531,7 +2677,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'you want back. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -2637,7 +2783,7 @@ const VIEW = {
     title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
     fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
           'Jupiter hangs 12° wide over the chaos to the east, bands on end, and never<br>' +
-          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     // Light here is kept in units ten times the Moon's — a sun of
     // 1.26 rather than 0.126 — and the stars and the eye's range are
@@ -2718,7 +2864,7 @@ const VIEW = {
     title: 'Pluto Walk', sub: 'Charon-facing hemisphere · 0.063 g · surface unbounded',
     fine: 'Noon here is dusk: the sun is a point a thousandth as bright, and the<br>' +
           'stars stay out. Charon hangs 3.7° wide in the east and never moves, over<br>' +
-          'mountains capped with methane frost. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'mountains capped with methane frost. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2773,7 +2919,7 @@ const VIEW = {
     title: 'Charon Walk', sub: 'Vulcan Planitia · 0.029 g · surface unbounded',
     fine: 'Water ice at −220 °C under Pluto\'s dusk-dim sun. Pluto hangs 7° wide in<br>' +
           'the east, over a mountain standing in a moat, and never moves. A full<br>' +
-          'push keeps you aloft for twelve seconds. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'push keeps you aloft for twelve seconds. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2822,7 +2968,7 @@ const VIEW = {
     title: 'Mercury Walk', sub: 'Discovery Rupes · 0.377 g · surface unbounded',
     fine: 'The sun is two and a half times as wide as from the Moon and seven times as bright;<br>' +
           'at noon the ground under it would melt lead. To the east a cliff a kilometre and a<br>' +
-          'half high crosses the horizon: the planet shrank, and broke. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'half high crosses the horizon: the planet shrank, and broke. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 145, sunHDR: [60, 57, 52],
     corona: 3400, coronaColor: [1.6, 1.55, 1.45],
@@ -2867,7 +3013,7 @@ const VIEW = {
     title: 'Io Walk', sub: 'Kanehekili Fluctus · 0.183 g · surface unbounded',
     fine: 'Sulphur and frozen SO₂ over a crust four hundred volcanoes remake so fast that not<br>' +
           'one impact crater survives. Jupiter fills 19° of the sky; plumes stand over the horizon.<br>' +
-          'The dose is 36 Sv a day: a lethal one in three hours. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'The dose is 36 Sv a day: a lethal one in three hours. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 1.26, sunSize: 10.7, sunHDR: [60, 57, 52],
     corona: 2000, coronaColor: [0.68, 0.66, 0.62],
@@ -2921,12 +3067,70 @@ const VIEW = {
      the sun. At a ninth of the Moon's gravity walking is a slow shuffle
      and a jump lasts half a minute, so the suit carries jets, as on
      the Martian moons, with a beacon to recharge them. */
+  /* Titan is 9.5 AU out, like Enceladus, but under 1.5 bar of
+     nitrogen and a haze 300 km deep. The haze absorbs blue and scatters
+     the rest, so what reaches the ground is orange, almost all of it
+     diffuse, and about a thousandth of Earth's daylight — Huygens'
+     lamp was for colour, not for light (Tomasko et al. 2005). The sun
+     shows only as a brighter part of the sky, the ground casts no
+     shadow you could see, and Saturn, which stands in this sky and
+     never moves, is lost in the haze at every visible wavelength.
+
+     Light is kept in units a hundred times the Moon's: the top of the
+     atmosphere gets 3.8, the ground about a tenth of that, nearly all
+     of it from the sky, so the hemisphere carries it and the sun's
+     term is the last few per cent of direct beam.
+
+     Ligeia Mare's southern shore, at 78° N in the summer the northern
+     seas were seen in: the sun stands low, here 16°, the sea to the
+     north. The liquid level is height 0; see hTitan(). */
+  titan: {
+    name: 'TITAN', site: 'Ligeia Mare', gTxt: '1.35 m/s²',
+    title: 'Titan Walk', sub: 'Ligeia Mare · 0.138 g · surface unbounded',
+    fine: 'One and a half bar of nitrogen at −179 °C, under a haze that lets through a thousandth<br>' +
+          'of Earth\'s daylight, all of it orange and none of it from a visible sun. The sea to the<br>' +
+          'north is liquid methane. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+    air: true, stars: 0, noSun: true, shadows: false, skyLit: true,
+    sunColor: 0xffb46a, sunPower: 0.05, sunSize: 5.9, sunHDR: [1, 1, 1],
+    corona: 1, coronaColor: [1, 1, 1],
+    hemi: [0xffaa58, 0x24170b, 1.8], amb: [0xb07038, 0.08],
+    // The lower atmosphere is clearer than the haze over it: Huygens
+    // saw the ground sharply from 8 km up. Distance still goes orange
+    // over tens of kilometres.
+    fog: { density: 3.6e-5 },
+    sky: { zenith: [0.135, 0.068, 0.020], horizon: [0.20, 0.112, 0.042],
+           aureole: [0.30, 0.19, 0.08], k: 4, amt: 0.30 },
+    // Organic sediment, wet with methane and sorted by it: fine, smooth,
+    // few pits — rain and the haze's fallout fill them in.
+    grey: 92, mapTint: [1.02, 0.98, 0.92], pits: 14, grain: 0.55, clods: 0.2, pebbles: 25,
+    // No opposition to surge toward under light from the whole sky.
+    hapke: { w: 0.45, b: 0.20, c: 0.30, B0: 0, h: 0.10, theta: 14, Bc0: 0, hc: 0.01 },
+    micro: [0, 0], sparkle: 0,
+    levels: L4, fly: 400, rover: true, roverDrag: 0.028,
+    mu: 0.6,
+    // ½ρC_dA/m for a suited walker in 5.3 kg/m³ of nitrogen, and the
+    // weight that air holds up — both small at a walk.
+    drag: 0.0124, buoy: 0.008,
+    medium: { air: 0.9, lp: 7000, wind: 0.12, windLP: 220 },
+    dustColor: 0x5c4834, dustDrag: 24, dustLife: 3.0, stampColor: 0x3a2c20, soil: 0x5a4632,
+    // Water ice, rounded by rolling, under a film of the organics: a
+    // little brighter and greyer than the sand they lie in.
+    rockTint: [1.0, 0.95, 0.88], rockAlb: [0.42, 0.2], rockN: 0.25, rockRound: true,
+    cobbles: { patches: 160, per: 45, r: 5, size: [0.03, 0.17] }, rockMax: 5000,
+    landmark: 'flag', flagColor: 0xd8d2c4,
+    lander: 'generic',
+    exposure: 1.0, eye: [0.16, 0.3, 14], tone: 'aces', bloom: [0.2, 0.75, 3.0],
+    companions: [],
+    sea: 0,
+    look: [0.25, -0.04],
+  },
+
   enceladus: {
     name: 'ENCELADUS', site: 'Baghdad Sulcus', gTxt: '0.113 m/s²',
     title: 'Enceladus Walk', sub: 'Baghdad Sulcus · 0.012 g · surface unbounded',
     fine: 'The brightest ground in the solar system: snow fallen back from jets of an ocean<br>' +
           'underneath, which stand along the tiger stripe to the north. Saturn fills 29° of the<br>' +
-          'sky, its rings edge-on. <b>1</b>–<b>9</b>, <b>−</b> and <b>=</b> change world.',
+          'sky, its rings edge-on. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 0.378, sunSize: 5.9, sunHDR: [60, 57, 52],
     corona: 1600, coronaColor: [0.68, 0.66, 0.62],
@@ -2959,9 +3163,9 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'enceladus', 'pluto', 'charon'];
-// 1–9 along the number row, then − and =: 0 is the demo.
-const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'enceladus', 'titan', 'pluto', 'charon'];
+// 1–9 along the number row, then −, = and Backspace: 0 is the demo.
+const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
 
@@ -3191,6 +3395,9 @@ scene.add(sun, sun.target, sunFar, sunFar.target);
    soft tan and a lunar one is black. */
 const hemiLight = new THREE.HemisphereLight(0x0a0d14, 0x67645f, 0.36);
 const ambLight = new THREE.AmbientLight(0x232634, 0.14);
+// Lights count only for cameras that share a layer with them, and the
+// sea's mirror (§10) looks at layer 1 alone.
+for (const l of [sun, sunFar, hemiLight, ambLight]) l.layers.enable(1);
 scene.add(hemiLight, ambLight);
 
 /* ═════════════════════════════════════════════════════════════
@@ -3913,6 +4120,77 @@ const GROUND_NORMAL = `
   microLit = mix( 1.0, microLit, tsSun.w );
 `;
 
+/* A sea of liquid methane, drawn by the ground under it. Wherever the
+   terrain lies below the liquid's level (uLake.x, raw height, so the
+   drawn level is that less the curvature drop), the eye looks at the
+   liquid's surface first: the ray from the eye meets the level, part
+   of the light is the sky reflected there — Fresnel for n = 1.28,
+   1.5% straight down, nearly all of it at grazing — and the rest is
+   the ground below, dimmed along the path through the liquid both
+   ways, with a little light scattered in the liquid itself. No
+   geometry: the lakebed is the terrain, and every pixel of the sea is
+   a pixel of the floor under it. The surface is almost a mirror —
+   Cassini found Titan's seas smooth to a millimetre most of the time
+   (Zebker et al. 2014) — and wears a faint breath of capillary
+   ripples that the wind of half a metre a second can raise. */
+const GLSL_LAKE = `
+  uniform vec4 uLake;          // level, on, curvature anchor x, z
+  uniform vec2 uLakeR;         // apparent radius, flat-cap radius²
+  uniform vec3 uLakeAbs, uLakeIn;
+  uniform float uLakeT, uLakeMirror, uLakeHave;
+  uniform sampler2D uLakeMap;
+  uniform mat4 uLakeMat;
+  float lakeDrop( vec2 p ) {
+    vec2 d = p - uLake.zw;
+    float d2 = dot( d, d ) - uLakeR.y;
+    return d2 > 0.0 ? d2 / ( 2.0 * uLakeR.x ) : 0.0;
+  }
+  vec2 lakeRipple( vec2 p, float t ) {
+    vec2 g = vec2( 0.0 );
+    g += vec2( 0.8, 0.6 ) * cos( dot( p, vec2( 0.8, 0.6 ) ) * 3.1 + t * 1.9 ) * 0.5;
+    g += vec2( -0.5, 0.86 ) * cos( dot( p, vec2( -0.5, 0.86 ) ) * 4.7 + t * 2.3 ) * 0.35;
+    g += vec2( 0.97, -0.24 ) * cos( dot( p, vec2( 0.97, -0.24 ) ) * 7.3 - t * 2.9 ) * 0.2;
+    // Patches of calm and of catspaw, drifting.
+    float patchy = 0.5 + 0.5 * sin( p.x * 0.013 + t * 0.05 ) * sin( p.y * 0.017 - t * 0.04 );
+    return g * 0.012 * patchy;
+  }
+`;
+const LAKE_SURFACE = `
+  if ( uLake.y > 0.5 ) {
+    float lvl = uLake.x - lakeDrop( vWPos.xz );
+    // Drawing the mirror: nothing under the surface is in it.
+    if ( uLakeMirror > 0.5 && vWPos.y < lvl - 0.02 ) discard;
+    float camLvl = uLake.x - lakeDrop( cameraPosition.xz );
+    if ( vWPos.y < lvl && cameraPosition.y > camLvl ) {
+      vec3 C = cameraPosition, F = vWPos;
+      float t = ( C.y - lvl ) / max( C.y - F.y, 1e-4 );
+      vec3 P = C + ( F - C ) * t;
+      vec3 V = normalize( P - C );
+      float far = length( P - C );
+      // Ripples fade out with distance, where a pixel spans many.
+      vec2 rg = lakeRipple( P.xz, uLakeT ) * ( 1.0 - smoothstep( 30.0, 400.0, far ) );
+      vec3 N = normalize( vec3( -rg.x, 1.0, -rg.y ) );
+      vec3 R = reflect( V, N );
+      R.y = abs( R.y );
+      float ci = clamp( -dot( V, N ), 0.0, 1.0 );
+      float Fr = 0.0153 + 0.9847 * pow( 1.0 - ci, 5.0 );
+      vec3 sky = skyRadiance( normalize( R ) );
+      // The far shore, the hills and the haze over them, from the
+      // mirror image where it has them; the ripples shake it a little.
+      if ( uLakeHave > 0.5 ) {
+        vec4 q = uLakeMat * vec4( P, 1.0 );
+        vec2 uv = q.xy / q.w + rg * 0.4;
+        if ( q.w > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0 ) sky = texture2D( uLakeMap, uv ).rgb;
+      }
+      // Down to the floor along the view, and the light down to it.
+      float depth = lvl - F.y;
+      vec3 T = exp( -uLakeAbs * ( length( F - P ) + depth * 1.4 ) );
+      vec3 body = gl_FragColor.rgb * T + uLakeIn * ( 1.0 - exp( -uLakeAbs * length( F - P ) ) );
+      gl_FragColor.rgb = mix( body, sky, Fr );
+    }
+  }
+`;
+
 const GROUND_SPARKLE = `
   {
     // Sparse micro-facets of impact glass: a hashed cell either holds
@@ -3931,6 +4209,7 @@ const GROUND_SPARKLE = `
       }
     }
   }
+` + LAKE_SURFACE + `
   #include <tonemapping_fragment>
 `;
 
@@ -4027,7 +4306,10 @@ function surfacePatch(mat, kind, hpk, extra) {
           vWPos = ( modelMatrix * wq ).xyz;
         }`);
     let fs = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + GLSL_TS + (kind === 'ground' ? GLSL_GROUND : ''));
+      .replace('#include <common>', '#include <common>\n' + GLSL_TS + (kind === 'ground' ? GLSL_GROUND + skyDome.glsl + GLSL_LAKE : ''));
+    // The sea reflects the sky through the dome's own function and
+    // uniforms (§7), shared, not copied.
+    if (kind === 'ground') Object.assign(shader.uniforms, skyDome.uniforms, LAKE_U);
     if (hpk) {
       fs = fs.replace('#include <lights_physical_pars_fragment>',
                       '#include <lights_physical_pars_fragment>\n' + GLSL_HAPKE
@@ -4066,6 +4348,18 @@ function surfacePatch(mat, kind, hpk, extra) {
 const uSunView = { value: new THREE.Vector3() };
 const uSparkle = { value: 0.3 };
 const groundHapke = hapkeUniforms();
+const LAKE_U = {
+  uLake: { value: new THREE.Vector4(0, 0, 128, 128) },
+  uLakeR: { value: new THREE.Vector2(1e9, 160000) },
+  uLakeAbs: { value: new THREE.Vector3(0.25, 0.18, 0.22) },
+  uLakeIn: { value: new THREE.Vector3() },
+  uLakeT: { value: 0 },
+  // The mirror image (§10): its texture, and world → its texture coords.
+  uLakeMap: { value: null },
+  uLakeMat: { value: new THREE.Matrix4() },
+  uLakeMirror: { value: 0 },     // 1 while the mirror itself is drawn
+  uLakeHave: { value: 0 },
+};
 const GROUND_U = {
   rgMean: { value: 0.1 },
   rgMeanC: { value: new THREE.Color(0.1, 0.1, 0.1) },
@@ -4352,6 +4646,7 @@ const chunkStreamer = (() => {
           new THREE.Vector3(s.x0 + half, 0, s.z0 + half), half * 1.5 + 500);
         const mesh = new THREE.Mesh(geo, groundMat);
         mesh.userData.level = s.level;   // for debugging views; nothing reads it
+        mesh.layers.enable(1);            // seen in the sea's mirror (§10)
         mesh.receiveShadow = s.level === 0;
         chunks.set(job.key, { mesh, level: s.level, x0: s.x0, z0: s.z0, W: d.W, m: d.m, mask: 0 });
         chunkGroup.add(mesh);
@@ -4688,7 +4983,9 @@ const rockSystem = (() => {
     return (l(0, 0) * (1 - v) + l(1, 0) * v) * (1 - w) + (l(0, 1) * (1 - v) + l(1, 1) * v) * w;
   };
 
-  function makeRock(seed, detail, fresh, cuts = 0) {
+  // round: a cobble, not a block — worn smooth by rolling along a
+  // stream bed, the way Titan's water-ice gravel is (§1, hTitan).
+  function makeRock(seed, detail, fresh, cuts = 0, round = false) {
     let s = seed; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
     for (let i = 0; i < 5; i++) rnd();
     const src = new THREE.IcosahedronGeometry(1, detail);
@@ -4704,23 +5001,23 @@ const rockSystem = (() => {
     }
     src.dispose();
 
-    const ax = 0.85 + rnd() * 0.4, ay = 0.7 + rnd() * 0.35, az = 0.85 + rnd() * 0.4;
+    const ax = 0.85 + rnd() * 0.4, ay = (round ? 0.62 : 0.7) + rnd() * 0.35, az = 0.85 + rnd() * 0.4;
     const off = rnd() * 100;
     const planes = [];
-    const nCut = 5 + cuts + Math.floor(rnd() * 6);
+    const nCut = round ? 0 : 5 + cuts + Math.floor(rnd() * 6);
     for (let k = 0; k < nCut; k++) {
       const zc = rnd() * 2 - 1, th = rnd() * 6.2832, r = Math.sqrt(1 - zc * zc);
       planes.push([Math.cos(th) * r, zc, Math.sin(th) * r, 0.36 + rnd() * 0.4]);
     }
-    planes.push([0, -1, 0, 0.4 + rnd() * 0.2]);     // a bed to lie on
+    planes.push([0, -1, 0, (round ? 0.6 : 0.4) + rnd() * 0.2]);     // a bed to lie on
     // Fresh fractures stay flat and sharp; weathered ones are
     // sandblasted back toward the lump they were cut from.
-    const keep = fresh ? 1 : 0.72;
+    const keep = round ? 0.4 : fresh ? 1 : 0.72;
     for (let i = 0; i < verts.length; i += 3) {
       let x = verts[i] * ax, y = verts[i + 1] * ay, z = verts[i + 2] * az;
       const n = n3(x * 2.1 + off, y * 2.1, z * 2.1) * 0.55 + n3(x * 5.3, y * 5.3 + off, z * 5.3) * 0.3
               + n3(x * 13, y * 13, z * 13 + off) * 0.15;
-      const f = 1 + (n - 0.5) * 0.42;
+      const f = 1 + (n - 0.5) * (round ? 0.14 : 0.42);
       x *= f; y *= f; z *= f;
       for (const [px, py, pz, d] of planes) {
         const e = x * px + y * py + z * pz - d;
@@ -4752,7 +5049,7 @@ const rockSystem = (() => {
       for (let k = 0; k < 3; k++) around[index[f * 3 + k]].push(f);
     }
     const pos = new Float32Array(nF * 9), nrm = new Float32Array(nF * 9);
-    const COS = Math.cos(32 * DEG);
+    const COS = Math.cos((round ? 80 : 32) * DEG);
     for (let f = 0; f < nF; f++) {
       const fx = fn[f * 3], fy = fn[f * 3 + 1], fz = fn[f * 3 + 2];
       const fl = Math.hypot(fx, fy, fz) || 1;
@@ -4782,6 +5079,16 @@ const rockSystem = (() => {
     { max: 0.45, detail: 3, protos: [41, 53, 67, 71, 83].map((sd, i) => makeRock(sd, 3, i % 2 === 0)), shadow: true, receive: true },
     { max: 1e9, detail: 6, protos: [97, 101, 113, 127, 131, 139].map((sd, i) => makeRock(sd, 6, i % 3 !== 2, 5)), shadow: true, receive: true },
   ];
+  // Cobbles, for a world with world.rockRound, made the first time one
+  // is needed. Same classes, same draw structure, smooth shapes.
+  let ROUND = null;
+  const classesFor = () => {
+    if (!world.rockRound) return CLASSES;
+    if (!ROUND) ROUND = CLASSES.map((C, ci) => ({ ...C,
+      protos: [7, 19, 29, 43].map((sd) => makeRock(sd + ci * 100, [2, 3, 5][ci], false, 0, true)) }));
+    for (let ci = 0; ci < 3; ci++) ROUND[ci].shadow = CLASSES[ci].shadow;
+    return ROUND;
+  };
 
   // Freshly exposed rock is a little brighter than the mature soil
   // around it — it has had less time in the solar wind — and dust
@@ -4878,7 +5185,10 @@ const rockSystem = (() => {
       // Nothing under the lander: it came down on a clear patch, and its
       // engine swept the pebbles out from under it.
       if (LS && (x - LS[0]) ** 2 + (z - LS[1]) ** 2 < 42) return;
-      if (slots.length >= MAXR) return;
+      if (slots.length >= (world.rockMax || MAXR)) return;
+      // Nothing under a sea: the liquid's surface is drawn over the
+      // ground beneath it, and a stone would show through it unwet.
+      if (world.sea !== undefined && terrainHeight(x, z) < world.sea + 0.1) return;
       slots.push({ x, z, size });
     };
 
@@ -4929,6 +5239,22 @@ const rockSystem = (() => {
     // than craters: Enceladus's ice blocks, tens of metres across.
     for (let i = 0; i < (world.blocks || 0); i++)
       consider(x0 + rnd() * SIZE, z0 + rnd() * SIZE, 1.5 + Math.pow(rnd(), 2.2) * 11);
+    // Cobbles, in patches where liquid has sorted them, on a world
+    // that has them: a patch is tried anywhere and kept as often as
+    // the ground under it says gravel lies there.
+    if (world.cobbles) {
+      const cb = world.cobbles;
+      for (let i = 0; i < cb.patches; i++) {
+        const px = x0 + rnd() * SIZE, pz = z0 + rnd() * SIZE;
+        const keep = 0.15 + 0.85 * tiGravel(px, pz, terrainHeight(px, pz));
+        if (rnd() > keep) continue;
+        const n = Math.floor(cb.per * (0.4 + rnd()));
+        for (let k = 0; k < n; k++) {
+          const a = rnd() * 6.2832, d = cb.r * Math.sqrt(rnd());
+          consider(px + Math.cos(a) * d, pz + Math.sin(a) * d, cb.size[0] + Math.pow(rnd(), 2.2) * (cb.size[1] - cb.size[0]));
+        }
+      }
+    }
     // Background scatter, and a carpet of pebbles.
     for (let i = 0; i < 40 * nMul; i++)
       consider(x0 + rnd() * SIZE, z0 + rnd() * SIZE, 0.12 + Math.pow(rnd(), 3.4) * 2.0);
@@ -4940,12 +5266,13 @@ const rockSystem = (() => {
     // plates rather than lumps — the flagstones in every Venera
     // panorama. rockFlat squashes them, and their bedding with them.
     const flat = world.rockFlat || 1;
-    const buckets = CLASSES.map((C) => C.protos.map(() => []));
+    const CLS = classesFor();
+    const buckets = CLS.map((C) => C.protos.map(() => []));
     const solids = [];
     for (const r of slots) {
-      const ci = r.size < CLASSES[0].max ? 0 : r.size < CLASSES[1].max ? 1 : 2;
-      const pi = Math.floor(rnd() * Math.min(CLASSES[ci].protos.length, shapes));
-      const proto = CLASSES[ci].protos[pi];
+      const ci = r.size < CLS[0].max ? 0 : r.size < CLS[1].max ? 1 : 2;
+      const pi = Math.floor(rnd() * Math.min(CLS[ci].protos.length, shapes));
+      const proto = CLS[ci].protos[pi];
       // Resting pose: any heading, a modest tilt — more for the big
       // ejecta blocks, which land where they land.
       const tilt = (ci === 2 ? 0.35 : 0.22) * flat;
@@ -4994,7 +5321,7 @@ const rockSystem = (() => {
     // soil, so a print laid over them can push them down (press()).
     const small = group.userData.small = [];
     group.userData.solids = solidGrid(solids, x0, z0);
-    CLASSES.forEach((C, ci) => {
+    CLS.forEach((C, ci) => {
       C.protos.forEach((proto, pi) => {
         const list = buckets[ci][pi];
         const n = list.length / 3;
@@ -5625,6 +5952,7 @@ const lander = (() => {
       holder.rotation.y = yaw;
       holder.add(lm);
       group.add(holder);
+      group.traverse((o) => o.layers.enable(1));   // and in the sea's mirror (§10)
       baseH = hc;
       group.position.set(x, hc, z);
       this.update();
@@ -5965,6 +6293,7 @@ const skyDome = (() => {
   mesh.renderOrder = -4;
   mesh.frustumCulled = false;
   mesh.visible = false;
+  mesh.layers.enable(1);
   scene.add(mesh);
   return { mesh, uniforms, glsl };
 })();
@@ -8760,6 +9089,66 @@ const gradePass = new ShaderPass({
     }`,
 });
 composer.addPass(gradePass);
+
+/* ── The sea's mirror ──────────────────────────────────────────
+   A calm sea is a mirror, and what it mirrors most is the land around
+   it: the far shore, the hills behind, the haze over them. So where
+   the world has a sea, the terrain, the sky and the lander are drawn
+   again each frame from the eye reflected in the sea's surface, at
+   part resolution, into a texture the ground shader reads where it
+   draws the liquid (§4b). Only layer 1 is drawn, which the chunks,
+   the dome, the lander and the lights are on; the ground discards
+   what lies under the surface, against the curved level, so a far
+   shore that has dropped below the eye's level is still in it. */
+const seaMirror = (() => {
+  const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+  const cam = new THREE.PerspectiveCamera();
+  cam.layers.set(1);
+  // Bound in its place while drawing into it: a texture can't be read
+  // and written in the same draw.
+  const blank = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  blank.needsUpdate = true;
+  const bias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+  const p = new THREE.Vector3(), d = new THREE.Vector3(), u = new THREE.Vector3(), q = new THREE.Quaternion();
+  let tick = 0;
+  LAKE_U.uLakeMap.value = blank;
+  return {
+    render() {
+      LAKE_U.uLakeHave.value = 0;
+      if (world.sea === undefined) return;
+      camera.getWorldPosition(p);
+      const L = world.sea - dropAt(p.x, p.z);
+      if (p.y <= L) return;
+      const low = quality.id === 'low';
+      // On low it is redrawn every other frame.
+      if (low && (tick++ & 1) && rt.width > 4) { LAKE_U.uLakeHave.value = 1; return; }
+      camera.getWorldDirection(d);
+      u.set(0, 1, 0).applyQuaternion(camera.getWorldQuaternion(q));
+      const k = low ? 0.33 : 0.5;
+      const w = Math.max(4, Math.round(renderer.domElement.width * k));
+      const h = Math.max(4, Math.round(renderer.domElement.height * k));
+      if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+      cam.position.set(p.x, 2 * L - p.y, p.z);
+      cam.up.set(u.x, -u.y, u.z);
+      cam.lookAt(p.x + d.x, 2 * L - p.y - d.y, p.z + d.z);
+      cam.fov = camera.fov; cam.aspect = camera.aspect;
+      cam.near = 0.3; cam.far = camera.far;
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      LAKE_U.uLakeMat.value.copy(bias).multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
+      LAKE_U.uLakeMap.value = blank;
+      LAKE_U.uLakeMirror.value = 1;
+      const prev = renderer.getRenderTarget();
+      renderer.setRenderTarget(rt);
+      renderer.clear();
+      renderer.render(scene, cam);
+      renderer.setRenderTarget(prev);
+      LAKE_U.uLakeMirror.value = 0;
+      LAKE_U.uLakeMap.value = rt.texture;
+      LAKE_U.uLakeHave.value = 1;
+    },
+  };
+})();
 composer.addPass(new OutputPass());
 
 // FXAA, for the low tier, which gives up MSAA. It runs last, on the
@@ -9825,7 +10214,8 @@ const sound = (() => {
       // Wind noise goes with dynamic pressure, ½ρv²: a 1 m/s breeze on
       // Venus is 32 Pa, a 10 m/s wind on Mars 1 Pa — thirty decibels
       // apart, with Mars's just audible over the backpack.
-      medium = w.drag ? { air: 1.0, lp: 9000, wind: 0.30, windLP: 140 }     // Venus
+      medium = w.medium ? w.medium
+        : w.drag ? { air: 1.0, lp: 9000, wind: 0.30, windLP: 140 }     // Venus
         : w.air ? { air: 0.18, lp: 1600, wind: 0.22, windLP: 380 }             // Mars
         : { air: 0, lp: 20000, wind: 0, windLP: 400 };                         // vacuum
       applyMedium();
@@ -9901,7 +10291,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
@@ -10216,7 +10606,7 @@ function updateKeysHelp() {
     own = [['WASD', 'walk'], ['Shift', 'run'], ['Space', 'crouch, release to push'], ['R', 'rover'], ['F', 'fly']];
   }
   const all = [
-    ['Esc', 'worlds'], ['1 – 9 − =', 'switch world'], ['[ ]', 'sun elevation'], ['G', 'gravity'],
+    ['Esc', 'worlds'], ['1 – 9 − = ⌫', 'switch world'], ['[ ]', 'sun elevation'], ['G', 'gravity'],
     ['Z', 'zoom · right button'], ['P', 'photo'], ['H', 'hide HUD'], ['V', 'head motion'], ['L', 'copy link'],
     ['Q', 'quality'], ['M', 'sound'], ['0', 'demo'],
   ];
@@ -10238,7 +10628,7 @@ function setGravity(g) {
 }
 
 addEventListener('keydown', (e) => {
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space' || e.code === 'Backspace') e.preventDefault();
   // Held keys repeat only where that means something: sweeping the sun.
   if (e.repeat && e.code !== 'BracketLeft' && e.code !== 'BracketRight') { keys[e.code] = true; return; }
   sound.unlock();
@@ -11644,6 +12034,9 @@ function updateSkyColors() {
   if (scene.fog) {
     scene.fog.color.setRGB(s.horizon[0] * gain, s.horizon[1] * gain, s.horizon[2] * gain, lin);
   }
+  // Light scattered back out of a sea's body: the liquid is clear, so
+  // a few per cent of the sky's, browned by what is dissolved in it.
+  LAKE_U.uLakeIn.value.set(s.horizon[0] * gain * 0.05, s.horizon[1] * gain * 0.04, s.horizon[2] * gain * 0.025);
 }
 
 /* Switching worlds is two steps. First what is costly the first time —
@@ -12098,10 +12491,15 @@ renderer.setAnimationLoop(() => {
   }
   elapsed += dt;
   gradePass.uniforms.uTime.value = elapsed;
+  // The sea's level, in the frame the chunks are drawn in (§4b).
+  LAKE_U.uLake.value.set(world.sea ?? 0, world.sea !== undefined ? 1 : 0, curveAX, curveAZ);
+  LAKE_U.uLakeR.value.set(CURVE_R, CURVE_D02);
+  LAKE_U.uLakeT.value = elapsed;
   eyePass.uniforms.uDt.value = dt;
   quality.tick();       // first: a resize after rendering blanks the frame
   stepZoom(dt);
   step(dt, elapsed);
+  seaMirror.render();
   composer.render();
   // In the same task as the drawing, while the canvas still holds it.
   if (photoPending) { photoPending = false; takePhoto(); }
