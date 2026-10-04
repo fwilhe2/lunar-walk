@@ -4834,6 +4834,20 @@ const rockSystem = (() => {
   };
 
   const SIZE = 256, EXT = 1, MAXR = 900;
+  // Rocks this big or bigger are solid to the walker and the rover;
+  // smaller ones are pressed into the soil or rolled over unnoticed.
+  const SOLID_MIN = 0.15, SG = 16, SGC = SIZE / SG;
+  // A chunk's solid rocks, binned on a 16 m grid by their reach.
+  function solidGrid(list, x0, z0) {
+    const cells = Array.from({ length: SG * SG }, () => []);
+    for (const r of list) {
+      const R = r.R + 0.5;   // room for the body around the point asked
+      const i0 = Math.max(0, Math.floor((r.x - R - x0) / SGC)), i1 = Math.min(SG - 1, Math.floor((r.x + R - x0) / SGC));
+      const j0 = Math.max(0, Math.floor((r.z - R - z0) / SGC)), j1 = Math.min(SG - 1, Math.floor((r.z + R - z0) / SGC));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cells[j * SG + i].push(r);
+    }
+    return cells;
+  }
   // Stones under this size are pressed into the soil by a boot or a
   // wheel (§8); anything bigger you would step over or drive round.
   const PRESS_MAX = 0.12;
@@ -4925,6 +4939,7 @@ const rockSystem = (() => {
     // panorama. rockFlat squashes them, and their bedding with them.
     const flat = world.rockFlat || 1;
     const buckets = CLASSES.map((C) => C.protos.map(() => []));
+    const solids = [];
     for (const r of slots) {
       const ci = r.size < CLASSES[0].max ? 0 : r.size < CLASSES[1].max ? 1 : 2;
       const pi = Math.floor(rnd() * Math.min(CLASSES[ci].protos.length, shapes));
@@ -4955,6 +4970,20 @@ const rockSystem = (() => {
       // Rock albedo, as a fraction: rockAlb is [base, spread].
       const a = world.rockAlb[0] + Math.pow(rnd(), 1.6) * world.rockAlb[1];
       buckets[ci][pi].push(m.clone(), a, r);
+      // Anything you would notice underfoot is solid: its crown, in
+      // physics' frame (raw heights, no curvature drop), and how far
+      // it reaches out at the ground.
+      if (r.size >= SOLID_MIN) {
+        let high = -1e9, reach = 0;
+        for (let i = 0; i < pts.length; i += 3) {
+          const x = pts[i], y = pts[i + 1], z = pts[i + 2];
+          const py = el[1] * x + el[5] * y + el[9] * z;
+          if (py > high) high = py;
+          const px = el[0] * x + el[4] * y + el[8] * z, pz = el[2] * x + el[6] * y + el[10] * z;
+          reach = Math.max(reach, px * px + pz * pz);
+        }
+        solids.push({ x: r.x, z: r.z, R: Math.sqrt(reach), top: g - low - bury + high, g });
+      }
     }
 
     const group = new THREE.Group();
@@ -4962,6 +4991,7 @@ const rockSystem = (() => {
     // Stones small enough for a boot or a wheel to press into the
     // soil, so a print laid over them can push them down (press()).
     const small = group.userData.small = [];
+    group.userData.solids = solidGrid(solids, x0, z0);
     CLASSES.forEach((C, ci) => {
       C.protos.forEach((proto, pi) => {
         const list = buckets[ci][pi];
@@ -5048,6 +5078,28 @@ const rockSystem = (() => {
       }
     },
     clearMarks() { marks.clear(); },
+    // The solid rocks whose reach covers (x, z). A rock is a dome over
+    // its footprint: its height at distance d from its centre is
+    // top − (top − g)·(1 − √(1 − d²/R²)), which is all a boot or a
+    // tyre needs. Rocks overhanging a chunk edge are binned in the
+    // chunk they were placed in, so the neighbours are asked too.
+    solidsAt(x, z, out, pad = 0) {
+      out.length = 0;
+      const cx = Math.floor(x / SIZE), cz = Math.floor(z / SIZE);
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const g = live.get((cx + dx) + ':' + (cz + dz));
+        if (!g || !g.userData.solids) continue;
+        // Off this chunk's edge, its edge cells still hold what overhangs.
+        const i = Math.floor((x - (cx + dx) * SIZE) / SGC), j = Math.floor((z - (cz + dz) * SIZE) / SGC);
+        if (i < -1 || j < -1 || i > SG || j > SG) continue;
+        const cell = g.userData.solids[Math.min(SG - 1, Math.max(0, j)) * SG + Math.min(SG - 1, Math.max(0, i))];
+        for (const r of cell) {
+          const ex = x - r.x, ez = z - r.z, R = r.R + pad;
+          if (ex * ex + ez * ez < R * R) out.push(r);
+        }
+      }
+      return out;
+    },
     update(px, pz) {
       const ccx = Math.floor(px / SIZE), ccz = Math.floor(pz / SIZE);
       const cell = ccx + ':' + ccz;
@@ -9953,6 +10005,7 @@ const player = {
   gravity: G_LIST.moon,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
+  lift: 0, eyeOff: 0,             // m a rock holds you above the soil; the eye's lag behind a step
   gas: JET.dv,                    // m/s of Δv left in the jets
 };
 player.pos.y = terrainHeight(0, 0) + EYE;
@@ -10024,6 +10077,7 @@ function setMode(next) {
   }
   if (next === 'EVA') player.onGround = false;
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
+  player.lift = 0; player.eyeOff = 0;
   mode = next;
   el.mode.textContent = mode === 'EVA' ? 'EVA' : mode === 'FLY' ? 'FLIGHT' : 'ROVER LRV';
   updateKeysHelp();
@@ -10552,6 +10606,44 @@ const touchUI = (() => {
   };
 })();
 
+/* Rocks underfoot. A stone you can lift a boot onto is ground — the
+   suit's knees allow about 0.3 m of step, the height of the rocks the
+   Apollo crews stepped up on — and anything taller is a wall, met at
+   the contour where it rises past that. On top of a block, its crown
+   is ground like any other; walking off one, you step down. */
+const STEP_UP = 0.3;
+const _solids = [];
+function rockHeight(r, x, z) {
+  const q = 1 - ((x - r.x) ** 2 + (z - r.z) ** 2) / (r.R * r.R);
+  return q <= 0 ? -1e9 : r.top - (r.top - r.g) * (1 - Math.sqrt(q));
+}
+// The ground a body with its feet at `feet` stands on at (x, z).
+function standHeight(x, z, feet) {
+  let h = terrainHeight(x, z);
+  for (const r of rockSystem.solidsAt(x, z, _solids)) {
+    const rh = rockHeight(r, x, z);
+    if (rh > h && rh <= feet + STEP_UP) h = rh;
+  }
+  return h;
+}
+// Keep a body of radius rad out of every rock too tall to step onto.
+function rockPush(pos, feet, rad, n) {
+  let hit = false;
+  const H = feet + STEP_UP;
+  for (const r of rockSystem.solidsAt(pos.x, pos.z, _solids, rad)) {
+    if (r.top <= H) continue;
+    const k = (r.top - H) / Math.max(r.top - r.g, 1e-3);
+    const wall = (k >= 1 ? 1 : Math.sqrt(1 - (1 - k) ** 2)) * r.R + rad;
+    const ex = pos.x - r.x, ez = pos.z - r.z, d = Math.hypot(ex, ez);
+    if (d >= wall || d < 1e-6) continue;
+    pos.x = r.x + ex / d * wall; pos.z = r.z + ez / d * wall;
+    n.set(ex / d, 0, ez / d);
+    hit = true;
+  }
+  return hit;
+}
+
+const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3();
 const _hitN = new THREE.Vector3();
 function stepEVA(dt) {
   const p = player, v = p.vel;
@@ -10634,7 +10726,7 @@ function stepEVA(dt) {
     // On the ground you move along it.
     v.y = gx * v.x + gz * v.z;
     // The eye rides on the legs: down into the crouch, up out of it.
-    p.pos.y = terrainHeight(p.pos.x, p.pos.z) + EYE - p.crouch;
+    p.pos.y = standHeight(p.pos.x, p.pos.z, p.pos.y - EYE + p.crouch) + EYE - p.crouch;
     if (tookOff > 0) {
       v.y += tookOff;
       p.onGround = false;
@@ -10674,13 +10766,31 @@ function stepEVA(dt) {
     const vn = v.x * _hitN.x + v.z * _hitN.z;
     if (vn < 0) { v.x -= vn * _hitN.x; v.z -= vn * _hitN.z; }
   }
+  // So are the rocks. Walking into one stops you; running into one
+  // is a knock you feel through the suit.
+  if (rockPush(p.pos, p.pos.y - EYE + p.crouch, 0.3, _hitN)) {
+    const vn = v.x * _hitN.x + v.z * _hitN.z;
+    if (vn < 0) {
+      if (vn < -0.5) sound.step(Math.min(1, -vn * 0.6));
+      v.x -= vn * _hitN.x; v.z -= vn * _hitN.z;
+      // Glove and boot on rock grip: what slides along it loses μ of
+      // the blow, so a push square on stops you instead of steering
+      // you round the stone.
+      const tx = v.x - (v.x * _hitN.x + v.z * _hitN.z) * _hitN.x, tz = v.z - (v.x * _hitN.x + v.z * _hitN.z) * _hitN.z;
+      const vt = Math.hypot(tx, tz), k = vt > 1e-6 ? Math.max(0, 1 - 0.6 * -vn / vt) : 0;
+      v.x += tx * (k - 1); v.z += tz * (k - 1);
+    }
+  }
 
   // The streamed world ends somewhere; this keeps you inside it.
   const ceil = terrainHeight(p.pos.x, p.pos.z) + EYE + FLY_CEILING;
   if (p.pos.y > ceil) { p.pos.y = ceil; v.y = Math.min(0, v.y); }
 
-  const gh = terrainHeight(p.pos.x, p.pos.z);
   let feet = p.pos.y - EYE + p.crouch;
+  const wasGround = p.onGround;
+  const th = terrainHeight(p.pos.x, p.pos.z);
+  const gh = standHeight(p.pos.x, p.pos.z, feet);
+  const lift = gh - th;            // how far a rock holds you above the soil
   if (!p.onGround) {
     if (feet <= gh) {
       // Landing: the legs take it, sinking as far as they must to
@@ -10694,6 +10804,9 @@ function stepEVA(dt) {
       v.y = 0;
       feet = gh;
     }
+  } else if (p.lift > 0.005 && feet - gh <= p.lift + 0.01) {
+    // Off the edge of a stone: you step down rather than fall.
+    feet = gh;
   } else if (feet - gh > 0.5 * gl * dt * dt + 0.002) {
     // The ground fell away faster than gravity could follow it: over a
     // crest at speed, you fly. That happens when v²κ > g, and on a
@@ -10703,6 +10816,10 @@ function stepEVA(dt) {
     feet = gh;
   }
   if (p.onGround) p.pos.y = gh + EYE - p.crouch;
+  // A step up or down takes the eye a stride's time, not a frame.
+  const dLift = p.onGround && wasGround ? lift - p.lift : 0;
+  p.eyeOff = (p.eyeOff - dLift) * Math.exp(-dt / 0.15);
+  p.lift = p.onGround ? lift : 0;
 
   // Back at the beacon the jets are recharged.
   if (world.jets && p.onGround && p.gas < JET.dv && Math.hypot(p.pos.x - 8, p.pos.z + 11) < 3) {
@@ -10712,8 +10829,8 @@ function stepEVA(dt) {
   const hs = Math.hypot(v.x, v.z);
   // The gait: where the eye rides over the feet, and when they strike.
   const g8 = gait.step(p, hs, gl, dt, running);
-  yawObj.position.set(p.pos.x + right.x * g8.x, p.pos.y + g8.y, p.pos.z + right.z * g8.x);
-  body.update(p.pos.x + right.x * g8.x, feet + g8.y, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt);
+  yawObj.position.set(p.pos.x + right.x * g8.x, p.pos.y + g8.y + p.eyeOff, p.pos.z + right.z * g8.x);
+  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt);
   hudSpeed = hs;
   return gh;
 }
@@ -10924,6 +11041,12 @@ const demo = (() => {
       if (terrainHeight(player.pos.x + fx * 8, player.pos.z + fz * 8) - gh > 3.5) {
         yawTarget = yawObj.rotation.y + (Math.random() < 0.5 ? 1.0 : -1.0);
         left = Math.max(left, 20); gaze = 'ahead';
+      }
+      // Nor into a boulder: walk round it, as anyone would.
+      _demoAhead.set(player.pos.x + fx * 1.5, 0, player.pos.z + fz * 1.5);
+      if (player.onGround && Math.abs(wrap(yawTarget - yawObj.rotation.y)) < 0.2 && rockPush(_demoAhead, player.pos.y - EYE + player.crouch, 0.5, _demoN)) {
+        yawTarget = yawObj.rotation.y + (Math.random() < 0.5 ? 0.7 : -0.7);
+        gaze = 'ahead';
       }
       if (world.jets && player.gas > 2) {
         // On a moonlet you do not walk, you hover a couple of metres up
@@ -11332,7 +11455,7 @@ function applyWorldNow(id) {
   player.pos.set(0, SITE_H + EYE, 0);
   player.vel.set(0, 0, 0);
   player.onGround = true;
-  player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
+  player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset(); player.lift = 0; player.eyeOff = 0;
   player.gas = JET.dv;
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
