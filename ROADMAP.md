@@ -274,3 +274,70 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 **Io, as built:** kind 8, no craters. Plains with layered benches and lava flows, one patera per 56 km cell (black floor, red or white fallout halo) and one tilted-block mountain per 110 km cell, each kept inside its cell. The site near Kanehekili Fluctus has Jupiter 19.5° across over a 7 km mountain, with the three other Galileans in Io's own frame. Two plumes (a new sky object) stand over the horizon, scattering forward. Night is Jupiter-lit, the dose is 36 Sv a day, and the tone mapping is ACES for the yellow. Keys now run along the number row: `1`–`9`, then `-` (and `=` next).
 
 **Enceladus, as built:** kind 9. Tiger stripes in 35 km lanes with funiscular ridges between, a snow mantle, ice blocks from a new `blocks` rock option, and a short level set (±14 km). The site is 5 km from Baghdad Sulcus. The jet curtain is a ribbon on the stripe's trough, built from the kernel, forward-scattering, with the moon's shadow climbing it after sunset. Saturn is 29° across with rings as a companion capability: profiled annulus, single-scattering lit and unlit faces, the planet's shadow on them, their shadow on the globe. From Enceladus they are edge-on, so the shadow band is what shows. Tethys, Dione, Rhea, Titan and Mimas move along the ring plane. The suit has jets, and there is no rover.
+
+---
+
+## 13. More worlds, and a realism pass over the old ones (overnight run, 2026-10-04)
+
+**Why.** The world picker already shows a dozen solid bodies dimmed as "not yet" — Ganymede, Callisto, Iapetus, Miranda, Triton and the rest — and every one of them is somewhere a suited person could stand. Each new body is chosen for three things: a surface we actually know (spacecraft imaging at metres to hundreds of metres), a landscape that looks like nothing else in the set, and a sky worth looking up at. Realism comes first everywhere: every constant gets a source or a derivation in a comment, as the existing rows do.
+
+**Rules for the whole run**
+- One commit per working feature, straight to `main`, never pushed. Tick the box here in the same commit.
+- Every new height function: `node tools/check.mjs` (no NaN, pure across cache resets, µs per call recorded in the baseline with `--save` once it is meant to cost that). Budget: no world above ~1.5× the Moon's cost per query.
+- Every visual change: a probe shot from the site and from the flight ceiling on low, looked at, before committing. Nothing new in the default view may move the camera (motion sickness — see `CLAUDE.md`).
+- Each new world gets its README paragraph (surface, light, sky, physics table row) and its `CLAUDE.md` paragraph in the same commit or the one right after.
+
+### 13a. Plumbing for more than twelve worlds
+- [ ] Keys: `1`–`9`, `-`, `=`, `⌫` stay the first twelve in solar order; `Shift` + the same keys reach the rest. Update key help, README controls, opening-screen text (`fine:` lines say "change world" generically, not a key list that goes stale).
+- [ ] Picker: add an asteroid-belt "system" between Mars and Jupiter (Vesta, Ceres) so the belt bodies have a slot; check the strip still packs at 960 px and at phone width.
+- [ ] `G_LIST`, `WORLD_IDS`, `WORLD_KEYS`, the demo's tour and shared-link parsing pick a new world up from its rows alone — check nothing else hard-codes twelve.
+- [ ] `tools/probe/drivers/worlds.js` takes an optional list of ids (`window.__worlds`) so one world can be shot without the full 25-minute sweep.
+
+### 13b. Callisto — the place a crewed Jovian mission would actually land
+Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's order of magnitude), so NASA's HOPE study (Troutman et al. 2003) put the base here.
+- [ ] Kernel row (kind 11): R 2410.3 km, g 1.235 m/s². The most heavily cratered surface in the solar system, saturated at large sizes — **but depleted below ~1 km** (Moore et al. 1999): sublimation of ice from crater walls degrades small craters into **knobs**, rim remnants 50–100 m high. Dark lag deposit smoothing the lows.
+- [ ] `hCallisto`: crater classes from 100 m to 30 km, small ones skewed very old and shallow; complex craters past Dtr ≈ 3–4 km (Schenk 2002 transitions on icy Galileans); a knob field term (sharp, isolated hillocks on degraded rims, a pure function of the crater); a smooth dark mantle filling lows.
+- [ ] Colour: dark lag (albedo ~0.2) with **bright frost on crests and poleward-facing slopes** — a colour-only slope × aspect term in `surfaceTint`, like Pluto's frost line but on aspect. Fresh craters bright.
+- [ ] VIEW row: sun 50 W/m² (Europa's units), Jupiter 4.35° across (2·atan(71492/1882700)), fixed; Io, Europa and Ganymede all orbit inside Callisto, so **all three transit Jupiter** from here — `kepler` companions in Callisto's frame. Night: Jupiter at 0.08% of the sun. Hapke from Buratti / Domingue for Callisto. Rover yes.
+- [ ] Site: a plausible base site on the Valhalla ring plains (≈ 15°N), in Node: level, a knob field in view, Jupiter over the horizon.
+
+### 13c. Ganymede — grooved terrain
+- [ ] Kernel row (kind 12): R 2634.1 km, g 1.428 m/s². Two terrains: ancient **dark regio** (cratered, furrowed, dark lag, frost on crests) and younger **bright sulci** — swaths tens of km wide of parallel **grooves**, 3–10 km wavelength and 100–500 m relief, with finer ~1 km grooves on them, often tilt-block (asymmetric) (Pappalardo et al. 1998, 2004). Groove sets in lanes with different trends; a sulcus boundary cuts the dark terrain.
+- [ ] Site: at the edge of a sulcus (Uruk-Sulcus-like) facing across it, so the opening view shows grooves marching to the horizon.
+- [ ] Bright-ray craters (Osiris-like) as the large fresh class; polar frost not at site latitude.
+- [ ] Sky: Jupiter 7.64° across; Io and Europa inside (transits), Callisto outside. Ganymede has its own magnetosphere: dose ≈ 0.08 Sv/day equatorial — readout like Europa's.
+
+### 13d. Triton — geysers and cantaloupe terrain, Neptune overhead
+- [ ] Kernel row (kind 13): R 1353.4 km, g 0.779 m/s². Young (≲ 100 Myr), few craters. **Cantaloupe terrain**: dimples 25–35 km across bounded by ridges, crossed by long double ridges (Croft et al. 1995); site on the south polar cap boundary, smooth frost plains with dark **plume streaks** (100+ km long, all blown the same way by the wind at ~8 km altitude).
+- [ ] Colour: nitrogen frost, albedo ~0.75, faintly pink-cream; dark streaks a colour-only term aligned to one bearing.
+- [ ] Geysers: Hili/Mahilani-style plume columns rising 8 km then bending into a horizontal trail downwind for 100+ km (Soderblom et al. 1990), a sky object like Io's plumes but dark and with a shadow side.
+- [ ] Sky: 14 µbar N₂ with a thin haze (like Pluto's, `world.sky`), sun a point at 30 AU (1.5 W/m², Pluto-scale units), **Neptune 8.0° across**, deep blue, with banding, dark spots and bright methane clouds; it never moves. Neptune texture generator written the pure way (`OFF_THREAD`). Night lit by Neptune.
+- [ ] Physics table row; rover yes.
+
+### 13e. Ceres — Occator's bright faculae
+- [ ] Kernel row (kind 14): R 470 km, g 0.28 m/s². Dark (albedo 0.09) carbonaceous regolith; craters with **polygonal outlines** and few large basins (relaxed); Dtr ≈ 7–12 km (Hiesinger et al. 2016).
+- [ ] Site: the floor of an Occator-like 92 km crater, near **Cerealia Facula** — the brightest material on Ceres (sodium carbonate, albedo ~0.5+, De Sanctis et al. 2016), on a fractured central dome (Cerealia Tholus, ~0.7 km high) inside a central pit; floor fractures; lobate flows.
+- [ ] Sky: black, sun 0.19° at 177 W/m²; no companion. Horizon only ~1 km off at eye height.
+
+### 13f. Iapetus — the two-faced moon and its ridge
+- [ ] Kernel row (kind 15): R 734.5 km, g 0.223 m/s². **Equatorial ridge** up to 13–20 km high and ~20 km wide (Porco et al. 2005), with the site on its flank so the ridge fills the horizon; huge landslides off crater walls (Singer et al. 2012, long runout); heavily cratered, saturated at large sizes.
+- [ ] Colour: the boundary of **Cassini Regio** — dark (0.03–0.05) lag on sun-facing, warmer slopes, bright (0.5–0.6) ice on poleward and shaded slopes, with a sharp, patchy transition (thermal segregation, Spencer & Denk 2010). Colour-only.
+- [ ] Sky: Saturn 1.94° across, **rings open** — Iapetus' orbit is inclined ~15° to Saturn's equator, so the rings show as an ellipse, not a line. Reuse the ring capability; Titan and Hyperion as moving points. Saturn moves? Iapetus is locked, so no.
+
+### 13g. Miranda — Verona Rupes
+- [ ] Kernel row (kind 16): R 235.8 km, g 0.079 m/s² (jets, beacon). **Coronae**: concentric bands of parallel ridges and troughs (Inverness's chevron, Arden's racetrack), next to old rolling cratered terrain; **Verona Rupes**, a fault scarp 5–10 km high (Pappalardo et al. 1997) on the skyline.
+- [ ] Sky: **Uranus 22° across**, pale cyan and nearly featureless, rings dark and almost edge-on, at 19 AU (3.7 W/m²). Uranus texture generator (pure). Ariel/Umbriel/Titania/Oberon as moving discs.
+
+### 13h. Vesta — Rheasilvia and the troughs (if time allows)
+- [ ] Kernel row: R 262.7 km, g 0.25 m/s²; Divalia Fossa troughs 10–20 km wide, km deep; Rheasilvia central mound. Bright basaltic regolith (albedo 0.4) with dark carbonaceous spots.
+
+### 13i. Realism pass over the existing worlds
+Each item gets a probe shot before and after.
+- [ ] **Zodiacal light** on the airless bodies: a cone along the ecliptic above the point where the sun set, visible once the sun is a few degrees below the horizon and the eye has opened — the glow Apollo crews sketched from orbit. Brightness scaled by 1/r² of the body's distance from the sun (invisible past Jupiter against the Milky Way, so only Mercury, Moon, Phobos, Deimos and the belt).
+- [ ] **Titan**: rocks and cobbles reflected in the sea (layer 1 on rock meshes, capped by distance); capillary ripples tied to a light wind; optional methane drizzle (Tokano et al. 2006, mm drops falling slowly at ~1.6 m/s) as a sparse screen-space streak layer, off by default if it moves in the view.
+- [ ] **Mars**: dust-devil tracks — dark sinuous streaks where devils lifted the bright dust (Spirit, HiRISE), colour-only in the kernel's colour pass; a distant dust devil or two on the horizon (Spirit's Gusev movies), as a sky-object column.
+- [ ] Venus: the cracked-plate texture reads as a repeating pattern near the eye — check scale against Venera 13/14 slab sizes (decimetre-scale plates) and break up the tiling.
+- [ ] Go through each world's site and flight shots for anything wrong (floating objects, seams, banding, colour errors) and fix what's found.
+
+### 13j. Docs
+- [ ] README: world count, table rows, controls, a paragraph per new body; `CLAUDE.md`: a paragraph per new kernel kind, and correct the stale "~5,600 lines".
