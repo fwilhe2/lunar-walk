@@ -9995,11 +9995,14 @@ const gait = (() => {
     if (hs > 0.15) dust.kick(p.pos.x - ax * 0.15, terrainHeight(p.pos.x, p.pos.z), p.pos.z - az * 0.15, ax, az, hs);
   };
   // A cycle's shape, fixed at its start so the arcs join up.
-  const plan = (hs, gl, L) => {
+  // On a grade steps shorten — uphill to keep the knee within what it
+  // can push through, downhill to brake — and quicken to hold the pace
+  // (step length falls with the grade either way: Kawamura et al. 1991).
+  const plan = (hs, gl, L, grade = 0) => {
     const fr = hs * hs / (gl * L);
     if (mode === 'walk' && fr > GAIT.lope) mode = 'lope';
     else if (mode === 'lope' && fr < GAIT.walk) mode = 'walk';
-    const stride = GAIT.suit * 2.3 * L * Math.pow(Math.max(fr, 1e-4), 0.3);
+    const stride = GAIT.suit * 2.3 * L * Math.pow(Math.max(fr, 1e-4), 0.3) * Math.max(0.6, 1 - Math.abs(grade));
     if (mode === 'walk') { s = stride / 2; T = s / hs; }
     else {
       s = stride; T = Math.max(s / hs, GAIT.contact);
@@ -10024,12 +10027,13 @@ const gait = (() => {
         if (env === 0) ph = 0;
         return { y: oy, x: ox, swing: n * Math.PI + ph * Math.PI, amt: 0 };
       }
-      if (env === 0 && ph === 0) plan(hs, gl, L);
+      const grade = hs > 0.01 ? p.vel.y / hs : 0;
+      if (env === 0 && ph === 0) plan(hs, gl, L, grade);
       env = Math.min(1, env + dt / 0.25);
       ph += dt / T;
       if (ph >= 1) {
         ph -= 1; n++; side = -side; second = false;
-        plan(hs, gl, L);
+        plan(hs, gl, L, grade);
         if (mode === 'walk') strike(p, running ? 0.4 : 0.32, s * 0.45, hs);
         else {
           strike(p, Math.min(1, 0.25 + vy * 0.9), hs * GAIT.contact * 0.2, hs);
