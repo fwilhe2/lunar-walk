@@ -222,6 +222,7 @@ Gravity is each body's real value, and nothing about moving on foot is tuned for
 | Venus | 0.52 m/s | 0.02 m | 0.13 s | 1.63 m/s | 2.9 m/s (power) |
 | Io | 1.61 m/s | 0.72 m | 1.8 s | 0.76 m/s | 1.48 m/s |
 | Europa | 1.67 m/s | 1.06 m | 2.5 s | 0.65 m/s | 1.26 m/s |
+| Titan | 1.67 m/s | 1.02 m | 2.5 s | 0.66 m/s | 1.28 m/s |
 | Enceladus | 1.81 m/s | 14.5 m | 32 s | 0.19 m/s | 0.37 m/s |
 | Pluto | 1.75 m/s | 2.48 m | 5.7 s | 0.45 m/s | 0.87 m/s |
 | Charon | 1.79 m/s | 5.6 m | 12.4 s | 0.31 m/s | 0.59 m/s |
