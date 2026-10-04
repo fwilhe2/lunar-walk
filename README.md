@@ -46,11 +46,12 @@ GitHub Actions builds all three platforms on their native runners for pushes to 
 | `P` | save the frame as a PNG |
 | `H` | hide the HUD |
 | `L` | copy a link to this exact view — world, place, heading, sun |
-| `Esc` | release pointer |
+| `Esc` | release the pointer and bring up the world picker; the view stays clear, so `P` still photographs it |
+| `←` `→` · `↓` `↑` · `Enter` | in the picker: choose, zoom into a system or back out, go |
 
 **Gamepad** (any pad with the standard mapping): left stick moves, right stick looks, `LB` runs or boosts, `A` is `Space` and `B` is `C`, the right trigger crouches and pushes — squeeze and let go, as hard as you mean to jump — `Y` the rover, `X` flight, `RB` the long lens, the D-pad the sun and the world, `Start` the demo, `Back` the sound. Sticks are analog all the way through: half over walks at half pace, drives at half throttle, fires the jets at half thrust.
 
-**Touch**: tap the opening screen and a stick appears wherever your left thumb lands; drag anywhere else to look, and the buttons on the right jump, descend, zoom, and take the rover or the flight. `≡` brings the opening screen back.
+**Touch**: tap the opening screen and a stick appears wherever your left thumb lands; drag anywhere else to look, and the buttons on the right jump, descend, zoom, and take the rover or the flight. `≡` brings up the world picker.
 
 Sun elevation is the interesting one. At 5° the craters are all rim and shadow, and every shadow is a black pool that reaches across the ground; at 60° an airless surface flattens into a grey wash and you can barely read the ground — which is exactly the problem Apollo crews had judging distance near lunar noon. Turn your back to the sun at any elevation and it happens again: the shadows all hide behind whatever casts them, and the ground washes out into a featureless glare around your own shadow. On Mars it does something else entirely: the whole sky dims and deepens with it, because the sky *is* the sunlit dust.
 
