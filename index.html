@@ -10005,7 +10005,7 @@ const player = {
   gravity: G_LIST.moon,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
-  leanF: 0, leanS: 0, pvx: 0, pvz: 0,   // rad leaned forward and to the right; last velocity
+  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0,   // rad leaned forward and to the right; last velocity
   lift: 0, eyeOff: 0,             // m a rock holds you above the soil; the eye's lag behind a step
   gas: JET.dv,                    // m/s of Δv left in the jets
 };
@@ -10851,8 +10851,15 @@ function stepEVA(dt) {
   }
   p.pvx = v.x; p.pvz = v.z;
   camera.rotation.set(-p.leanF * 0.5, 0, -p.leanS * 0.35);
-  yawObj.position.set(p.pos.x + right.x * g8.x, p.pos.y + g8.y + p.eyeOff, p.pos.z + right.z * g8.x);
-  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF, p.leanS);
+  // Looking down past what the neck manages inside the helmet means
+  // bending at the hips, and looking up, leaning back: the eye swings
+  // about the hips, 0.67 m below it, as stiffly as the suit allows.
+  const pit = pitchObj.rotation.x, NECK = 0.45;
+  const bendT = pit < -NECK ? Math.min(1.0, -pit - NECK) : pit > NECK ? -Math.min(0.45, pit - NECK) : 0;
+  p.bend += (bendT - p.bend) * (1 - Math.exp(-dt / 0.35));
+  const bf = 0.67 * Math.sin(p.bend), bd = 0.67 * (1 - Math.cos(p.bend));
+  yawObj.position.set(p.pos.x + right.x * g8.x + fwd.x * bf, p.pos.y + g8.y + p.eyeOff - bd, p.pos.z + right.z * g8.x + fwd.z * bf);
+  body.update(p.pos.x + right.x * g8.x, feet + g8.y + p.eyeOff, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt, p.leanF + p.bend * 0.6, p.leanS);
   hudSpeed = hs;
   return gh;
 }
