@@ -9966,6 +9966,10 @@ const GAIT = {
   contact: 0.45,     // s on the ground per lope: two overlapping foot contacts
   lope: 0.6, walk: 0.45,   // Froude numbers to change gait at, up and down
 };
+// Steady (default) or full head motion on foot; see stepEVA.
+let viewMotion = 'steady';
+try { if (localStorage.getItem('viewMotion') === 'full') viewMotion = 'full'; } catch (err) { /* no storage */ }
+
 const gait = (() => {
   let mode = 'walk', ph = 0, side = 1, n = 0;   // phase 0–1 within the step (walk) or cycle (lope)
   let T = 1, s = 0.5, td = 0, vy = 0, second = false, env = 0;
@@ -10097,7 +10101,7 @@ const player = {
   gravity: G_LIST.moon,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
-  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0,
+  leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0, steadyY: null, smoothOff: 0,
   fall: null, fallAmt: 0, footN: 0,     // a fall in progress: { t, dir: 1 forward, −1 back }   // rad leaned forward and to the right; last velocity
   lift: 0, eyeOff: 0,             // m a rock holds you above the soil; the eye's lag behind a step
   gas: JET.dv,                    // m/s of Δv left in the jets
@@ -10174,7 +10178,7 @@ function setMode(next) {
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
   player.lift = 0; player.eyeOff = 0;
   player.leanF = player.leanS = 0; player.pvx = player.vel.x; player.pvz = player.vel.z;
-  player.fall = null; player.fallAmt = 0;
+  player.fall = null; player.fallAmt = 0; player.steadyY = null; player.smoothOff = 0;
   camera.rotation.set(0, 0, 0);
   mode = next;
   el.mode.textContent = mode === 'EVA' ? 'EVA' : mode === 'FLY' ? 'FLIGHT' : 'ROVER LRV';
@@ -10203,7 +10207,7 @@ function updateKeysHelp() {
   }
   const all = [
     ['Esc', 'worlds'], ['1 – 9 − =', 'switch world'], ['[ ]', 'sun elevation'], ['G', 'gravity'],
-    ['Z', 'zoom · right button'], ['P', 'photo'], ['H', 'hide HUD'], ['L', 'copy link'],
+    ['Z', 'zoom · right button'], ['P', 'photo'], ['H', 'hide HUD'], ['V', 'head motion'], ['L', 'copy link'],
     ['Q', 'quality'], ['M', 'sound'], ['0', 'demo'],
   ];
   const cap = (t) => t === '–' || t === '/' ? '<i>' + t + '</i>' : '<b>' + t + '</b>';
@@ -10247,6 +10251,11 @@ function press(code) {
   // has to happen before a frame is drawn, not after (§10b).
   if (code === 'KeyP') { quality.fullScale(); photoPending = true; }
   if (code === 'KeyH') hud.classList.toggle('clean');
+  if (code === 'KeyV') {
+    viewMotion = viewMotion === 'full' ? 'steady' : 'full';
+    try { localStorage.setItem('viewMotion', viewMotion); } catch (err) { /* private window */ }
+    note(viewMotion === 'full' ? 'VIEW: FULL HEAD MOTION' : 'VIEW: STEADY');
+  }
   if (code === 'KeyL') {
     lastHash = viewHash();
     try { history.replaceState(null, '', '#' + lastHash); } catch (err) { /* no address bar */ }
@@ -11043,12 +11052,16 @@ function stepEVA(dt) {
   // shorter than a stride. A triangle filter over ±0.4 m along the way
   // you are going keeps any slope exact and halves the jolting the
   // metre-scale lunar roughness would otherwise put in the eye.
-  let smooth = 0;
+  // Eased in and out, never switched: leaving the ground over a crest
+  // would otherwise jerk the eye by the whole correction in a frame.
+  let smoothT = 0;
   if (p.onGround && p.lift === 0 && hs > 0.05) {
     const ux = v.x / hs * 0.4, uz = v.z / hs * 0.4;
     const avg = (terrainHeight(p.pos.x - ux, p.pos.z - uz) + 2 * th + terrainHeight(p.pos.x + ux, p.pos.z + uz)) / 4;
-    smooth = (avg - th) * Math.min(1, hs / 0.3);
+    smoothT = (avg - th) * Math.min(1, hs / 0.3);
   }
+  p.smoothOff += (smoothT - p.smoothOff) * (1 - Math.exp(-dt / 0.08));
+  const smooth = p.smoothOff;
   // The body pivots about the feet, and the eye rides the helmet's arc:
   // onto hands and knees going forward, onto the backpack going back.
   const fDir = p.fall ? p.fall.dir : 1, fTh = fa * (fDir > 0 ? 1.2 : 1.25);
@@ -11077,7 +11090,14 @@ function stepEVA(dt) {
   if (tookOff > 0) effort.spend(0.5 * SUIT.m * tookOff * tookOff / EFFORT.eff + EFFORT.step * 2);
   if (p.charge > 0) P += 120;    // holding a crouch in a stiff suit
   effort.update(dt, P);
-  camera.rotation.set(-p.leanF * 0.5 - fa * (fDir > 0 ? 0.7 : -0.6), 0, -p.leanS * 0.35 + fa * 0.15);
+  // How much of all that reaches the eye is a choice (V). Full motion
+  // is what the head does; steady — the default — is what the eye
+  // makes of it, and what most stomachs prefer: the view stays level
+  // through every lean, the stride's bounce and sway are left to the
+  // shadow and the footfalls, and the ground's jolts are smoothed.
+  const full = viewMotion === 'full';
+  if (full) camera.rotation.set(-p.leanF * 0.5 - fa * (fDir > 0 ? 0.7 : -0.6), 0, -p.leanS * 0.35 + fa * 0.15);
+  else camera.rotation.set(-fa * (fDir > 0 ? 0.35 : -0.3), 0, 0);
   // Looking down past what the neck manages inside the helmet means
   // bending at the hips, and looking up, leaning back: the eye swings
   // about the hips, 0.67 m below it, as stiffly as the suit allows.
@@ -11085,12 +11105,20 @@ function stepEVA(dt) {
   const bendT = pit < -NECK ? Math.min(1.0, -pit - NECK) : pit > NECK ? -Math.min(0.45, pit - NECK) : 0;
   p.bend += (bendT - p.bend) * (1 - Math.exp(-dt / 0.35));
   const bf = 0.67 * Math.sin(p.bend), bd = 0.67 * (1 - Math.cos(p.bend));
-  yawObj.position.set(p.pos.x + right.x * g8.x + fwd.x * (bf + fOut), p.pos.y + g8.y + p.eyeOff + smooth - bd - fDrop, p.pos.z + right.z * g8.x + fwd.z * (bf + fOut));
+  const gx8 = full ? g8.x : 0, gy8 = full ? g8.y : 0;
+  let eyeY = p.pos.y + gy8 + p.eyeOff + smooth - bd - fDrop;
+  // Legs take up a landing; nothing moves the head in one frame. Full
+  // motion only rounds that off; steady smooths over a stride.
+  if (p.steadyY !== null && Math.abs(eyeY - p.steadyY) < 1) eyeY = p.steadyY + (eyeY - p.steadyY) * (1 - Math.exp(-dt / (full ? 0.04 : 0.12)));
+  p.steadyY = eyeY;
+  yawObj.position.set(p.pos.x + right.x * gx8 + fwd.x * (bf + fOut), eyeY, p.pos.z + right.z * gx8 + fwd.z * (bf + fOut));
   if (fa > 0) {   // lying on uneven ground, the helmet stays on top of it
     const under = terrainHeight(yawObj.position.x, yawObj.position.z) + 0.3;
     if (yawObj.position.y < under) yawObj.position.y = under;
   }
-  body.update(yawObj.position.x, yawObj.position.y, yawObj.position.z, yawObj.rotation.y, g8.swing, g8.amt, p.leanF + fTh * fDir, p.leanS, p.bend);
+  // The body always moves fully; only the view is steadied.
+  body.update(p.pos.x + right.x * g8.x + fwd.x * (bf + fOut), p.pos.y + g8.y + p.eyeOff + smooth - bd - fDrop,
+              p.pos.z + right.z * g8.x + fwd.z * (bf + fOut), yawObj.rotation.y, g8.swing, g8.amt, p.leanF + fTh * fDir, p.leanS, p.bend);
   hudSpeed = hs;
   return gh;
 }
@@ -11731,7 +11759,7 @@ function applyWorldNow(id) {
   player.onGround = true;
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset(); player.lift = 0; player.eyeOff = 0;
   player.leanF = player.leanS = 0; player.pvx = player.pvz = 0;
-  player.fall = null; player.fallAmt = 0;
+  player.fall = null; player.fallAmt = 0; player.steadyY = null; player.smoothOff = 0;
   player.gas = JET.dv;
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
