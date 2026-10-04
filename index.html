@@ -4187,6 +4187,10 @@ const LAKE_SURFACE = `
       vec3 T = exp( -uLakeAbs * ( length( F - P ) + depth * 1.4 ) );
       vec3 body = gl_FragColor.rgb * T + uLakeIn * ( 1.0 - exp( -uLakeAbs * length( F - P ) ) );
       gl_FragColor.rgb = mix( body, sky, Fr );
+    } else if ( vWPos.y < lvl ) {
+      // From under the surface the fog is the liquid along the view;
+      // the floor still only gets what came down through it.
+      gl_FragColor.rgb *= exp( -uLakeAbs * ( lvl - vWPos.y ) * 1.4 );
     }
   }
 `;
@@ -4351,7 +4355,9 @@ const groundHapke = hapkeUniforms();
 const LAKE_U = {
   uLake: { value: new THREE.Vector4(0, 0, 128, 128) },
   uLakeR: { value: new THREE.Vector2(1e9, 160000) },
-  uLakeAbs: { value: new THREE.Vector3(0.25, 0.18, 0.22) },
+  // Per metre: clear, but browned by dissolved organics — a guess; the
+  // radar that saw the floor works at centimetres, not in the visible.
+  uLakeAbs: { value: new THREE.Vector3(0.12, 0.085, 0.11) },
   uLakeIn: { value: new THREE.Vector3() },
   uLakeT: { value: 0 },
   // The mirror image (§10): its texture, and world → its texture coords.
@@ -8797,6 +8803,7 @@ const dust = (() => {
     // out by the caller (the rover's wheels). ground is the surface it
     // left from.
     grain(x, y, z, vx, vy, vz, ground) {
+      if (world.sea !== undefined && y < world.sea) return;
       emit(x, y, z, vx, vy, vz, 2.5 + Math.random() * 1.5, ground);
     },
     // A boot's toe-off: the sole sweeps forward and up out of the soil
@@ -8804,6 +8811,7 @@ const dust = (() => {
     // which in vacuum flies in clean arcs a metre or so long — the
     // spray in front of every Apollo crewman's boots.
     kick(x, y, z, dirX, dirZ, speed) {
+      if (world.sea !== undefined && y < world.sea) return;   // under a sea nothing flies
       const n = Math.min(90, Math.floor(18 + speed * 40));
       for (let i = 0; i < n; i++) {
         const a = Math.atan2(dirZ, dirX) + (Math.random() - 0.5) * 0.8;
@@ -8814,6 +8822,7 @@ const dust = (() => {
       }
     },
     burst(x, y, z, power, dirX = 0, dirZ = 0) {
+      if (world.sea !== undefined && y < world.sea) return;
       const n = Math.min(420, Math.floor(60 + power * 165));
       for (let i = 0; i < n; i++) {
         const a = Math.random() * 6.283, sp = (0.5 + Math.random() * 2.4) * (0.5 + power);
@@ -9100,6 +9109,35 @@ composer.addPass(gradePass);
    the dome, the lander and the lights are on; the ground discards
    what lies under the surface, against the curved level, so a far
    shore that has dropped below the eye's level is still in it. */
+/* Under the surface. With the eye below a sea's level the sky is gone
+   — what is overhead is the surface, seen from beneath — and what is
+   left is the liquid: clear, but browned by what is dissolved in it,
+   so things fade into a murk at a few tens of metres, and the light
+   coming down through it dims with depth. */
+let underSea = false;
+const _uw = new THREE.Vector3();
+function seaView() {
+  camera.getWorldPosition(_uw);
+  const lvl = world.sea === undefined ? -Infinity : world.sea - dropAt(_uw.x, _uw.z);
+  const under = _uw.y < lvl && !!scene.fog;
+  if (under) {
+    const s = world.sky, depth = lvl - _uw.y;
+    const k = 0.11 * Math.exp(-0.12 * depth);
+    scene.fog.color.setRGB(s.horizon[0] * k, s.horizon[1] * k * 0.8, s.horizon[2] * k * 0.5, THREE.LinearSRGBColorSpace);
+    scene.fog.density = 0.045;
+    scene.background.copy(scene.fog.color);
+  }
+  if (under !== underSea) {
+    underSea = under;
+    skyDome.mesh.visible = !under && !!world.sky;
+    if (!under) {
+      if (scene.fog) scene.fog.density = world.fog.density;
+      scene.background.setRGB(0, 0, 0);
+      updateSkyColors();
+    }
+  }
+}
+
 const seaMirror = (() => {
   const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
   const cam = new THREE.PerspectiveCamera();
@@ -11218,6 +11256,7 @@ function startFall(p, dir, gl) {
 }
 
 const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3(), _rvEnd = new THREE.Vector3();
+const LIQ = { lift: 480 * 0.25 / 171, drag: 0.5 * 480 * 1.0 * 0.6 / 171 };
 const _hitN = new THREE.Vector3();
 function stepEVA(dt) {
   const p = player, v = p.vel;
@@ -11225,7 +11264,15 @@ function stepEVA(dt) {
   // and falling off with height as it really does — which matters
   // only on the moonlets, a few per cent at the top of a long drift.
   const R = WORLD.R, yF = p.pos.y - EYE + p.crouch;
-  const gl = p.gravity * (R / (R + yF)) ** 2 * (1 - (world.buoy || 0));
+  let gl = p.gravity * (R / (R + yF)) ** 2 * (1 - (world.buoy || 0));
+  // Wading, and walking on a sea's floor. Liquid methane is about 480
+  // kg/m³; a suited body displaces about a quarter of a cubic metre,
+  // so all the way under, the liquid holds up 70% of your weight —
+  // you sink, but stand on the bottom at a third of Titan's gravity —
+  // and drags at ½ρC_dA/m ≈ 0.84 per metre on what is under.
+  p.subm = world.sea === undefined ? 0 : THREE.MathUtils.clamp((world.sea - yF) / 1.8, 0, 1);
+  gl *= 1 - LIQ.lift * p.subm;
+  const drag = (world.drag || 0) + LIQ.drag * p.subm;
   const mu = world.mu;
 
   fwd.set(0, 0, -1).applyQuaternion(yawObj.quaternion); fwd.y = 0; fwd.normalize();
@@ -11335,9 +11382,9 @@ function stepEVA(dt) {
   // jump as well as a stride. ½ρC_dA/m ≈ 0.095 per metre for a
   // suited walker in supercritical CO₂; zero everywhere else in the
   // set, where the densest air on offer is Mars's 0.02 kg/m³.
-  if (world.drag) {
+  if (drag) {
     const sp = v.length();
-    if (sp > 0.001) v.multiplyScalar(Math.max(0, 1 - world.drag * sp * dt));
+    if (sp > 0.001) v.multiplyScalar(Math.max(0, 1 - drag * sp * dt));
   }
 
   p.pos.addScaledVector(v, dt);
@@ -11503,7 +11550,7 @@ function stepEVA(dt) {
     P += EFFORT.step * gait.rate + SUIT.m * gl * hs * (gait.mode === 'walk' ? EFFORT.walk : EFFORT.lope);
     P += Math.max(0, SUIT.m * gl * v.y) / EFFORT.eff;
   }
-  if (world.drag && p.onGround) P += SUIT.m * world.drag * hs * hs * hs / EFFORT.eff;
+  if (drag && p.onGround) P += SUIT.m * drag * hs * hs * hs / EFFORT.eff;
   if (tookOff > 0) effort.spend(0.5 * SUIT.m * tookOff * tookOff / EFFORT.eff + EFFORT.step * 2);
   if (p.charge > 0) P += 120;    // holding a crouch in a stiff suit
   effort.update(dt, P);
@@ -12499,6 +12546,7 @@ renderer.setAnimationLoop(() => {
   quality.tick();       // first: a resize after rendering blanks the frame
   stepZoom(dt);
   step(dt, elapsed);
+  seaView();
   seaMirror.render();
   composer.render();
   // In the same task as the drawing, while the canvas still holds it.
