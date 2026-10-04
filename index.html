@@ -9838,13 +9838,119 @@ function pushSpeed(e, d, g) {
   return u;
 }
 
+/* ── Gait ───────────────────────────────────────────────────────
+   Physics moves you at the pace your legs and the grip allow; the
+   gait decides how the body rides over the feet on the way, and when
+   the feet come down. It moves the eye, never the physical position:
+   averaged over a stride a bouncing gait pushes on the ground with
+   exactly your weight, so friction, slopes and crests see the same
+   forces either way.
+
+   - Step length follows Alexander's dynamic similarity, a stride of
+     2.3 L Fr^0.3 (Alexander 1976), so it scales with gravity through
+     the Froude number and needs nothing per world. The suit takes
+     about 30% off it: pose estimation of Apollo video (Chiou-Tan et
+     al. 2026) found 0.39 m steps at 0.42 m/s, against 0.55 m for the
+     same Froude number unsuited, with 40% of the time on both feet
+     and the feet 0.36 m apart.
+   - A walk vaults: the hip rides an arc of radius L over the planted
+     foot, and drops between arcs while both feet are down. Sideways,
+     the body swings over each foot as an inverted pendulum, which
+     with the suit's wide stance and the slow fall in low gravity is
+     about 2 cm on the Moon and 1.5 cm unsuited on Earth.
+   - Above Fr ≈ 0.5 the Apollo crews loped: a skip, trailing foot then
+     leading foot, then a flight. Contact lasts about as long in low
+     gravity as on Earth (Newman et al. 1994); the stride grows, so the
+     flight is what gets longer — 0.7 s and 10 cm up at 1.4 m/s on the
+     Moon, two seconds and 20 cm on Charon. The stance is a spring
+     between flights, matched in height and speed at both ends.
+   - Faster than a run the legs cannot keep up and you skid: no steps. */
+const GAIT = {
+  suit: 0.71,        // suited step length over unsuited, at the same Froude number
+  double: 0.4,       // share of a walking step with both feet down (Apollo video)
+  base: 0.36,        // m between the feet (Apollo video: 14–15 in.)
+  contact: 0.45,     // s on the ground per lope: two overlapping foot contacts
+  lope: 0.6, walk: 0.45,   // Froude numbers to change gait at, up and down
+};
+const gait = (() => {
+  let mode = 'walk', ph = 0, side = 1, n = 0;   // phase 0–1 within the step (walk) or cycle (lope)
+  let T = 1, s = 0.5, td = 0, vy = 0, second = false, env = 0;
+  let oy = 0, ox = 0;
+  const strike = (p, k, ahead, hs) => {
+    const ax = hs > 0.01 ? p.vel.x / hs : 0, az = hs > 0.01 ? p.vel.z / hs : 0;
+    prints.place(p.pos.x + ax * ahead, p.pos.z + az * ahead, yawObj.rotation.y);
+    sound.step(k);
+  };
+  // A cycle's shape, fixed at its start so the arcs join up.
+  const plan = (hs, gl, L) => {
+    const fr = hs * hs / (gl * L);
+    if (mode === 'walk' && fr > GAIT.lope) mode = 'lope';
+    else if (mode === 'lope' && fr < GAIT.walk) mode = 'walk';
+    const stride = GAIT.suit * 2.3 * L * Math.pow(Math.max(fr, 1e-4), 0.3);
+    if (mode === 'walk') { s = stride / 2; T = s / hs; }
+    else {
+      s = stride; T = Math.max(s / hs, GAIT.contact);
+      td = T - GAIT.contact;            // the flight
+      vy = gl * td / 2;                 // leaving and meeting the ground
+    }
+  };
+  return {
+    get mode() { return mode; },
+    reset() { ph = 0; env = 0; oy = 0; ox = 0; n = 0; },
+    step(p, hs, gl, dt, running) {
+      const L = SUIT.L;
+      const vRun = Math.sqrt(SUIT.frRun * gl * L);
+      const moving = p.onGround && !p.pushing && p.charge === 0 && hs > 0.08 && hs < 1.6 * vRun;
+      if (!moving) {
+        // Coming to rest: the body settles over both feet.
+        env = Math.max(0, env - dt / 0.25);
+        oy *= env; ox *= env;
+        if (env === 0) ph = 0;
+        return { y: oy, x: ox, swing: n * Math.PI + ph * Math.PI, amt: 0 };
+      }
+      if (env === 0 && ph === 0) plan(hs, gl, L);
+      env = Math.min(1, env + dt / 0.25);
+      ph += dt / T;
+      if (ph >= 1) {
+        ph -= 1; n++; side = -side; second = false;
+        plan(hs, gl, L);
+        if (mode === 'walk') strike(p, running ? 0.4 : 0.32, s * 0.45, hs);
+        else {
+          strike(p, Math.min(1, 0.25 + vy * 0.9), hs * GAIT.contact * 0.2, hs);
+          if (td > 0.25) dust.burst(p.pos.x, p.pos.y - EYE + p.crouch, p.pos.z, Math.min(0.4, 0.08 + vy * 0.5));
+        }
+      }
+      const t = ph * T;
+      if (mode === 'walk') {
+        // Both feet down for the first share of the step, then the vault.
+        const tD = GAIT.double * T, a = s * (1 - GAIT.double) / 2;
+        const top = Math.sqrt(L * L - a * a), m = hs * a / top;
+        if (t < tD) { const u = t / tD; oy = -m * tD * u * (1 - u); }
+        else { const x = -a + hs * (t - tD); oy = Math.sqrt(Math.max(L * L - x * x, 0)) - top; }
+        // Sideways, an inverted pendulum over each foot in turn.
+        const w = Math.sqrt(gl / L), c = Math.cosh(w * T / 2);
+        ox = side * (GAIT.base / 2) * (1 - Math.cosh(w * (t - T / 2)) / c);
+      } else {
+        // The stance, then the flight; vy at both joins.
+        const tc = T - td;
+        if (t < tc) {
+          oy = -(vy * tc / Math.PI) * Math.sin(Math.PI * t / tc);
+          if (!second && t > tc * 0.35) { second = true; strike(p, Math.min(0.8, 0.2 + vy * 0.6), hs * tc * 0.6 + 0.25, hs); }
+        } else { const f = t - tc; oy = vy * f - 0.5 * gl * f * f; }
+        // A skip keeps both feet under you, so the body hardly sways.
+        ox *= 1 - Math.min(1, dt * 4);
+      }
+      oy *= env; ox *= env;
+      return { y: oy, x: ox, swing: n * Math.PI + ph * Math.PI, amt: Math.min(hs / 2, 1) };
+    },
+  };
+})();
+
 const player = {
   pos: new THREE.Vector3(0, 0, 0),
   vel: new THREE.Vector3(),
   onGround: true,
   gravity: G_LIST.moon,
-  bob: 0,
-  stride: 0,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
   gas: JET.dv,                    // m/s of Δv left in the jets
@@ -9917,7 +10023,7 @@ function setMode(next) {
     player.onGround = false;
   }
   if (next === 'EVA') player.onGround = false;
-  player.crouch = 0; player.charge = 0; player.pushing = false;
+  player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
   mode = next;
   el.mode.textContent = mode === 'EVA' ? 'EVA' : mode === 'FLY' ? 'FLIGHT' : 'ROVER LRV';
   updateKeysHelp();
@@ -10604,25 +10710,10 @@ function stepEVA(dt) {
   }
 
   const hs = Math.hypot(v.x, v.z);
-  // A print every stride, and a head bob at the same cadence.
-  let bobY = 0, bobX = 0;
-  const gE = gl / G_EARTH;
-  if (p.onGround && !p.pushing && hs > 0.08) {
-    p.stride += hs * dt;
-    if (p.stride > (running ? 1.5 : 0.95)) {
-      p.stride = 0;
-      prints.place(p.pos.x, p.pos.z, yawObj.rotation.y);
-      sound.step(running ? 0.55 : 0.32);
-      if (running) dust.burst(p.pos.x, gh, p.pos.z, 0.18);
-    }
-    p.bob += hs * dt * (2.2 + 1.2 * gE);
-    const amp = Math.min(hs / Math.max(vT, 0.05), 1) * (0.055 - 0.020 * Math.min(gE, 1));
-    bobY = Math.sin(p.bob * 2) * amp;
-    bobX = Math.cos(p.bob) * amp * 0.6;
-  }
-
-  yawObj.position.set(p.pos.x + bobX, p.pos.y + bobY, p.pos.z);
-  body.update(p.pos.x + bobX, feet + bobY, p.pos.z, yawObj.rotation.y, p.bob, Math.min(hs / 2, 1));
+  // The gait: where the eye rides over the feet, and when they strike.
+  const g8 = gait.step(p, hs, gl, dt, running);
+  yawObj.position.set(p.pos.x + right.x * g8.x, p.pos.y + g8.y, p.pos.z + right.z * g8.x);
+  body.update(p.pos.x + right.x * g8.x, feet + g8.y, p.pos.z + right.z * g8.x, yawObj.rotation.y, g8.swing, g8.amt);
   hudSpeed = hs;
   return gh;
 }
@@ -11241,7 +11332,7 @@ function applyWorldNow(id) {
   player.pos.set(0, SITE_H + EYE, 0);
   player.vel.set(0, 0, 0);
   player.onGround = true;
-  player.crouch = 0; player.charge = 0; player.pushing = false;
+  player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset();
   player.gas = JET.dv;
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
