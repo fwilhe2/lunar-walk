@@ -11633,6 +11633,15 @@ function stepROVER(dt) {
     if (Math.abs(s.vel) > 0.3) sound.step(Math.min(1.2, Math.abs(s.vel) * 0.5));
     s.vel *= -0.15;
   }
+  // A sea: an LRV is not a boat, and its electronics were never meant
+  // to be wet, so it stops where the water would reach its hubs.
+  if (world.sea !== undefined) {
+    const nx = s.pos.x - Math.sin(s.yaw) * 1.4 * Math.sign(s.vel), nz = s.pos.z - Math.cos(s.yaw) * 1.4 * Math.sign(s.vel);
+    if (terrainHeight(nx, nz) < world.sea - 0.4 && Math.abs(s.vel) > 0.01) {
+      if (Math.abs(s.vel) > 0.3) sound.step(Math.min(1, Math.abs(s.vel) * 0.4));
+      s.vel *= -0.1;
+    }
+  }
   // And so is a boulder too big to climb, met by the nose or the tail
   // — but only the end that is driving into it: backing off is free.
   const rfx = -Math.sin(s.yaw), rfz = -Math.cos(s.yaw);
