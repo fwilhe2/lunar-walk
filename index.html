@@ -8470,6 +8470,20 @@ const dust = (() => {
     grain(x, y, z, vx, vy, vz, ground) {
       emit(x, y, z, vx, vy, vz, 2.5 + Math.random() * 1.5, ground);
     },
+    // A boot's toe-off: the sole sweeps forward and up out of the soil
+    // at about twice your speed and throws a narrow fan of it ahead,
+    // which in vacuum flies in clean arcs a metre or so long — the
+    // spray in front of every Apollo crewman's boots.
+    kick(x, y, z, dirX, dirZ, speed) {
+      const n = Math.min(90, Math.floor(18 + speed * 40));
+      for (let i = 0; i < n; i++) {
+        const a = Math.atan2(dirZ, dirX) + (Math.random() - 0.5) * 0.8;
+        const el = 0.25 + Math.random() * 0.5, sp = speed * (0.6 + Math.random() * 1.4);
+        emit(x + (Math.random() - 0.5) * 0.12, y + 0.02, z + (Math.random() - 0.5) * 0.12,
+             Math.cos(a) * Math.cos(el) * sp, Math.sin(el) * sp, Math.sin(a) * Math.cos(el) * sp,
+             1.5 + Math.random() * 1.4, y);
+      }
+    },
     burst(x, y, z, power, dirX = 0, dirZ = 0) {
       const n = Math.min(420, Math.floor(60 + power * 165));
       for (let i = 0; i < n; i++) {
@@ -9959,6 +9973,8 @@ const gait = (() => {
     foot.x = p.pos.x + ax * ahead; foot.z = p.pos.z + az * ahead; foot.n++;
     prints.place(foot.x, foot.z, yawObj.rotation.y);
     sound.step(k);
+    // The other boot, leaving the ground behind this one, kicks.
+    if (hs > 0.15) dust.kick(p.pos.x - ax * 0.15, terrainHeight(p.pos.x, p.pos.z), p.pos.z - az * 0.15, ax, az, hs);
   };
   // A cycle's shape, fixed at its start so the arcs join up.
   const plan = (hs, gl, L) => {
