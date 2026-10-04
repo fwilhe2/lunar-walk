@@ -10056,9 +10056,13 @@ const gait = (() => {
    1975: 200–300 kcal/h, 230–350 W, averaged over whole EVAs, and well
    above that hauling up Cone crater's flank); heart rate follows at about 0.2 beat a
    minute per watt, lagging by tens of seconds as it does. */
-const EFFORT = { rest: 140, step: 75, walk: 0.2, lope: 0.35, eff: 0.25 };
+/* Above what can be held for an hour — critical power, about 1 kW of
+   metabolism for a fit astronaut — effort draws on a reserve of some
+   80 kJ that only refills below it (Monod & Scherrer 1965). Empty, you
+   cannot keep up a run until you have got a third of it back. */
+const EFFORT = { rest: 140, step: 75, walk: 0.2, lope: 0.35, eff: 0.25, cp: 1000, reserve: 80000 };
 const effort = {
-  W: EFFORT.rest, Wf: EFFORT.rest, hr: 72, kick: 0,
+  W: EFFORT.rest, Wf: EFFORT.rest, hr: 72, kick: 0, left: EFFORT.reserve, winded: false,
   // Energy spent at once — a push — joins the next second's rate.
   spend(J) { this.kick += J; },
   update(dt, P) {
@@ -10066,7 +10070,11 @@ const effort = {
     this.kick -= kick;
     // A fit astronaut's aerobic ceiling is about 4 L of O₂ a minute,
     // 1.4 kW; past it the rest is borrowed, and shows as heart rate.
-    const inst = Math.min(1400, P + kick / Math.max(dt, 1e-3));
+    const raw = P + kick / Math.max(dt, 1e-3);
+    this.left = Math.min(EFFORT.reserve, Math.max(0, this.left + (EFFORT.cp - raw) * dt));
+    if (this.left === 0) this.winded = true;
+    else if (this.left > EFFORT.reserve / 3) this.winded = false;
+    const inst = Math.min(1400, raw);
     this.Wf += (inst - this.Wf) * (1 - Math.exp(-dt / 2));       // for the breath, which answers fast
     this.W += (inst - this.W) * (1 - Math.exp(-dt / 12));        // what the readout shows
     const hrT = Math.min(185, 72 + 0.2 * (this.W - EFFORT.rest));
@@ -10764,7 +10772,7 @@ function stepEVA(dt) {
   wish.copy(fwd).multiplyScalar(kf).addScaledVector(right, kr);
   if (wish.lengthSq() > 1) wish.normalize();
   if (p.fall) wish.set(0, 0, 0);    // down: the legs are not under you
-  const running = input.run;
+  const running = input.run && !effort.winded;
 
   // The slope under you, as a gradient.
   const e = 0.4;
@@ -11378,7 +11386,7 @@ function step(dt, t) {
   if (hudTimer <= 0) {
     hudTimer = 0.1;
     el.v.textContent = hudSpeed.toFixed(2) + ' m/s';
-    el.met.textContent = Math.round(effort.W / 10) * 10 + ' W · ' + Math.round(effort.hr) + ' bpm';
+    el.met.textContent = Math.round(effort.W / 10) * 10 + ' W · ' + Math.round(effort.hr) + ' bpm' + (effort.winded ? ' · winded' : '');
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
     drawCompass();
