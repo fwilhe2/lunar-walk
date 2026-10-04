@@ -615,6 +615,36 @@ var WORLDS = {
     craterAmp: 0, depthK: 0, rampart: 0, halo: 0,
   },
 
+  /* Callisto: the most heavily cratered surface in the solar system,
+     saturated at the large end — but short of small craters, under
+     about a kilometre, by an order of magnitude and more (Moore et al.
+     1999; Bierhaus et al.). The ice in a crater's wall sublimes in the
+     sun, the dark non-ice part stays behind as a lag that slumps into
+     the lows, and the rims break down into isolated knobs, so what
+     would be a saturated field of small bowls on the Moon is a smooth
+     dark plain with bright knobs on it. Past the transition the
+     craters are complex, and past ~30 km they have a pit where a
+     rocky body's would have a peak (Schenk 1993). The smallest class
+     here is a sixteenth of the lunar density for its size, the next
+     a quarter, then the curve. See hCallisto().
+     Seed: 13 January 1610, the night Galileo first saw all four. */
+  callisto: {
+    id: 'callisto', kind: 11, seed: 16100113,
+    g: 1.235, R: 2410300,
+    lander: [26.8, 8],
+    craters: [
+      { cell: 65536, salt:  7, rMin: 8000, rMax: 30000, count: 1, prob: 0.50, ageK: 1.2 },
+      { cell: 16384, salt: 13, rMin: 2000, rMax:  8000, count: 2, prob: 0.80, ageK: 1.5, rays: 1, knob: 1 },
+      { cell:  4096, salt: 29, rMin:  500, rMax:  2000, count: 2, prob: 0.75, ageK: 2.4, knob: 1 },
+      { cell:  1024, salt: 41, rMin:  120, rMax:   500, count: 1, prob: 0.35, ageK: 3.2, rocks: 1 },
+      { cell:   256, salt: 59, rMin:   25, rMax:   120, count: 1, prob: 0.12, ageK: 2.6, rocks: 1 },
+    ],
+    craterAmp: 1, depthK: 0.85, rampart: 0, halo: 0.6,
+    // Transition a few kilometres across on Ganymede and Callisto, about
+    // half Europa's (Schenk 2002); central pits from ~30 km.
+    Dtr: 3000, pitD: 30000,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -639,7 +669,7 @@ function flagged(key) {
 }
 // Filled here for the opening world too: setWorld() returns early for
 // the world already active, and the kernel starts on the Moon.
-var RAY_LI = flagged('rays'), STREAK_LI = flagged('streak'), HOL_LI = flagged('hol');
+var RAY_LI = flagged('rays'), STREAK_LI = flagged('streak'), HOL_LI = flagged('hol'), KNOB_LI = flagged('knob');
 var CURVE_R = WORLD.R;        // apparent, not physical — see curveDrop()
 
 function setWorld(id) {
@@ -651,6 +681,7 @@ function setWorld(id) {
   RAY_LI = flagged('rays');
   STREAK_LI = flagged('streak');
   HOL_LI = flagged('hol');
+  KNOB_LI = flagged('knob');
   CURVE_R = WORLD.Rc || WORLD.R;
   craterCacheReset();
   hollowCacheReset();
@@ -676,6 +707,7 @@ var CC_BITS = 13, CC_SIZE = 1 << CC_BITS, CC_SHIFT = 32 - CC_BITS;
 var ccX = [], ccZ = [], ccList = [];
 function craterCacheReset() {
   ccX = []; ccZ = []; ccList = [];
+  if (typeof kcL !== 'undefined') kcL.fill(null);
   for (var li = 0; li < CRATER_LAYERS.length; li++) {
     ccX.push(new Int32Array(CC_SIZE));
     ccZ.push(new Int32Array(CC_SIZE));
@@ -746,9 +778,19 @@ function cellCraters(li, cx, cz) {
         hp: depth * 0.36 * sstep(1.15, 2.6, s) * (0.45 + 0.55 * age) * (0.75 + 0.5 * jp),
         pr: 0.22 + 0.06 * jp,                                     // its base, as a fraction of r
         nt: s > 1.7 ? Math.min(4, 1 + Math.floor((s - 1.7) * 1.4)) : 0,
+        // Central pits instead (pitD, Ganymede and Callisto): a pit a
+        // fifth of the crater across, with a low raised rim, taking
+        // over from the peak over a band around pitD (Schenk 1993).
+        pd: 0,
         ta: sstep(1.7, 2.4, s) * (0.25 + 0.75 * age),             // how crisp the terraces still are
         nx: jp * 97.3, nz: j * 53.1,
       };
+    }
+    if (cpx !== null && WORLD.pitD) {
+      var pk = sstep(0.8, 1.2, 2 * r / WORLD.pitD);
+      cpx.pd = depth * 0.4 * pk * (0.5 + 0.5 * age);
+      cpx.hp *= 1 - pk;
+      if (pk > 0) cpx.pr = 0.18 + 0.05 * jp;
     }
     var o = 1 - age;
     out.push({
@@ -823,6 +865,10 @@ function craterField(x, z) {
             if (d < X.pr && X.hp > 0) {
               var qp = 1 - d / X.pr;
               hin += X.hp * Math.pow(qp, 1.4) * (0.45 + 1.1 * valueNoise(u * 9 + X.nx, w * 9 - X.nz));
+            }
+            if (X.pd > 0 && d < X.pr * 1.6) {
+              var qq = d / X.pr;
+              hin += qq < 1 ? X.pd * (0.25 - (1 - qq * qq)) : X.pd * 0.25 * (1 - sstep(1, 1.6, qq));
             }
           }
           var dd = d < 0.5 ? 0.5 : d;
@@ -2184,6 +2230,138 @@ function hTitan(x0, z0) {
   return h;
 }
 
+/* ── Callisto ───────────────────────────────────────────────────
+   On the outer ring zone of Valhalla, the largest multi-ring impact
+   structure in the solar system: a bright central plain 600 km across
+   and around it rings out to nearly 2,000 km from the centre — on the
+   inside ridges, out here graben, troughs a few kilometres wide and a
+   few hundred metres deep between inward-facing fault scarps, running
+   concentric for hundreds of kilometres in broken segments. The
+   centre is 775 km east of the site, so here they run north–south.
+
+   Everything else is what sublimation has done to a saturated
+   cratered plain (Moore et al. 1999, 2004): the small craters are
+   gone, their rims reduced to knobs — steep, isolated hills tens of
+   metres to a hundred high and a few hundred across, frosted bright
+   on top — and the lows are filled with the dark lag, so between the
+   knobs the ground is smoother at the metre scale than the Moon's.
+   Knobs gather on the rims of the degraded craters they came from
+   (classes flagged knob), and thinly everywhere else. */
+var CA_OX = 0, CA_OZ = 0;
+var CA_VX = 775000, CA_VZ = 60000, CA_RL = 28000;
+// Arc length along a ring is measured from the line through the site,
+// where the angle is near zero, so atan2's wrap falls 1,500 km away.
+function caRings(x, z) {
+  var dx = x - CA_VX, dz = z - CA_VZ;
+  var rho = Math.sqrt(dx * dx + dz * dz);
+  var li = Math.floor(rho / CA_RL);
+  if (cellRnd(li, 0, 61, 0) > 0.7) return 0;
+  var s = Math.atan2(dz, -dx) * CA_VX;
+  // A ring is a chain of graben segments tens of kilometres long.
+  var seg = sstep(0.36, 0.5, valueNoise(s * 0.000022 + li * 3.1, li * 0.7));
+  if (seg <= 0) return 0;
+  var w = 1100 + cellRnd(li, 0, 61, 1) * 1900;              // floor half-width
+  var D = (220 + cellRnd(li, 0, 61, 2) * 480) * seg;        // depth
+  var cen = (li + 0.5) * CA_RL + (valueNoise(s * 0.00004, li * 1.9) - 0.5) * 7000;
+  // The widest it reaches, 3 km + 1.2 km of wall + 3.5 km of wander,
+  // stays inside the 14 km half-lane.
+  var t = rho - cen; if (t < 0) t = -t;
+  if (t > w + 1200) return 0;
+  // Fault scarps, steep but degraded, the outer one taller: these are
+  // inward-facing, the ground beyond stepping up.
+  var g = 1 - sstep(w, w + 1200, t);
+  return -D * g * g * (3 - 2 * g) + (rho > cen ? D * 0.12 * g : 0);
+}
+
+var CA_KCELL = 240, CA_KN = 0;
+var KC_BITS = 12, KC_SIZE = 1 << KC_BITS, KC_SHIFT = 32 - KC_BITS;
+var kcX = new Int32Array(KC_SIZE), kcZ = new Int32Array(KC_SIZE), kcL = new Array(KC_SIZE).fill(null);
+// How much of a degraded crater rim is at (x, z): 1 on the crest of an
+// old one, falling off a fifth of a radius either side.
+function knobRim(x, z) {
+  var k = 0;
+  for (var ki = 0; ki < KNOB_LI.length; ki++) {
+    var li = KNOB_LI[ki], L = CRATER_LAYERS[li];
+    var ccx = Math.floor(x / L.cell), ccz = Math.floor(z / L.cell);
+    for (var dz = -1; dz <= 1; dz++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        var list = cellCraters(li, ccx + dx, ccz + dz);
+        for (var i = 0; i < list.length; i++) {
+          var c = list[i], ox = x - c.x, oz = z - c.z, rr = c.r * 1.35;
+          var d2 = ox * ox + oz * oz;
+          if (d2 > rr * rr || c.age > 0.55) continue;
+          var e = (Math.sqrt(d2) / c.r - 1.04) / 0.2;
+          var q = Math.exp(-e * e) * (1 - c.age / 0.55);
+          if (q > k) k = q;
+        }
+      }
+    }
+  }
+  return k;
+}
+// One knob per cell at most, decided at its own centre, so a pure
+// function of the cell; cached direct-mapped like the craters.
+function knobCell(ix, iz) {
+  var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> KC_SHIFT;
+  var hit = kcL[slot];
+  if (hit !== null && kcX[slot] === ix && kcZ[slot] === iz) return hit;
+  var out = false;
+  var px = (ix + 0.2 + cellRnd(ix, iz, 71, 2) * 0.6) * CA_KCELL;
+  var pz = (iz + 0.2 + cellRnd(ix, iz, 71, 3) * 0.6) * CA_KCELL;
+  var p = 0.015 + 0.06 * sstep(0.5, 0.72, fbm(px * 0.00009 + 3.3, pz * 0.00009 - 1.7, 2)) + 0.4 * knobRim(px, pz);
+  if (cellRnd(ix, iz, 71, 0) <= p) {
+    var u = cellRnd(ix, iz, 71, 1);
+    var r = 60 + Math.pow(u, 1.4) * 140;
+    // Steep: up to 40° on the flanks, the height of the bigger ones
+    // reaching a hundred metres (Moore et al. 1999).
+    out = { x: px, z: pz, r: r, H: r * (0.28 + 0.27 * cellRnd(ix, iz, 71, 4)) };
+  }
+  kcX[slot] = ix; kcZ[slot] = iz; kcL[slot] = out;
+  return out;
+}
+// CA_KN: how far up a knob the point is (1 at the summit, scaled down
+// for small ones); with apron set, CA_AP: how much of the dark lag
+// that has slumped off it lies around its foot, for the colour pass.
+var CA_AP = 0;
+function callistoKnobs(x, z, apron) {
+  CA_KN = 0; CA_AP = 0;
+  var cx = Math.floor(x / CA_KCELL), cz = Math.floor(z / CA_KCELL);
+  var best = 0, reach = apron ? 1.7 : 1;
+  for (var dz = -1; dz <= 1; dz++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      var c = knobCell(cx + dx, cz + dz);
+      if (c === false) continue;
+      var ox = x - c.x, oz = z - c.z, d2 = ox * ox + oz * oz, rr = c.r * reach;
+      if (d2 > rr * rr) continue;
+      // Ragged, not round: what is left of a rim is a broken hill.
+      var d = Math.sqrt(d2) / c.r * (1 + (valueNoise(x * 0.025 + (cx + dx) * 3.7, z * 0.025 - (cz + dz) * 1.9) - 0.5) * 0.5);
+      if (apron && d > 0.8) { var ap = 1 - sstep(0.9, 1.6, d); if (ap > CA_AP) CA_AP = ap * (c.H > 60 ? 1 : c.H / 60); }
+      if (d >= 1) continue;
+      // A peak, not a dome: a cone with a slightly concave flank, and
+      // crags on it.
+      var q = 1 - d;
+      var hk = c.H * Math.pow(q, 1.25) * (0.85 + 0.3 * valueNoise(x * 0.07 + c.x, z * 0.07));
+      if (hk > best) { best = hk; CA_KN = q * (c.H > 60 ? 1 : c.H / 60); }
+    }
+  }
+  return best;
+}
+
+function hCallisto(x0, z0) {
+  var x = x0 + CA_OX, z = z0 + CA_OZ;
+  var h = (fbm(x * 0.00003, z * 0.00003, 4) - 0.5) * 900;           // regional swells
+  h += (fbm(x * 0.0003 + 5, z * 0.0003 - 3, 3) - 0.5) * 70;         // rolling plain
+  // The lag fills the lows, so below a hundred metres the plain is
+  // smoother than the Moon's.
+  h += (fbm(x * 0.003 - 7, z * 0.003 + 2, 2) - 0.5) * 5;
+  h += (fbm(x * 0.03, z * 0.03, 2) - 0.5) * 0.7;
+  h += (fbm(x * 0.15 + 2, z * 0.15, 2) - 0.5) * 0.12;
+  h += caRings(x, z);
+  // Knobs came from the craters, so they stay with them, unshifted.
+  h += callistoKnobs(x0, z0);
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2192,7 +2370,8 @@ function terrainHeight(x, z) {
        : WK === 3 ? hVenus(x, z) : WK === 4 ? hEuropa(x, z)
        : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z)
        : WK === 7 ? hMercury(x, z) : WK === 8 ? hIo(x, z)
-       : WK === 9 ? hEnceladus(x, z) : WK === 10 ? hTitan(x, z) : hSmall(x, z);
+       : WK === 9 ? hEnceladus(x, z) : WK === 10 ? hTitan(x, z)
+       : WK === 11 ? hCallisto(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -2239,6 +2418,10 @@ function curveDrop(dx, dz) {
    0.28 for the ferric dust that coats everything else on Mars,
    and 0.10 for Venusian basalt, which is about as dark as the
    Moon and looks nothing like it.                               */
+// How far the ground at the vertex being tinted faces north (−z): the
+// normal's −z component, set by the worker before each surfaceTint().
+// Frost on Callisto lies on poleward slopes.
+var TN_Z = 0;
 function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
   var v;
   if (WK === 0) {
@@ -2465,6 +2648,26 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
       out[1] += (ew * 0.97 - out[1]) * ev;
       out[2] += (ew * 0.90 - out[2]) * ev;
     }
+
+  } else if (WK === 11) {
+    // Callisto is dark: a lag of non-ice material, grey-brown and a
+    // little red, at a reflectance of about 0.2 — what is left when the
+    // ice sublimes out of the surface. The ice that sublimes freezes out
+    // again where it is coldest, so there is bright frost, reflectance
+    // 0.6 and more, on the slopes that face the pole, and on the crests
+    // of the knobs (Spencer 1987; Moore et al. 1999) — high, steep, and
+    // shedding the lag as fast as it forms. Fresh craters punch through
+    // to clean ice: bright halos and rays.
+    callistoKnobs(x, z, true);
+    var n1 = valueNoise(x * 0.0007 + 1.3, z * 0.0007 - 4.4), n2 = valueNoise(x * 0.045, z * 0.045);
+    var cl = fresh * WORLD.halo + rayBrightness(x, z);
+    var fz = sstep(0.06, 0.32, TN_Z + (n2 - 0.5) * 0.12) * (0.55 + 0.45 * n1);
+    var fr = fz + sstep(0.4, 0.75, CA_KN + (n2 - 0.5) * 0.25) * 0.95 + sstep(0.3, 0.6, slope) * 0.3 + cl;
+    fr = fr > 1 ? 1 : fr;
+    v = (0.62 + (n1 - 0.5) * 0.16) * (0.93 + n2 * 0.14) * (1 - CA_AP * 0.22);
+    out[0] = v * 1.06; out[1] = v; out[2] = v * 0.90;
+    var fv = 2.1 + (n2 - 0.5) * 0.3;
+    out[0] += (fv - out[0]) * fr; out[1] += (fv - out[1]) * fr; out[2] += (fv * 1.02 - out[2]) * fr;
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -2835,6 +3038,57 @@ const VIEW = {
     // trailing one takes, so here it is if anything an overestimate.
     dose: 5.4,
   },
+  /* Callisto is at Jupiter's distance from the sun, so the light is
+     Europa's and in Europa's units, ten times the Moon's. It falls on
+     ground a third as reflective as Europa's ice — a dark lag, about
+     0.2, frosted bright on knobs and poleward slopes — so the shadows
+     fill less, and the eye opens wider.
+
+     This is where a crewed mission to Jupiter would land: Callisto
+     orbits outside the radiation belts that make Io and Europa lethal,
+     and its surface dose is about what the Moon's is, from cosmic rays
+     (NASA's HOPE study, Troutman et al. 2003). Jupiter is 4.4° across,
+     eight full Moons, 14° over the eastern horizon from the site
+     (15°N, 75°W, on Valhalla's outer rings), and never moves. Io,
+     Europa and Ganymede all orbit inside Callisto, so all three cross
+     Jupiter's face from here, and go behind it. */
+  callisto: {
+    name: 'CALLISTO', site: 'Valhalla', gTxt: '1.24 m/s²',
+    title: 'Callisto Walk', sub: 'Valhalla · 0.126 g · surface unbounded',
+    fine: 'The oldest surface in the solar system: craters on craters, worn down by the sun<br>' +
+          'until only knobs of frost are left of their rims. Jupiter hangs 4° wide over<br>' +
+          'Valhalla\'s rings to the east, its moons crossing it. <b>Esc</b> picks another world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 1.26, sunSize: 10.7, sunHDR: [60, 57, 52],
+    corona: 2000, coronaColor: [0.68, 0.66, 0.62],
+    // Bounce off ground twice the Moon's reflectance, in these units.
+    hemi: [0x181716, 0x4a4642, 1.6], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 150, mapTint: [1.03, 1.0, 0.95], pits: 30, grain: 0.7, clods: 0.6, pebbles: 60,
+    // Callisto's photometry (Domingue & Verbiscer 1997): dark,
+    // backscattering grains, a broad surge, and rougher than any other
+    // Galilean surface — the lag between the frost is a rubble.
+    hapke: { w: 0.42, b: 0.30, c: 0.60, B0: 1.0, h: 0.05, theta: 30, Bc0: 0.35, hc: 0.006 },
+    micro: [0.6, 0.4, 0.55], sparkle: 1.2,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.55,
+    dustColor: 0x5e5650, dustDrag: 0, stampColor: 0x4a4440, soil: 0x5a524c,
+    // Few blocks survive: the same sublimation that turns rims to knobs
+    // crumbles the ice-cemented blocks around young craters.
+    rockTint: [1.05, 1.0, 0.94], rockAlb: [0.22, 0.12], rockN: 0.5,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
+    // Stars dimmer than Europa's: the gain was never physical, and with
+    // the eye open this much wider for the dark ground they would show
+    // by day, which on an airless world they only do out at Pluto.
+    exposure: 1.0, eye: [0.24, 0.05, 15], starGain: 0.004, bloom: [0.5, 0.65, 3.0],
+    companions: ['jupiter-cal', 'io-cal', 'europa-cal', 'ganymede-cal'],
+    // Night: Jupiter, 4.35° across at albedo 0.52 — 0.075% of the sun.
+    night: { ratio: 7.5e-4, radius: 0.0380, color: 0xfff0dc, label: 'JUPITERLIT', stars: 40 },
+    relay: 0.14,
+    look: [-1.64, 0.12],
+  },
+
   /* Pluto is 33 AU out: 1.26 W/m², a thousandth of the Moon's
      sunlight, from a sun 58 arcseconds across — a point, not a disc,
      though still some two hundred and fifty full moons bright. Noon
@@ -3165,7 +3419,7 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'enceladus', 'titan', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'callisto', 'enceladus', 'titan', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
@@ -3271,6 +3525,7 @@ onmessage = function (e) {
       // Albedo comes from the kernel, so it changes with the body.
       var slope = Math.hypot(hR - hL, hU - hD) * inv2s * 0.7;
       if (slope > 1) slope = 1;
+      TN_Z = -nz2 * nl;
       surfaceTint(px, pz, hC, slope, fg[kc], dg[kc], yg[kc], og[kc], _tint);
       col[k * 3] = _tint[0]; col[k * 3 + 1] = _tint[1]; col[k * 3 + 2] = _tint[2];
     }
@@ -7484,6 +7739,15 @@ const ENC = (() => {
   return { J: F(rel.map((v) => v / d)), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: a, ang: Math.asin(60268 / d) };
 })();
 
+/* And from Callisto, 15°N, 75° west of the point beneath Jupiter, on
+   Valhalla's outer rings: Jupiter 1.88 million km off, 4.35° across,
+   14° above the eastern horizon. Io, Europa and Ganymede all circle
+   inside Callisto's orbit, so each transits Jupiter from here. */
+const CAL = (() => {
+  const F = siteFrame(15, -75);
+  return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 1882700 };
+})();
+
 const IOJ = (() => {
   const F = siteFrame(-18, -48);
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 421700 };
@@ -7692,6 +7956,22 @@ const COMPANIONS = {
     tex: 'callisto', r: 1, gain: 1.0, bright: 0.5,
     kepler: { a: 1882700, R: 2410.3, rate: -0.0187, phase: 4.1, frame: IOJ },
   },
+
+  /* Jupiter from Callisto: 4.35° across, eight full Moons, at true
+     size; the same sunlight on the same clouds as from Europa. The other
+     three are all inside Callisto's orbit and cross its face. Their
+     synodic rates about Callisto, compressed as from Europa. */
+  'jupiter-cal': {
+    tex: 'jupiter', r: COMPANION_DIST * Math.sin(Math.asin(71492 / 1882700)), dir: CAL.J, pole: CAL.Z, oblate: 0.9351, spin: 0.012,
+    gain: 1.0, bright: 0.5, limb: 0.85,
+    atmo: [0.50, 0.55, 0.70], atmoK: 0.10, atmoR: 1.006,
+  },
+  'io-cal': { tex: 'io', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 421700, R: 1821.6, rate: 0.0187, phase: 0.8, frame: CAL } },
+  'europa-cal': { tex: 'europa', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 671100, R: 1560.8, rate: 0.0082, phase: 2.9, frame: CAL } },
+  'ganymede-cal': { tex: 'ganymede', r: 1, gain: 1.0, bright: 0.5,
+    kepler: { a: 1070400, R: 2634.1, rate: 0.00296, phase: 4.6, frame: CAL } },
 
   /* Saturn from Enceladus: 29° across at true size, 24° up in the
      north-east, flattened to 0.90 by its spin. Its brightness is the
@@ -10332,7 +10612,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
