@@ -10779,7 +10779,12 @@ function stepEVA(dt) {
   const gx = (terrainHeight(p.pos.x + e, p.pos.z) - terrainHeight(p.pos.x - e, p.pos.z)) / (2 * e);
   const gz = (terrainHeight(p.pos.x, p.pos.z + e) - terrainHeight(p.pos.x, p.pos.z - e)) / (2 * e);
   const s2 = 1 + gx * gx + gz * gz, cosT = 1 / Math.sqrt(s2);
-  const vT = Math.sqrt((running ? SUIT.frRun : SUIT.frWalk) * gl * SUIT.L);
+  // Legs, and suit knees most of all, are built to go forwards: people
+  // choose about two-thirds of their pace stepping sideways and half
+  // going backwards, where they cannot see where the foot goes.
+  const wl = wish.length(), wc = wl > 1e-3 ? (wish.x * fwd.x + wish.z * fwd.z) / wl : 1;
+  const dirK = wc >= 0 ? 0.65 + 0.35 * wc : 0.65 + 0.15 * wc;
+  const vT = Math.sqrt((running ? SUIT.frRun : SUIT.frWalk) * gl * SUIT.L) * dirK;
   let tookOff = 0;
 
   if (p.onGround) {
