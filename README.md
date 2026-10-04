@@ -35,7 +35,7 @@ GitHub Actions builds all three platforms on their native runners for pushes to 
 | `C` | descend (flight) · suit jet down (moonlets) |
 | `R` | board / leave the rover |
 | `F` | flight mode on / off |
-| `1` … `9` `-` `=` `⌫` | Mercury · Venus · Moon · Mars · Phobos · Deimos · Io · Europa · Enceladus · Titan · Pluto · Charon |
+| `1` … `9` `-` `=` `⌫` | Mercury · Venus · Moon · Mars · Phobos · Deimos · Io · Europa · Enceladus · Titan · Pluto · Charon, in order out from the sun; with `Shift`, the worlds after the twelfth |
 | `0` | demo mode on / off |
 | Mouse | look (EVA, flight) · orbit camera (rover) |
 | `[` `]` | sun elevation — below the horizon, where something overhead lights the night |

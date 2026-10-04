@@ -2599,7 +2599,7 @@ const VIEW = {
     title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
     fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
           'The sky is butterscotch, the shadows are filled, and the halo around<br>' +
-          'the sun is blue — forward-scattered by the same dust. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'the sun is blue — forward-scattered by the same dust. <b>Esc</b> picks another world.',
     air: true, stars: 0,
     // Dust reddens the beam on the way down and steals about half of it.
     sunColor: 0xffd9b0, sunPower: 1.85, sunSize: 37, sunHDR: [7.2, 5.4, 3.6],
@@ -2647,7 +2647,7 @@ const VIEW = {
     title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
     fine: 'Gravity is six thousandths of Earth\'s: a full push would be a launch,<br>' +
           'so you push gently and drift, and steer on the jets. Mars fills 42° of<br>' +
-          'the sky and never moves. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'the sky and never moves. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -2678,7 +2678,7 @@ const VIEW = {
     title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
     fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
           'are no grooves. Escape velocity is 5.6 m/s — do not throw anything<br>' +
-          'you want back. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'you want back. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff4e8, sunPower: 1.55, sunSize: 37, sunHDR: [30, 28.5, 26],
     corona: 2000, coronaColor: [1.3, 1.26, 1.18],
@@ -2784,7 +2784,7 @@ const VIEW = {
     title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
     fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
           'Jupiter hangs 12° wide over the chaos to the east, bands on end, and never<br>' +
-          'moves. The dose out here is about 5 Sv a day. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'moves. The dose out here is about 5 Sv a day. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     // Light here is kept in units ten times the Moon's — a sun of
     // 1.26 rather than 0.126 — and the stars and the eye's range are
@@ -2865,7 +2865,7 @@ const VIEW = {
     title: 'Pluto Walk', sub: 'Charon-facing hemisphere · 0.063 g · surface unbounded',
     fine: 'Noon here is dusk: the sun is a point a thousandth as bright, and the<br>' +
           'stars stay out. Charon hangs 3.7° wide in the east and never moves, over<br>' +
-          'mountains capped with methane frost. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'mountains capped with methane frost. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2920,7 +2920,7 @@ const VIEW = {
     title: 'Charon Walk', sub: 'Vulcan Planitia · 0.029 g · surface unbounded',
     fine: 'Water ice at −220 °C under Pluto\'s dusk-dim sun. Pluto hangs 7° wide in<br>' +
           'the east, over a mountain standing in a moat, and never moves. A full<br>' +
-          'push keeps you aloft for twelve seconds. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'push keeps you aloft for twelve seconds. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 1.7, sunHDR: [60, 57, 52],
     corona: 2600, coronaColor: [1.6, 1.55, 1.45],
@@ -2969,7 +2969,7 @@ const VIEW = {
     title: 'Mercury Walk', sub: 'Discovery Rupes · 0.377 g · surface unbounded',
     fine: 'The sun is two and a half times as wide as from the Moon and seven times as bright;<br>' +
           'at noon the ground under it would melt lead. To the east a cliff a kilometre and a<br>' +
-          'half high crosses the horizon: the planet shrank, and broke. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'half high crosses the horizon: the planet shrank, and broke. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 3.4, sunSize: 145, sunHDR: [60, 57, 52],
     corona: 3400, coronaColor: [1.6, 1.55, 1.45],
@@ -3014,7 +3014,7 @@ const VIEW = {
     title: 'Io Walk', sub: 'Kanehekili Fluctus · 0.183 g · surface unbounded',
     fine: 'Sulphur and frozen SO₂ over a crust four hundred volcanoes remake so fast that not<br>' +
           'one impact crater survives. Jupiter fills 19° of the sky; plumes stand over the horizon.<br>' +
-          'The dose is 36 Sv a day: a lethal one in three hours. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'The dose is 36 Sv a day: a lethal one in three hours. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 1.26, sunSize: 10.7, sunHDR: [60, 57, 52],
     corona: 2000, coronaColor: [0.68, 0.66, 0.62],
@@ -3091,7 +3091,7 @@ const VIEW = {
     title: 'Titan Walk', sub: 'Ligeia Mare · 0.138 g · surface unbounded',
     fine: 'One and a half bar of nitrogen at −179 °C, under a haze that lets through a thousandth<br>' +
           'of Earth\'s daylight, all of it orange and none of it from a visible sun. The bay in<br>' +
-          'front of you is liquid methane: walk in. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'front of you is liquid methane: walk in. <b>Esc</b> picks another world.',
     air: true, stars: 0, noSun: true, shadows: false, skyLit: true,
     sunColor: 0xffb46a, sunPower: 0.05, sunSize: 5.9, sunHDR: [1, 1, 1],
     corona: 1, coronaColor: [1, 1, 1],
@@ -3132,7 +3132,7 @@ const VIEW = {
     title: 'Enceladus Walk', sub: 'Baghdad Sulcus · 0.012 g · surface unbounded',
     fine: 'The brightest ground in the solar system: snow fallen back from jets of an ocean<br>' +
           'underneath, which stand along the tiger stripe to the north. Saturn fills 29° of the<br>' +
-          'sky, its rings edge-on. <b>1</b>–<b>9</b>, <b>−</b>, <b>=</b> and <b>⌫</b> change world.',
+          'sky, its rings edge-on. <b>Esc</b> picks another world.',
     air: false, stars: 1,
     sunColor: 0xfff8f2, sunPower: 0.378, sunSize: 5.9, sunHDR: [60, 57, 52],
     corona: 1600, coronaColor: [0.68, 0.66, 0.62],
@@ -3167,6 +3167,7 @@ const VIEW = {
 // demo's tour.
 const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'enceladus', 'titan', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
+// Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
 let world = VIEW.moon;        // active render-side row
 let worldId = 'moon';
@@ -10646,7 +10647,7 @@ function updateKeysHelp() {
     own = [['WASD', 'walk'], ['Shift', 'run'], ['Space', 'crouch, release to push'], ['R', 'rover'], ['F', 'fly']];
   }
   const all = [
-    ['Esc', 'worlds'], ['1 – 9 − = ⌫', 'switch world'], ['[ ]', 'sun elevation'], ['G', 'gravity'],
+    ['Esc', 'worlds'], ['1 – 9 − = ⌫', 'switch world · Shift: more'], ['[ ]', 'sun elevation'], ['G', 'gravity'],
     ['Z', 'zoom · right button'], ['P', 'photo'], ['H', 'hide HUD'], ['V', 'head motion'], ['L', 'copy link'],
     ['Q', 'quality'], ['M', 'sound'], ['0', 'demo'],
   ];
@@ -10708,8 +10709,9 @@ function press(code) {
   }
   if (code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
-  const pick = WORLD_KEYS.indexOf(code);
-  if (pick >= 0) applyWorld(WORLD_IDS[pick]);
+  // The number row reaches the first twelve; with Shift, the rest.
+  const pick = WORLD_KEYS.indexOf(code) + (keys.ShiftLeft || keys.ShiftRight ? WORLD_KEYS.length : 0);
+  if (pick >= 0 && WORLD_KEYS.includes(code) && pick < WORLD_IDS.length) applyWorld(WORLD_IDS[pick]);
   if (code === 'BracketLeft' || code === 'BracketRight') {
     // Below the horizon only where there is something to light the night.
     sunElev = THREE.MathUtils.clamp(sunElev + (code === 'BracketRight' ? 0.035 : -0.035), world.night ? -1.35 : 0.045, 1.35);

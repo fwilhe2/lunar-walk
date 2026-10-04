@@ -1,7 +1,9 @@
 /* Every world from its landing site, and from the flight ceiling.
-     tools/probe/run.sh tools/probe/drivers/worlds.js /tmp/worlds */
+     tools/probe/run.sh tools/probe/drivers/worlds.js /tmp/worlds
+   PROBE_WORLDS=titan,io limits it to those (run.sh passes it on). */
 async function drive(probe) {
-  for (const id of WORLD_IDS) {
+  const only = new URLSearchParams(location.search).get('worlds');
+  for (const id of (only ? only.split(',') : WORLD_IDS)) {
     await probe.at({ world: id });
     const look = world.look || [-0.95, 0];
     await probe.at({ yaw: look[0], pitch: look[1] });

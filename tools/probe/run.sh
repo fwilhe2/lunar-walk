@@ -7,7 +7,8 @@
 # The driver is a file defining `async function drive(probe)`; see lib.js.
 # Only the processes this script starts are ever killed, and probe.html
 # is removed on the way out. PROBE_HASH (e.g. '#w=mars&x=100&z=0') opens
-# the page at a shared view.
+# the page at a shared view. PROBE_WORLDS=io,titan reaches the page as
+# ?worlds=…, which drivers/worlds.js reads to shoot only those.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -47,7 +48,7 @@ sleep 1
 W=${SIZE%x*}; H=${SIZE#*x}
 LIBGL_ALWAYS_SOFTWARE=1 MOZ_HEADLESS=1 MOZ_HEADLESS_WIDTH=$W MOZ_HEADLESS_HEIGHT=$H \
   firefox --profile "$OUT/profile" --no-remote --new-instance \
-  "http://127.0.0.1:$PORT/probe.html${PROBE_HASH:-}" >| "$OUT/firefox.out" 2>&1 &
+  "http://127.0.0.1:$PORT/probe.html${PROBE_WORLDS:+?worlds=$PROBE_WORLDS}${PROBE_HASH:-}" >| "$OUT/firefox.out" 2>&1 &
 FF=$!
 
 T0=$(date +%s)
