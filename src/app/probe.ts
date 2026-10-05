@@ -7,6 +7,7 @@ import { session } from './boot';
 import { updateSkyColors } from './lighting';
 import { applyWorld, preparing } from './worlds';
 import { frameHooks } from './hooks';
+import { devils } from '../effects/devils';
 import { terrainHeight } from '../kernel/terrain';
 import { EYE } from '../player/constants';
 import { keys } from '../player/input';
@@ -65,7 +66,7 @@ const probe = {
 // What a driver's page.evaluate() finds on window.lw.
 const lw = {
   probe, THREE, VIEW, WORLD_IDS, keys, player, camera, scene, yawObj, pitchObj, quality, chunkStreamer, eyePass,
-  terrainHeight, applyWorld, setMode, updateSkyColors,
+  terrainHeight, applyWorld, setMode, updateSkyColors, devils,
   get world() { return world; }, get worldId() { return worldId; }, get mode() { return mode; }, get sunElev() { return sunElev; },
 };
 declare global {

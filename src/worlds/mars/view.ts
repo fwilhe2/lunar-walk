@@ -33,8 +33,10 @@ export const view = {
   // grains, so the opposition surge is weak and the phase curve flat.
   hapke: { w: 0.55, b: 0.25, c: 0.35, B0: 0.6, h: 0.10, theta: 16, Bc0: 0.1, hc: 0.01 },
   micro: [0.25, 0.4], sparkle: 0,
-  // A few dust devils walking across the plain with the wind.
-  devils: 3,
+  // A few dust devils walking across the plain with the wind: five
+  // slots, each with a devil for about half its time, so two or three
+  // are about at once.
+  devils: 5,
   levels: L4, fly: 400, rover: true,
   mu: 0.65,
   // Pressing pushes the bright oxidised dust film aside: the tracks
