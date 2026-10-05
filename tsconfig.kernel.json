@@ -1,0 +1,14 @@
+{
+  // The terrain kernel and the worlds' terrain definitions run in the
+  // mesh worker as well as on the main thread, so they must stay pure:
+  // no DOM, no three, nothing from the engine. This config checks them
+  // without the DOM's types and with three unresolvable; anything that
+  // reaches for either fails here (npm run check runs both configs).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": [],
+    "paths": { "three": ["./tools/no-three.d.ts"] }
+  },
+  "include": ["src/kernel", "src/worlds/*/terrain.ts", "src/worlds/common", "src/worlds/terrains.ts", "src/worlds/types.ts"]
+}
