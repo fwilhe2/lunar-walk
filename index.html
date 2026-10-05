@@ -7226,6 +7226,76 @@ function milkyWay() {
 const milkyWayMesh = milkyWay();
 skyGroup.add(milkyWayMesh);
 
+/* ── Zodiacal light ─────────────────────────────────────────────
+   Sunlight scattered by the interplanetary dust: a cone of light along
+   the ecliptic, brightest toward the sun and falling off as about the
+   2.3rd power of elongation, narrower near the sun than far from it,
+   with the faint gegenschein opposite (Leinert et al. 1998). From
+   Earth's surface the air hides it but for an hour after dusk; on an
+   airless world it stands over the place the sun set as soon as the
+   sun is gone and the eye has opened — the cone the Apollo crews
+   sketched from orbit. At 30° from the sun, on the ecliptic, it is
+   about twice the Milky Way's brightest; its gain is tied to the Milky
+   Way's, whose own is per world (starGain). The dust thins and the
+   sunlight on it weakens outward, so seen from distance r it scales
+   about as r^-2.3: nine times brighter from Mercury, a fiftieth from
+   Jupiter's moons, nothing worth drawing beyond.
+
+   The ecliptic here is the plane the sun moves in, the vertical
+   circle through SUN_AZ. */
+const ZODI_AU = { mercury: 0.387, moon: 1, phobos: 1.524, deimos: 1.524, vesta: 2.36, ceres: 2.77,
+  io: 5.2, europa: 5.2, ganymede: 5.2, callisto: 5.2 };
+const zodiacal = (() => {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uSun: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uGain: { value: 0 } },
+    vertexShader: `
+      varying vec3 vD;
+      void main() {
+        vD = normalize( ( modelMatrix * vec4( position, 0.0 ) ).xyz );
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      }`,
+    fragmentShader: `
+      uniform vec3 uSun, uN; uniform float uGain;
+      varying vec3 vD;
+      void main() {
+        vec3 d = normalize( vD );
+        float e = acos( clamp( dot( d, uSun ), -1.0, 1.0 ) );          // elongation
+        float b = abs( asin( clamp( dot( d, uN ), -1.0, 1.0 ) ) );       // ecliptic latitude
+        float ed = max( e, 0.06 ) * 57.2958;
+        float w = ( 6.0 + 0.22 * ed ) / 57.2958;
+        float I = pow( max( ed, 10.0 ) / 30.0, -2.3 ) * exp( - b / w );
+        // The gegenschein: a soft brightening round the antisolar point.
+        float g = 3.1416 - e;
+        I += 0.08 * exp( - ( g * g + b * b ) / 0.012 );
+        // Inside a few degrees it merges with the corona's glare.
+        I *= smoothstep( 0.03, 0.09, e );
+        gl_FragColor = vec4( vec3( 1.0, 0.95, 0.86 ) * I * uGain, 1.0 );
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(19000, 48, 24), mat);
+  mesh.renderOrder = -3;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return {
+    mesh,
+    // Once a frame, after the sky has followed the camera.
+    update(cam, gain) {
+      mesh.position.copy(cam);
+      mat.uniforms.uSun.value.copy(SUN_DIR);
+      mat.uniforms.uN.value.set(-Math.sin(SUN_AZ), 0, Math.cos(SUN_AZ));
+      const au = ZODI_AU[worldId];
+      mesh.visible = !!au && !world.air;
+      // By day the star gain, which was never physical, would raise the
+      // glow near the sun far past what an eye on sunlit ground sees:
+      // the cone comes out as the sun goes down.
+      mat.uniforms.uGain.value = au ? gain * 0.35 * Math.pow(au, -2.3) * (1 - THREE.MathUtils.smoothstep(sunElev, -0.02, 0.08)) : 0;
+    },
+  };
+})();
+
 const starPoints = (() => {
   const N = 9000;
   const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
@@ -13466,6 +13536,7 @@ function step(dt, t) {
   corona.position.copy(_camWorld).addScaledVector(SUN_DIR, 12500);
   skyGroup.position.copy(_camWorld);
   skyDome.mesh.position.copy(_camWorld);
+  zodiacal.update(_camWorld, (world.starGain || 1) * KEY.stars);
   skyDome.uniforms.uSun.value.copy(SUN_DIR);
 
   // Sun direction in view space, for the glass sparkle and for
