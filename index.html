@@ -1267,6 +1267,42 @@ function hMars(x, z) {
    scours the bright dust off the lee side, and the dark rock
    underneath shows as a tail pointing downwind — the most obvious
    thing about Mars from orbit. Returns how much dust is missing. */
+/* Dust-devil tracks: dark lines tens of metres wide and kilometres
+   long, looping and crossing, where a whirlwind lifted the bright dust
+   off the darker ground underneath — HiRISE sees them by the thousand
+   on Amazonis Planitia, and Spirit watched the devils that made them
+   cross Gusev (Greeley et al. 2006). Colour only. Each 1.6 km cell
+   holds up to two, each a meandering line through a point in the cell,
+   kept within a cell of it so the 3×3 scan finds every one. */
+var DV_CELL = 1600;
+function devilTracks(x, z) {
+  var cx = Math.floor(x / DV_CELL), cz = Math.floor(z / DV_CELL), best = 0;
+  for (var dz = -1; dz <= 1; dz++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      var ix = cx + dx, iz = cz + dz;
+      for (var k = 0; k < 2; k++) {
+        if (cellRnd(ix, iz, 97, k * 8) > 0.55) continue;
+        var px = (ix + cellRnd(ix, iz, 97, k * 8 + 1)) * DV_CELL, pz = (iz + cellRnd(ix, iz, 97, k * 8 + 2)) * DV_CELL;
+        // Most run with the prevailing wind, some across it.
+        var a = WIND_A + (cellRnd(ix, iz, 97, k * 8 + 3) - 0.5) * 1.6;
+        var ca = Math.cos(a), sa = Math.sin(a);
+        var ox = x - px, oz = z - pz;
+        var u = ox * ca + oz * sa, v = oz * ca - ox * sa;
+        var L = 700 + cellRnd(ix, iz, 97, k * 8 + 4) * 900;
+        if (u < -L || u > L) continue;
+        var vc = Math.sin(u * (0.003 + 0.004 * cellRnd(ix, iz, 97, k * 8 + 5)) + k * 2.1) * (60 + 140 * cellRnd(ix, iz, 97, k * 8 + 6));
+        var w = 12 + 40 * cellRnd(ix, iz, 97, k * 8 + 7);
+        var dd = v - vc; if (dd < 0) dd = -dd;
+        if (dd > w) continue;
+        // Fresh tracks are dark; older ones are dusting over.
+        var q = (1 - sstep(w * 0.4, w, dd)) * (1 - sstep(L * 0.7, L, u < 0 ? -u : u)) * (0.35 + 0.65 * cellRnd(ix, iz, 97, k * 8 + 4));
+        if (q > best) best = q;
+      }
+    }
+  }
+  return best;
+}
+
 function windStreak(x, z) {
   var b = 0;
   for (var si = 0; si < STREAK_LI.length; si++) {
@@ -3002,6 +3038,7 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     d -= slope * 0.62;
     d -= duneMask(x, z) * 0.55;
     d -= windStreak(x, z) * 0.5;
+    d -= devilTracks(x, z) * 0.4;
     d += valueNoise(x * 0.0055, z * 0.0055) * 0.34 - 0.17;
     d = d < 0 ? 0 : d > 1 ? 1 : d;
     var n = 0.92 + valueNoise(x * 0.07, z * 0.07) * 0.17;
