@@ -54,11 +54,8 @@ interface PrepJob { id: WorldId; done?: Promise<void> }
 export let preparing: PrepJob | null = null;
 export function applyWorld(id: WorldId) {
   if (session.initialized && id === worldId && !preparing) return Promise.resolve();
-  // Compares the job with an id, so it is never true: a second choice of
-  // the world being prepared starts a new job. Left as it behaves;
-  // `preparing?.id === id` is what it means.
-  // @ts-expect-error -- a job never equals a WorldId
-  if (preparing === id) return preparing.done;
+  // The same world chosen again while it prepares: wait on that job.
+  if (preparing?.id === id && preparing.done) return preparing.done;
   const job: PrepJob = preparing = { id };
   bootShow(VIEW[id].name, 0, 'preparing textures');
   boot.hidden = false;

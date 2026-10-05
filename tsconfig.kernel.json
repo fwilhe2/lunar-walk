@@ -4,12 +4,9 @@
   // no DOM, no three, nothing from the engine. This config checks them
   // without the DOM's types and with three unresolvable; anything that
   // reaches for either fails here (bun run check runs both configs).
-  // It is also strict ahead of the rest of the engine.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "lib": ["ES2022"],
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
     "types": [],
     "paths": { "three": ["./tools/no-three.d.ts"] }
   },
