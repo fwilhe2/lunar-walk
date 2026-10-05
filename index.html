@@ -690,6 +690,29 @@ var WORLDS = {
     Dtr: 8000,
   },
 
+  /* Ceres, the largest body in the asteroid belt: dark carbonaceous
+     regolith, salts and ice, and craters with straight-sided, polygonal
+     rims, guided by fractures in the crust (Otto et al. 2016). Large
+     craters are fewer than a rocky body this old should keep — the
+     ice-rich crust relaxes the biggest away — and the transition to
+     complex is at 7.5–12 km (Hiesinger et al. 2016). Classes flagged old
+     are absent from Occator's young floor. See hCeres(). Seed: New
+     Year's night 1801, when Giuseppe Piazzi found it. */
+  ceres: {
+    id: 'ceres', kind: 14, seed: 18010101,
+    g: 0.284, R: 469700,
+    lander: [13.5, -16.1],
+    craters: [
+      { cell: 20480, salt:  7, rMin: 2500, rMax: 10000, count: 1, prob: 0.45, ageK: 1.4, old: 1, poly: 1 },
+      { cell:  5120, salt: 13, rMin:  600, rMax:  2500, count: 1, prob: 0.60, ageK: 1.8, old: 1, poly: 1 },
+      { cell:  1280, salt: 29, rMin:  150, rMax:   600, count: 1, prob: 0.60, ageK: 2.2, old: 1, rocks: 1 },
+      { cell:   320, salt: 41, rMin:   30, rMax:   150, count: 1, prob: 0.30, ageK: 2.0, rocks: 1 },
+      { cell:    64, salt: 53, rMin:    5, rMax:    30, count: 1, prob: 0.30, ageK: 2.3, rocks: 1 },
+    ],
+    craterAmp: 1, depthK: 0.9, rampart: 0, halo: 0.35,
+    Dtr: 10000,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -800,6 +823,8 @@ function cellCraters(li, cx, cz) {
     // wiped them where it formed: decided at the crater's centre, so
     // still a function of the cell.
     if (L.old && WK === 12) { gaSulcus(px + GA_OX, pz + GA_OZ); if (GA_M > 0.5) continue; }
+    // And from Ceres's Occator, whose floor is twenty million years old.
+    if (L.old && WK === 14) { var ocx = px - OC_X, ocz = pz - OC_Z; if (ocx * ocx + ocz * ocz < OC_R * OC_R * 0.81) continue; }
     // Simple-crater morphometry (Pike 1977): a fresh bowl is 1:5 of
     // its diameter deep — 0.4 r — under a rim standing 0.036 D, and
     // degradation takes both down toward a shallow dimple with no
@@ -889,6 +914,17 @@ function craterField(x, z) {
           if (d2 > reach * reach) continue;
 
           var d = Math.sqrt(d2) / c.r;
+          // Polygonal craters (poly): straight stretches of rim along
+          // the crust's fractures, as on Ceres — the distance measured
+          // half toward a hexagon's, turned per crater.
+          if (L.poly && d > 0.3) {
+            var pa = c.rim * 10, pm = 0;
+            for (var pk = 0; pk < 3; pk++) {
+              var pp = (ox * Math.cos(pa + pk * 1.0472) + oz * Math.sin(pa + pk * 1.0472)) / c.r;
+              if (pp < 0) pp = -pp; if (pp > pm) pm = pp;
+            }
+            d += (pm * 1.07 - d) * 0.6 * sstep(0.3, 0.7, d) * (1 - sstep(1.3, 1.85, d));
+          }
           var hin, X = c.cx;
           if (X === null) {
             hin = c.dh * d * d - c.depth;
@@ -2588,6 +2624,84 @@ function hTriton(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Ceres ──────────────────────────────────────────────────────
+   On the floor of Occator, 92 km across and four deep, the youngest
+   large crater on Ceres — about twenty million years — and the
+   brightest place on it. Its floor is lobate material, impact melt and
+   brine-soaked rubble that flowed and froze, cut by fractures. In the
+   middle is a pit 9 km across and some 800 m deep, and in the pit a
+   dome, Cerealia Tholus, 3 km wide and 400 m high, split by
+   fractures: and over all of it lies Cerealia Facula, sodium carbonate
+   left behind where brine came up from a reservoir below and its
+   water boiled off into vacuum (De Sanctis et al. 2016, 2020;
+   Nathues et al. 2020) — five times as reflective as the rest of
+   Ceres. Out on the eastern floor the Vinalia Faculae are thinner,
+   patchy versions of the same.
+
+   Occator is a single landform at a fixed place (OC_X, OC_Z), not a
+   member of a crater class; the site is on the pit's western lip, 5 km
+   from the centre, looking down into it. OC_FAC is how much facula there is at
+   the last query point, for the colour pass. */
+var OC_X = 4000, OC_Z = -1400, OC_R = 46000, OC_FAC = 0;
+function ceOccator(x, z) {
+  var ox = x - OC_X, oz = z - OC_Z, r = Math.sqrt(ox * ox + oz * oz);
+  OC_FAC = 0;
+  if (r > OC_R * 1.9) return 0;
+  var d = r / OC_R;
+  // Scalloped, a little polygonal, like the craters around it.
+  d *= 1 + (valueNoise(ox * 0.00006 + 3, oz * 0.00006) - 0.5) * 0.06;
+  var h;
+  if (d > 1) {
+    // Rim crest a kilometre up, ejecta thinning as the inverse cube.
+    var dd = d < 1 ? 1 : d;
+    h = 1000 * (1 / (dd * dd * dd) - CUBE_0) * CUBE_K;
+  } else if (d > 0.62) {
+    // Walls in terraces, slumped blocks between them.
+    var t = (d - 0.62) / 0.38, tn = t * 4, ti = Math.floor(tn);
+    t = (ti + sstep(0.4, 1, tn - ti)) / 4 * 0.7 + t * 0.3;
+    h = -2800 + 3800 * Math.pow(t, 1.6) + (valueNoise(ox * 0.0008, oz * 0.0008) - 0.5) * 180 * (1 - Math.abs(t * 2 - 1));
+  } else {
+    // The floor: lobate flows, low and broad, with fronts tens of metres
+    // high, and concentric fractures.
+    h = -2800 + (fbm(ox * 0.00035 + 7, oz * 0.00035 - 2, 3) - 0.5) * 160;
+    var lobe = fbm(ox * 0.0012 - 3, oz * 0.0012 + 5, 2);
+    h += sstep(0.48, 0.53, lobe) * 30;
+    var fr = Math.abs(Math.sin(r * 0.0021 + valueNoise(ox * 0.0002, oz * 0.0002) * 4));
+    h -= (1 - sstep(0.0, 0.05, fr)) * 25 * sstep(0.12, 0.25, d) * sstep(0.45, 0.3, d);
+  }
+  // The central pit and the dome in it.
+  var pr = 4500 * (1 + (valueNoise(ox * 0.0009, oz * 0.0009 + 4) - 0.5) * 0.2);
+  if (r < pr * 1.4) {
+    var q = r / pr;
+    h += 60 * (1 - sstep(1, 1.4, q)) - (q < 1 ? 860 * (1 - smoothT(sstep(0.4, 1, q))) : 0);
+    if (r < 1700) {
+      var qd = r / 1600;
+      var dome = 420 * Math.pow(Math.max(0, 1 - qd * qd), 0.8);
+      // Split by radial and concentric fractures.
+      var ang = Math.atan2(oz, ox) * 7 + valueNoise(ox * 0.004, oz * 0.004) * 3;
+      dome -= (1 - sstep(0, 0.12, Math.abs(Math.sin(ang)))) * 25 * qd;
+      h += dome;
+    }
+    OC_FAC = 1 - sstep(0.75, 1.05, q + (valueNoise(ox * 0.002, oz * 0.002) - 0.5) * 0.35);
+  }
+  // The Vinalia Faculae: thin, patchy, on the eastern floor.
+  if (ox > 5000 && d < 0.55) {
+    var v = sstep(0.62, 0.75, fbm(ox * 0.0005 + 1, oz * 0.0005 - 3, 3)) * sstep(5000, 9000, ox) * 0.45;
+    if (v > OC_FAC) OC_FAC = v;
+  }
+  return h;
+}
+
+function hCeres(x, z) {
+  var h = (fbm(x * 0.00002 + 3, z * 0.00002 - 1, 4) - 0.5) * 2500;
+  h += (fbm(x * 0.0003 - 2, z * 0.0003 + 6, 3) - 0.5) * 60;
+  h += (fbm(x * 0.003 + 4, z * 0.003, 2) - 0.5) * 7;
+  h += (fbm(x * 0.03, z * 0.03 - 2, 2) - 0.5) * 1.1;
+  h += (fbm(x * 0.15 + 1, z * 0.15, 2) - 0.5) * 0.18;
+  h += ceOccator(x, z);
+  return h + craterAt(x, z);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2598,7 +2712,7 @@ function terrainHeight(x, z) {
        : WK === 7 ? hMercury(x, z) : WK === 8 ? hIo(x, z)
        : WK === 9 ? hEnceladus(x, z) : WK === 10 ? hTitan(x, z)
        : WK === 11 ? hCallisto(x, z) : WK === 12 ? hGanymede(x, z)
-       : WK === 13 ? hTriton(x, z) : hSmall(x, z);
+       : WK === 13 ? hTriton(x, z) : WK === 14 ? hCeres(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -2940,6 +3054,23 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     v = vt + (vc - vt) * cap + cl;
     var pk = cap * (1 - stk * 0.5);
     out[0] = v * (0.97 + pk * 0.04); out[1] = v * (0.985 - pk * 0.02); out[2] = v * (1.0 - pk * 0.07);
+
+  } else if (WK === 14) {
+    // Ceres is dark, a reflectance of about 0.09, and nearly grey —
+    // carbonaceous rock, clays and salts. Fresh craters are a little
+    // brighter and bluer. The faculae are sodium carbonate, five times
+    // brighter than the ground, white with a cream cast.
+    ceOccator(x, z);
+    var fac = OC_FAC;
+    var n1 = valueNoise(x * 0.0008 + 1.7, z * 0.0008 - 2.2), n2 = valueNoise(x * 0.05, z * 0.05);
+    var cl = fresh * WORLD.halo;
+    v = (0.62 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.08 + slope * 0.18 + cl) ;
+    out[0] = v * 1.0; out[1] = v * 0.99; out[2] = v * (0.98 + cl * 0.06);
+    if (fac > 0) {
+      var fv = 3.4 + (n2 - 0.5) * 0.6;
+      var fk = fac * (0.75 + 0.25 * n2);
+      out[0] += (fv - out[0]) * fk; out[1] += (fv * 0.99 - out[1]) * fk; out[2] += (fv * 0.95 - out[2]) * fk;
+    }
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -3310,6 +3441,43 @@ const VIEW = {
     // trailing one takes, so here it is if anything an overestimate.
     dose: 5.4,
   },
+  /* Ceres is 2.77 AU out: 177 W/m², an eighth of the Moon's, from a sun
+     0.19° across. Light is kept in Europa's units, ten times the Moon's,
+     so the numbers sit near the Moon's (a sun of 4.5 rather than 3.4).
+     The ground is as dark as lunar mare, so everything else is the
+     Moon's: black sky, black shadows filled only from the ground round
+     them. Nothing hangs overhead; the horizon is a kilometre off at eye
+     height, and Occator's rim stands round it, forty kilometres away,
+     its foot already below the curve. */
+  ceres: {
+    name: 'CERES', site: 'Occator', gTxt: '0.28 m/s²',
+    title: 'Ceres Walk', sub: 'Occator crater · 0.029 g · surface unbounded',
+    fine: 'The floor of Occator, 92 km across. Ahead, in the central pit, the brightest ground<br>' +
+          'on Ceres: salt left where brine from deep below boiled away into vacuum.<br>' +
+          'A full push keeps you aloft twelve seconds. <b>Esc</b> picks another world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 4.46, sunSize: 20.3, sunHDR: [60, 57, 52],
+    corona: 2600, coronaColor: [1.9, 1.85, 1.75],
+    hemi: [0x272624, 0x5f5a55, 1.3], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 96, mapTint: [1.0, 0.995, 0.98], pits: 90, grain: 0.95, pebbles: 150,
+    // Ceres's photometry (Li et al. 2016; Ciarniello et al. 2017): dark,
+    // strongly backscattering grains with a broad surge, lunar roughness.
+    hapke: { w: 0.14, b: 0.37, c: 0.70, B0: 1.6, h: 0.06, theta: 22, Bc0: 0.4, hc: 0.006 },
+    micro: [1, 0.45], sparkle: 0.6,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.6,
+    dustColor: 0x5f5d5a, dustDrag: 0, stampColor: 0x4c4a47, soil: 0x585653,
+    rockTint: [1.0, 1.0, 0.99], rockAlb: [0.11, 0.07], rockN: 0.8,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
+    exposure: 1.0, eye: [0.16, 0.05, 15], starGain: 0.012, bloom: [0.55, 0.65, 3.0],
+    companions: [],
+    // Earth is never more than 21° from the sun from here.
+    relay: 0.3,
+    look: [-1.23, -0.2],
+  },
+
   /* Ganymede has Europa's sun in Europa's units, on ground between
      Callisto's and Europa's: dark terrain about 0.3, bright grooved
      terrain about 0.5. Jupiter is 7.6° across, fifteen full Moons, 34°
@@ -3788,7 +3956,7 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'ganymede', 'callisto', 'enceladus', 'titan', 'triton', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'ceres', 'io', 'europa', 'ganymede', 'callisto', 'enceladus', 'titan', 'triton', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
@@ -5274,9 +5442,14 @@ const chunkStreamer = (() => {
         geo.setAttribute('color', new THREE.BufferAttribute(d.col, 3));
         geo.setAttribute('uv', new THREE.BufferAttribute(d.uv, 2));
         geo.setIndex(gridIndex(d.W));
+        // Bounds round the heights actually there: a crater floor
+        // kilometres down (Occator's is −3.2 km) is outside any sphere
+        // centred at zero, and would be culled.
         const half = (s.n * s.step) / 2;
+        let yLo = Infinity, yHi = -Infinity;
+        for (let i = 1; i < d.pos.length; i += 3) { const y = d.pos[i]; if (y < yLo) yLo = y; if (y > yHi) yHi = y; }
         geo.boundingSphere = new THREE.Sphere(
-          new THREE.Vector3(s.x0 + half, 0, s.z0 + half), half * 1.5 + 500);
+          new THREE.Vector3(s.x0 + half, (yLo + yHi) / 2, s.z0 + half), Math.hypot(half * 1.42, (yHi - yLo) / 2) + 50);
         const mesh = new THREE.Mesh(geo, groundMat);
         mesh.userData.level = s.level;   // for debugging views; nothing reads it
         mesh.layers.enable(1);            // seen in the sea's mirror (§10)
@@ -11217,7 +11390,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { ceres: 0.284, triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
@@ -13169,6 +13342,7 @@ const picker = (() => {
     mercury: { r: 2440, c: '#a39d95' }, venus: { r: 6052, c: '#dcc596' },
     earth: { n: 'Earth', r: 6371, c: '#7d9cc4' }, moon: { r: 1737, c: '#bdb9b2' },
     mars: { r: 3390, c: '#c4744c' }, phobos: { r: 11.3, c: '#86796e' }, deimos: { r: 6.2, c: '#a3937f' },
+    vesta: { n: 'Vesta', r: 263, c: '#a59d92' }, ceres: { r: 470, c: '#7d7a76' },
     jupiter: { n: 'Jupiter', r: 69911, c: '#cfae8c', gas: true },
     io: { r: 1822, c: '#dcc65e' }, europa: { r: 1561, c: '#d2c8b5' },
     ganymede: { n: 'Ganymede', r: 2634, c: '#9e958a' }, callisto: { n: 'Callisto', r: 2410, c: '#756b62' },
@@ -13186,7 +13360,7 @@ const picker = (() => {
   };
   // In order out from the sun; moons in order out from their planet.
   const SYS = [
-    ['mercury'], ['venus'], ['earth', 'moon'], ['mars', 'phobos', 'deimos'],
+    ['mercury'], ['venus'], ['earth', 'moon'], ['mars', 'phobos', 'deimos'], ['vesta'], ['ceres'],
     ['jupiter', 'io', 'europa', 'ganymede', 'callisto'],
     ['saturn', 'mimas', 'enceladus', 'tethys', 'dione', 'rhea', 'titan', 'iapetus'],
     ['uranus', 'miranda', 'ariel', 'umbriel', 'titania', 'oberon'], ['neptune', 'triton'], ['pluto', 'charon'],
@@ -13239,7 +13413,7 @@ const picker = (() => {
     it.push({ key: 'ecl', cls: 'ecl', style: { top: px(y) } });
     // Level one: one scale for the sun and every planet.
     const s1 = Math.min(hb * 0.3, W * 0.042) / B.jupiter.r;
-    const P1 = pack(SYS.map((s) => Math.max(Math.min(64, W * 0.09), 2 * halfW(s.id, B[s.id].r * s1) + 12)), W * 0.07, W * 0.99);
+    const P1 = pack(SYS.map((s) => Math.max(Math.min(64, W * 0.065), 2 * halfW(s.id, B[s.id].r * s1) + 12)), W * 0.07, W * 0.99);
     const sol = {};
     SYS.forEach((s, i) => (sol[s.id] = { ...P1[i], r: Math.max(MINR, B[s.id].r * s1) }));
     const sunR = B.sun.r * s1, sunC = W * 0.03 - sunR;

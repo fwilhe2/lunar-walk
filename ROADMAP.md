@@ -289,8 +289,8 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 ### 13a. Plumbing for more than twelve worlds
 - [x] Keys: `1`–`9`, `-`, `=`, `⌫` stay the first twelve in solar order; `Shift` + the same keys reach the rest. Update key help, README controls, opening-screen text (`fine:` lines say "change world" generically, not a key list that goes stale).
-- [ ] Picker: add an asteroid-belt "system" between Mars and Jupiter (Vesta, Ceres) so the belt bodies have a slot; check the strip still packs at 960 px and at phone width.
-- [ ] `G_LIST`, `WORLD_IDS`, `WORLD_KEYS`, the demo's tour and shared-link parsing pick a new world up from its rows alone — check nothing else hard-codes twelve.
+- [x] Picker: add an asteroid-belt "system" between Mars and Jupiter (Vesta, Ceres) so the belt bodies have a slot; check the strip still packs at 960 px and at phone width.
+- [x] `G_LIST`, `WORLD_IDS`, `WORLD_KEYS`, the demo's tour and shared-link parsing pick a new world up from its rows alone — check nothing else hard-codes twelve.
 - [x] `tools/probe/drivers/worlds.js` takes an optional list of ids (`PROBE_WORLDS=…`, passed as `?worlds=`) so one world can be shot without the full 25-minute sweep.
 
 ### 13b. Callisto — the place a crewed Jovian mission would actually land
@@ -321,9 +321,11 @@ Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's ord
 **As built:** kind 13. Site at the cap's northern edge on the cantaloupe terrain (Bubembe Regio, 15°S 60°W) rather than deep on the cap, so both terrains are in reach; two geysers on the cap 58 and 96 km out. Geysers are a new sky object: camera-facing ribbons in true metres, curved and proxied in the vertex shader, absorbing and forward-scattering. Neptune in Irwin et al.'s 2024 true colour. 1.1 µs per query.
 
 ### 13e. Ceres — Occator's bright faculae
-- [ ] Kernel row (kind 14): R 470 km, g 0.28 m/s². Dark (albedo 0.09) carbonaceous regolith; craters with **polygonal outlines** and few large basins (relaxed); Dtr ≈ 7–12 km (Hiesinger et al. 2016).
-- [ ] Site: the floor of an Occator-like 92 km crater, near **Cerealia Facula** — the brightest material on Ceres (sodium carbonate, albedo ~0.5+, De Sanctis et al. 2016), on a fractured central dome (Cerealia Tholus, ~0.7 km high) inside a central pit; floor fractures; lobate flows.
-- [ ] Sky: black, sun 0.19° at 177 W/m²; no companion. Horizon only ~1 km off at eye height.
+- [x] Kernel row (kind 14): R 470 km, g 0.28 m/s². Dark (albedo 0.09) carbonaceous regolith; craters with **polygonal outlines** and few large basins (relaxed); Dtr ≈ 7–12 km (Hiesinger et al. 2016).
+- [x] Site: the floor of an Occator-like 92 km crater, near **Cerealia Facula** — the brightest material on Ceres (sodium carbonate, albedo ~0.5+, De Sanctis et al. 2016), on a fractured central dome (Cerealia Tholus, ~0.7 km high) inside a central pit; floor fractures; lobate flows.
+- [x] Sky: black, sun 0.19° at 177 W/m²; no companion. Horizon only ~1 km off at eye height.
+
+**As built:** kind 14. Occator as a fixed landform with its pit, dome and faculae; polygonal crater rims (`poly`, a new crater option). Found on the way: chunk bounding spheres were centred at y = 0 with ~700 m radius, so ground kilometres below zero (Occator's floor) was frustum-culled; they are now fitted to each chunk's heights. Picker gets Vesta and Ceres as systems of their own between Mars and Jupiter. 1.75 µs per query.
 
 ### 13f. Iapetus — the two-faced moon and its ridge
 - [ ] Kernel row (kind 15): R 734.5 km, g 0.223 m/s². **Equatorial ridge** up to 13–20 km high and ~20 km wide (Porco et al. 2005), with the site on its flank so the ridge fills the horizon; huge landslides off crater walls (Singer et al. 2012, long runout); heavily cratered, saturated at large sizes.
