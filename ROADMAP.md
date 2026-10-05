@@ -350,8 +350,12 @@ Each item gets a probe shot before and after.
 - [x] **Zodiacal light** on the airless bodies: a cone along the ecliptic above the point where the sun set, visible once the sun is a few degrees below the horizon and the eye has opened — the glow Apollo crews sketched from orbit. Brightness scaled by 1/r² of the body's distance from the sun (invisible past Jupiter against the Milky Way, so only Mercury, Moon, Phobos, Deimos and the belt).
 - [~] **Titan**: rocks and cobbles reflected in the sea (layer 1 on rock meshes — done; no probe view yet happened to have stones at the waterline to show it); capillary ripples tied to a light wind; optional methane drizzle (Tokano et al. 2006, mm drops falling slowly at ~1.6 m/s) as a sparse screen-space streak layer, off by default if it moves in the view.
 - [x] **Mars**: dust-devil tracks — dark sinuous streaks where devils lifted the bright dust (Spirit, HiRISE), colour-only in the kernel's colour pass; a distant dust devil or two on the horizon (Spirit's Gusev movies), as a sky-object column. *(Done: tracks, colour-only, `devilTracks`; devils, `devils` in §7.)*
-- [ ] Venus: the cracked-plate texture reads as a repeating pattern near the eye — check scale against Venera 13/14 slab sizes (decimetre-scale plates) and break up the tiling.
-- [ ] Go through each world's site and flight shots for anything wrong (floating objects, seams, banding, colour errors) and fix what's found.
+- [x] Venus: the plates are ~43 cm, the Venera slab scale, and the hex-tiled blend hides the repeat; what was wrong was the vesicles, drawn with crater rims — now rimless holes.
+- [x] Go through each world's site and flight shots for anything wrong (floating objects, seams, banding, colour errors) and fix what's found.
+  - Found and fixed: chunk bounding spheres centred at y = 0 culled ground far below zero (13e).
+  - Earth from the Moon and Phobos from Mars were drawn 2.5× true size; now true size, the long lens does the rest.
+  - Phobos's boulders read flat only at zero phase, which is right.
+  - **Open:** a row of small sawtooth shadows at the foot of Io's mountain, 25 km out — not geometry (a per-level colour view shows no gap), most likely the 16 km horizon clipmap's 32 m texels aliasing on a steep face. Not fixed.
 
 ### 13j. Docs
-- [ ] README: world count, table rows, controls, a paragraph per new body; `CLAUDE.md`: a paragraph per new kernel kind, and correct the stale "~5,600 lines".
+- [x] README: world count, table rows, controls, a paragraph per new body; `CLAUDE.md`: a paragraph per new kernel kind, and correct the stale "~5,600 lines".
