@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { fbm, hash2, ridged } from '../kernel/noise';
+import { hdrSqueeze, hdrSqueezeBuiltin } from '../render/hdr';
 import { SUN_AZ, SUN_DIR, sunElev } from '../render/lights';
 import { scene } from '../render/renderer';
 import { TypedShaderMaterial } from '../util/three';
@@ -75,7 +76,8 @@ function milkyWay() {
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
   });
   mat.opacity = 0.34;
-  const mesh = new THREE.Mesh(geo, mat);
+  // Added to the squeezed frame (render/hdr.ts), so squeezed itself.
+  const mesh = new THREE.Mesh(geo, hdrSqueezeBuiltin(mat));
   mesh.renderOrder = -3;
   return mesh;
 }
@@ -100,7 +102,7 @@ skyGroup.add(milkyWayMesh);
    The ecliptic here is the plane the sun moves in, the vertical
    circle through SUN_AZ. */
 export const zodiacal = (() => {
-  const mat = new TypedShaderMaterial({
+  const mat = hdrSqueeze(new TypedShaderMaterial({
     uniforms: { uSun: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uGain: { value: 0 } },
     vertexShader: `
       varying vec3 vD;
@@ -128,7 +130,7 @@ export const zodiacal = (() => {
         #include <colorspace_fragment>
       }`,
     side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-  });
+  }));   // squeezed, as the frame it is added to is (render/hdr.ts)
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(19000, 48, 24), mat);
   mesh.renderOrder = -3;
   mesh.frustumCulled = false;
@@ -174,7 +176,7 @@ export const starPoints = (() => {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
-  const starMat = new TypedShaderMaterial({
+  const starMat = hdrSqueeze(new TypedShaderMaterial({
     uniforms: { uGain: { value: 1 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `
@@ -194,7 +196,7 @@ export const starPoints = (() => {
         gl_FragColor = vec4( vC * uGain, a );
       }`,
     vertexColors: true,
-  });
+  }));   // squeezed, as the frame it is added to is (render/hdr.ts)
   const stars = new THREE.Points(g, starMat);
   stars.renderOrder = -2;
   skyGroup.add(stars);

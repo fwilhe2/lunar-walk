@@ -41,24 +41,47 @@ export const HDR_GLSL = {
   fragmentHead: 'flat varying float vHdrK;\n',
   compress: `
     gl_FragColor.rgb /= 1.0 + vHdrK * max( max( max( gl_FragColor.r, gl_FragColor.g ), gl_FragColor.b ), 0.0 );`,
-  // For a pass that reads the resolved frame. Saturates at 50 times
-  // 1/K, far past the 6 the exposure is clamped at.
+  // Premultiplied: the colour under the alpha is what is squeezed.
+  compressPremult: `
+    gl_FragColor.rgb /= 1.0 + vHdrK * max( max( max( gl_FragColor.r, gl_FragColor.g ), gl_FragColor.b ), 0.0 ) / max( gl_FragColor.a, 1e-4 );`,
+  // For a pass that reads the resolved frame. Saturates at a thousand
+  // times 1/K, where half floats still hold it to a few per cent;
+  // unsqueezed things (the sun's disc) come out at least that bright.
   decode: `
     uniform sampler2D tHdrK;
     uniform float uHdrOn;
     float hdrK() { return ${K}; }
     vec3 hdrDecode( vec3 y, float k ) {
-      return y / ( 1.0 - min( k * max( max( y.r, y.g ), y.b ), 0.98 ) );
+      return y / ( 1.0 - min( k * max( max( y.r, y.g ), y.b ), 0.999 ) );
     }`,
 };
 
-// Squeeze an opaque ShaderMaterial: K at the end of its vertex stage,
-// the squeeze at the end of its fragment stage.
-export function hdrSqueeze(mat: THREE.ShaderMaterial) {
-  Object.assign(mat.uniforms, HDR_U);
+/* Squeeze a ShaderMaterial: K at the end of its vertex stage, the
+   squeeze at the end of its fragment stage. Something drawn over
+   squeezed ground must be squeezed itself, or the frame's undoing
+   blows it up; blended in squeezed space, one layer over another is
+   close, and never brighter than its brightest part. `premultiplied`
+   for output whose colour is already multiplied by its alpha; additive
+   output (alpha 1, or weighted by alpha in the blend) is squeezed as
+   it stands. */
+interface Program { vertexShader: string; fragmentShader: string; uniforms: { [name: string]: THREE.IUniform } }
+function squeeze(p: Program, premultiplied: boolean) {
+  Object.assign(p.uniforms, HDR_U);
   const end = /\}\s*$/;
-  if (!end.test(mat.vertexShader) || !end.test(mat.fragmentShader)) throw new Error('hdrSqueeze: no main() at the end');
-  mat.vertexShader = HDR_GLSL.vertexHead + mat.vertexShader.replace(end, HDR_GLSL.vertex + '\n}');
-  mat.fragmentShader = HDR_GLSL.fragmentHead + mat.fragmentShader.replace(end, HDR_GLSL.compress + '\n}');
+  if (!end.test(p.vertexShader) || !end.test(p.fragmentShader)) throw new Error('hdrSqueeze: no main() at the end');
+  p.vertexShader = HDR_GLSL.vertexHead + p.vertexShader.replace(end, HDR_GLSL.vertex + '\n}');
+  p.fragmentShader = HDR_GLSL.fragmentHead + p.fragmentShader.replace(end, (premultiplied ? HDR_GLSL.compressPremult : HDR_GLSL.compress) + '\n}');
+}
+export function hdrSqueeze<M extends THREE.ShaderMaterial>(mat: M, premultiplied = false): M {
+  squeeze(mat, premultiplied);
+  return mat;
+}
+// The same for one of three's own materials, at compile time, after
+// whatever its onBeforeCompile already does. Set that first.
+export function hdrSqueezeBuiltin<M extends THREE.Material>(mat: M, premultiplied = false): M {
+  const base = mat.onBeforeCompile, key = mat.customProgramCacheKey() + '-hdr' + (premultiplied ? 'p' : '');
+  mat.onBeforeCompile = (shader, r) => { base.call(mat, shader, r); squeeze(shader, premultiplied); };
+  // Otherwise the key is the wrapper's source, the same for every material wrapped.
+  mat.customProgramCacheKey = () => key;
   return mat;
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { terrainHeight } from '../kernel/terrain';
 import { WORLD } from '../kernel/world';
+import { hdrSqueeze } from '../render/hdr';
 import { SUN_DIR, sunElev } from '../render/lights';
 import { scene } from '../render/renderer';
 import { curveAX, curveAZ, dropAt } from '../terrain/anchor';
@@ -25,7 +26,7 @@ import { TypedShaderMaterial } from '../util/three';
 export const curtains = (() => {
   let mesh: THREE.Mesh<THREE.BufferGeometry, typeof mat> | null = null, ax = NaN, az = NaN;
   const H = 90000, LEN = 50000, STEP = 1250;
-  const mat = new TypedShaderMaterial({
+  const mat = hdrSqueeze(new TypedShaderMaterial({
     uniforms: { uSun: { value: new THREE.Vector3() }, uGain: { value: 1 }, uShadowZ: { value: -1 } },
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide,
     vertexShader: `
@@ -74,7 +75,7 @@ export const curtains = (() => {
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
-  });
+  }));   // squeezed, as what it is added to is (render/hdr.ts)
   // The ribbon's foot and top along the stripe; y is refreshed when the
   // curvature anchor moves.
   let foot: [number, number, number][] = [];   // x, z, height
