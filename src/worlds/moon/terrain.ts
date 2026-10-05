@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, ridged, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -102,7 +103,7 @@ function tintMoon(x, z, h, slope, fresh, dark, yel, hol, out) {
   out[0] = v * 1.005; out[1] = v; out[2] = v * 0.975;
 }
 
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'moon', seed: 19690720,
   g: 1.62, R: 1737400,
   /* Saturated at small diameters: four billion years of

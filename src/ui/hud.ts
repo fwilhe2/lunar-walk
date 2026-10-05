@@ -22,7 +22,7 @@ export const el = {
 export let doseSv = 0;
 
 // radio: it came over the loop, so it gets the Quindar tones.
-export function note(text, radio) {
+export function note(text, radio?) {
   el.note.textContent = text;
   noteTimer = 3.5;
   if (radio) sound.quindar();

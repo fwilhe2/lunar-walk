@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { clamp01, fbm, ridged, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -131,7 +132,7 @@ function tintCharon(x, z, h, slope, fresh, dark, yel, hol, out) {
    small end is kept thin. Fresh craters on Charon throw out bright
    rays of clean ice, so the largest class carries them. See
    hCharon(). */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'charon', seed: 19780622,
   g: 0.288, R: 606000,
   lander: [31, 1.2],

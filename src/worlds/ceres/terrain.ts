@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { CUBE_0, CUBE_K, craterAt } from '../../kernel/craters';
 import { fbm, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -107,7 +108,7 @@ function tintCeres(x, z, h, slope, fresh, dark, yel, hol, out) {
    complex is at 7.5–12 km (Hiesinger et al. 2016). Classes flagged old
    are absent from Occator's young floor. See hCeres(). Seed: New
    Year's night 1801, when Giuseppe Piazzi found it. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'ceres', seed: 18010101,
   g: 0.284, R: 469700,
   lander: [13.5, -16.1],

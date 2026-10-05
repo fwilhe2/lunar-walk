@@ -114,7 +114,7 @@ export const quality = (() => {
     // Geometry.
     if (LOD_COARSE !== T.coarse) { setLodCoarse(T.coarse); chunkStreamer.refresh(); }
     rockSystem.setDetail(T.pebbles, T.pebbleShadow, T.shapes);
-    if (retype) scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+    if (retype) scene.traverse((o) => { if ((o as any).material) (o as any).material.needsUpdate = true; });
     scale = 1;
     resolution();
     restart();

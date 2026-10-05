@@ -3,7 +3,7 @@ import { SUN_XZ } from '../render/lights';
 import { ANISO } from '../render/renderer';
 import { regolithData } from './regolith.pixels';
 import { offThread } from '../util/texgen';
-import { VIEW } from '../worlds/views';
+import { VIEW } from '../worlds/index';
 
 function regolithTextures(d) {
   const tex = (data, srgb) => {

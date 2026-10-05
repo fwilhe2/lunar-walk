@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene } from '../render/renderer';
 import { groundMat } from '../surface/ground';
 import { curveAX, curveAZ, setCurveAX, setCurveAZ } from './anchor';
-import { VIEW } from '../worlds/views';
+import { VIEW } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
    5. CHUNK STREAMER
@@ -49,7 +49,7 @@ export const chunkStreamer = (() => {
   const workers = [];
   function spawnWorkers() {
     for (let i = 0; i < Math.min(4, navigator.hardwareConcurrency || 2); i++) {
-      const w = new Worker(new URL('../workers/mesh.worker.ts', import.meta.url), { type: 'module' });
+      const w = new Worker(new URL('../workers/mesh.worker.ts', import.meta.url), { type: 'module' }) as Worker & { _idle?: boolean };
       w.onmessage = (e) => onChunkBuilt(e.data, w);
       w._idle = true;
       workers.push(w);

@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt } from '../../kernel/craters';
 import { fbm, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -62,7 +63,7 @@ function tintDione(x, z, h, slope, fresh, dark, yel, hol, out) {
 /* Dione: cratered plains, fewer craters on the trailing side, where
    the site is, than on the leading, and cut by the chasmata. See
    hDione(). Seed: 21 March 1684, when Giovanni Cassini found it. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'dione', seed: 16840321,
   g: 0.232, R: 561400,
   lander: [-17.2, 27],

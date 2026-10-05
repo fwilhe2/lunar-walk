@@ -14,7 +14,7 @@ import { pitchObj, yawObj } from '../render/renderer';
 import { chunkStreamer } from '../terrain/streamer';
 import { rover } from '../vehicles/rover';
 import { world, worldId } from '../worlds/index';
-import { VIEW } from '../worlds/views';
+import { VIEW } from '../worlds/index';
 
 /* ── Shareable views ────────────────────────────────────────────
    Every surface is a pure function of where you stand, so where you

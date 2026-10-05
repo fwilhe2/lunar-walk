@@ -10,7 +10,7 @@ import { GLSL_GROUND, GLSL_HAPKE, GLSL_HAPKE_GROUND, GLSL_LAKE, GLSL_TS, GROUND_
      rock    — Hapke, and the terrain shadow seen from above the ground
      object  — anything man-made: its own PBR, plus the terrain shadow
    `hpk` is a hapkeUniforms() set, for the three regolith kinds.     */
-export function surfacePatch(mat, kind, hpk, extra) {
+export function surfacePatch(mat, kind, hpk?, extra?) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, TS);
     if (hpk) Object.assign(shader.uniforms, hpk);

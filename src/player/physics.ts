@@ -41,7 +41,7 @@ export const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3(), _rv
 const LIQ = { lift: 480 * 0.25 / 171, drag: 0.5 * 480 * 1.0 * 0.6 / 171 };
 const _hitN = new THREE.Vector3();
 export function stepEVA(dt) {
-  const p = player, v = p.vel;
+  const p: typeof player & { subm?: number } = player, v = p.vel;
   // Weight, less what dense air holds up (Venus carries 7% of you),
   // and falling off with height as it really does — which matters
   // only on the moonlets, a few per cent at the top of a long drift.

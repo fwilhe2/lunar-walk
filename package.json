@@ -14,12 +14,14 @@
     "dist": "vite build && electron-builder --publish never",
     "dist:linux": "vite build && electron-builder --linux AppImage --publish never",
     "dist:mac": "vite build && electron-builder --mac dmg --publish never",
-    "dist:win": "vite build && electron-builder --win nsis --publish never"
+    "dist:win": "vite build && electron-builder --win nsis --publish never",
+    "perf": "PERF=1 vitest run"
   },
   "devDependencies": {
     "@types/three": "0.160.0",
     "electron": "38.2.1",
     "electron-builder": "26.0.12",
+    "puppeteer-core": "^25.12.0",
     "three": "0.160.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",

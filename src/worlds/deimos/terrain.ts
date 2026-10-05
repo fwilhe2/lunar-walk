@@ -1,9 +1,10 @@
+import type { TerrainDef } from '../types';
 import { hSmall, tintMoonlet } from '../common/moonlet';
 
 /* Deimos is the same rock with a thicker blanket on it: metres of
    regolith drape and infill every crater, so it reads visibly
    smoother than Phobos, and it has no grooves at all.           */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'deimos', seed: 18770812,
   g: 0.003, R: 6200,
   craters: [

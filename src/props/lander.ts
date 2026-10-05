@@ -385,7 +385,7 @@ export const lander = (() => {
 
   return {
     place() {
-      for (const m of group.children) m.traverse((o) => o.geometry && o.geometry.dispose());
+      for (const m of group.children) m.traverse((o) => (o as THREE.Mesh).geometry && (o as THREE.Mesh).geometry.dispose());
       group.clear();
       site = WORLD.lander || null;
       K = KINDS[world.lander || 'lm'];

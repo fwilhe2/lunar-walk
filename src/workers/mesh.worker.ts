@@ -115,7 +115,7 @@ onmessage = function (e) {
     }
   }
 
-  postMessage(
+  (postMessage as Worker['postMessage'])(
     { id: d.id, W: W, m: m, pos: pos, nrm: nrm, col: col, uv: uv },
     [pos.buffer, nrm.buffer, col.buffer, uv.buffer]
   );

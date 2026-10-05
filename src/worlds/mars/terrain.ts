@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellCraters, cellRnd, craterAt } from '../../kernel/craters';
 import { fbm, ridged, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { CRATER_LAYERS, STREAK_LI } from '../../kernel/world';
@@ -180,7 +181,7 @@ function tintMars(x, z, h, slope, fresh, dark, yel, hol, out) {
    survivors are shallow. Ejecta is lobate — ground ice fluidises
    it — so fresh craters end in a distal rampart ridge instead of
    a fading blanket.                                             */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'mars', seed: 19750820,
   g: 3.72, R: 3389500,
   lander: [11.3, -3.9],

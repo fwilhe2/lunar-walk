@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { craterAt } from '../../kernel/craters';
 import { fbm, hash2, ridged, sstep, valueNoise } from '../../kernel/noise';
 
@@ -145,7 +146,7 @@ function tintVenus(x, z, h, slope, fresh, dark, yel, hol, out) {
 
    Rc is the curvature radius the *ground* appears to have, and
    it is negative here; that is not a typo. See curveDrop().    */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'venus', seed: 19751022,
   g: 8.87, R: 6051800, Rc: -1330000,
   lander: [7.5, -27],

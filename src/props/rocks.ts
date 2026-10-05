@@ -496,7 +496,7 @@ export const rockSystem = (() => {
       const cell = ccx + ':' + ccz;
       if (cell === lastCell) return;
       lastCell = cell;
-      const want = new Set();
+      const want = new Set<string>();
       for (let dz = -EXT; dz <= EXT; dz++)
         for (let dx = -EXT; dx <= EXT; dx++) want.add((ccx + dx) + ':' + (ccz + dz));
       // The curvature drop is baked into each instance matrix, so on

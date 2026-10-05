@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, ridged, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -63,7 +64,7 @@ function tintVesta(x, z, h, slope, fresh, dark, yel, hol, out) {
    carbonaceous debris from impactors (Reddy et al. 2012). In gravity
    this weak no crater in reach is complex. See hVesta(). Seed: 29
    March 1807, when Heinrich Olbers found it. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'vesta', seed: 18070329,
   g: 0.25, R: 262700,
   lander: [8, 17.2],

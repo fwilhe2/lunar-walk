@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd } from '../../kernel/craters';
 import { fbm, ridged, sstep, valueNoise } from '../../kernel/noise';
 
@@ -208,7 +209,7 @@ function tintIo(x, z, h, slope, fresh, dark, yel, hol, out) {
    a centimetre a year, which buries a crater of any size faster than
    impacts can make them, and not one has ever been seen on it. See
    hIo(). */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'io', seed: 19790309,
   g: 1.796, R: 1821600,
   lander: [30.5, -5.3],

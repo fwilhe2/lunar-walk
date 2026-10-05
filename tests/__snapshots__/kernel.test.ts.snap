@@ -1,0 +1,27 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`fingerprints 1`] = `
+{
+  "callisto": "42b25ae6",
+  "ceres": "36adb294",
+  "charon": "1f5477ba",
+  "deimos": "b9037b88",
+  "dione": "881028bd",
+  "enceladus": "ca5100cd",
+  "europa": "d280ed90",
+  "ganymede": "01f7569d",
+  "iapetus": "69cc6688",
+  "io": "aba9f611",
+  "mars": "ce7a308b",
+  "mercury": "42c4de04",
+  "mimas": "373cc5d5",
+  "miranda": "f458aaa7",
+  "moon": "06c92060",
+  "phobos": "7ea8b1f0",
+  "pluto": "21ed3787",
+  "titan": "269c90bd",
+  "triton": "48bceedf",
+  "venus": "d2408831",
+  "vesta": "e793cf1a",
+}
+`;

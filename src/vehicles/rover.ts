@@ -122,7 +122,7 @@ export const rover = (() => {
   group.visible = false;
   scene.add(group);
 
-  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, parent = group) => {
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, parent: THREE.Object3D = group) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
     m.castShadow = true;
@@ -132,7 +132,7 @@ export const rover = (() => {
   };
   // A tube between two points.
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
-  const tube = (x0, y0, z0, x1, y1, z1, r, mat = alu, parent = group) => {
+  const tube = (x0, y0, z0, x1, y1, z1, r, mat = alu, parent: THREE.Object3D = group) => {
     _a.set(x0, y0, z0); _b.set(x1, y1, z1);
     const len = _a.distanceTo(_b);
     const m = add(new THREE.CylinderGeometry(r, r, len, 8), mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, parent);

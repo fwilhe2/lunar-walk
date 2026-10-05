@@ -17,7 +17,7 @@ import { world } from '../worlds/index';
    and everything on it looks the same distance away. */
 const HOME_X = 8, HOME_Z = -11;           // where landmark() stands the flag or beacon
 const compass = (() => {
-  const cv = document.getElementById('compass'), g = cv.getContext('2d');
+  const cv = document.getElementById('compass') as HTMLCanvasElement, g = cv.getContext('2d');
   const W = 420, H = 46, SPAN = 120, TAPE = 30;
   const NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';

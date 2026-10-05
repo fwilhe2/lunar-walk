@@ -170,7 +170,7 @@ export function marsMaps() {
   grad.addColorStop(1.00, '#9a9a9a');
   ex.fillStyle = grad; ex.fillRect(0, 0, EW, EH);
 
-  const bump = (lo, la, r, col, stop) => {
+  const bump = (lo, la, r, col, stop?) => {
     const g = ex.createRadialGradient(elon(lo), elat(la), 0, elon(lo), elat(la), r);
     g.addColorStop(0, col);
     if (stop) g.addColorStop(stop[0], stop[1]);

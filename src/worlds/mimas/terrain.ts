@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt } from '../../kernel/craters';
 import { fbm, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -39,7 +40,7 @@ function tintMimas(x, z, h, slope, fresh, dark, yel, hol, out) {
    face, where Saturn is below the horizon. In gravity this weak no
    crater in reach is complex. Seed: 17 September 1789, when William
    Herschel found it. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'mimas', seed: 17890917,
   g: 0.064, R: 198200,
   lander: [36.9, -9.2],

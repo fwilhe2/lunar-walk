@@ -97,8 +97,6 @@ skyGroup.add(milkyWayMesh);
 
    The ecliptic here is the plane the sun moves in, the vertical
    circle through SUN_AZ. */
-const ZODI_AU = { mercury: 0.387, moon: 1, phobos: 1.524, deimos: 1.524, vesta: 2.36, ceres: 2.77,
-  io: 5.2, europa: 5.2, ganymede: 5.2, callisto: 5.2 };
 export const zodiacal = (() => {
   const mat = new THREE.ShaderMaterial({
     uniforms: { uSun: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uGain: { value: 0 } },
@@ -140,7 +138,7 @@ export const zodiacal = (() => {
       mesh.position.copy(cam);
       mat.uniforms.uSun.value.copy(SUN_DIR);
       mat.uniforms.uN.value.set(-Math.sin(SUN_AZ), 0, Math.cos(SUN_AZ));
-      const au = ZODI_AU[worldId];
+      const au = world.zodiacal;
       mesh.visible = !!au && !world.air;
       // By day the star gain, which was never physical, would raise the
       // glow near the sun far past what an eye on sunlit ground sees:

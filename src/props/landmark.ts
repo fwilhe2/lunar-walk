@@ -26,8 +26,8 @@ export const landmark = (() => {
 
   function clear() {
     for (const m of group.children) {
-      m.geometry.dispose();
-      m.material.dispose();
+      (m as THREE.Mesh).geometry.dispose();
+      ((m as THREE.Mesh).material as THREE.Material).dispose();
     }
     group.clear();
   }

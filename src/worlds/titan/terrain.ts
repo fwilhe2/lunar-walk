@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { fbm, hash2, sstep, valueNoise } from '../../kernel/noise';
 
 /* ── Titan ──────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ function tintTitan(x, z, h, slope, fresh, dark, yel, hol, out) {
    horizon sits that much further off. Seed: 14 January 2005, when
    Huygens came down through the haze and sent the only pictures
    anyone has from the surface. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'titan', seed: 20050114,
   g: 1.352, R: 2574700, Rc: 3060000,
   lander: [19, -33],

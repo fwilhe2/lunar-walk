@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -10,6 +11,11 @@ export default defineConfig({
     // file:// worker loading at all.
     assetsInlineLimit: 0,
     sourcemap: true,
+  },
+  test: {
+    // tests/perf/ only on request: npm run perf
+    include: process.env.PERF ? ['tests/perf/*.test.ts'] : ['tests/*.test.ts'],
+    testTimeout: 120000,
   },
   server: { port: Number(process.env.PORT) || 5173 },
 });

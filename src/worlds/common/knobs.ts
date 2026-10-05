@@ -34,7 +34,7 @@ function knobCell(ix, iz) {
   var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> KC_SHIFT;
   var hit = kcL[slot];
   if (hit !== null && kcX[slot] === ix && kcZ[slot] === iz) return hit;
-  var out = false;
+  var out: false | { x: number; z: number; r: number; H: number } = false;
   var px = (ix + 0.2 + cellRnd(ix, iz, 71, 2) * 0.6) * CA_KCELL;
   var pz = (iz + 0.2 + cellRnd(ix, iz, 71, 3) * 0.6) * CA_KCELL;
   var p = (0.015 + 0.06 * sstep(0.5, 0.72, fbm(px * 0.00009 + 3.3, pz * 0.00009 - 1.7, 2)) + 0.4 * knobRim(px, pz)) * (WORLD.knobP || 1);
@@ -54,7 +54,7 @@ function knobCell(ix, iz) {
 // for small ones); with apron set, CA_AP: how much of the dark lag
 // that has slumped off it lies around its foot, for the colour pass.
 export var CA_AP = 0;
-export function callistoKnobs(x, z, apron) {
+export function callistoKnobs(x, z, apron?) {
   CA_KN = 0; CA_AP = 0;
   var cx = Math.floor(x / CA_KCELL), cz = Math.floor(z / CA_KCELL);
   var best = 0, reach = apron ? 1.7 : 1;

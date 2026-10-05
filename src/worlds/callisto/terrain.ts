@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, sstep, valueNoise } from '../../kernel/noise';
 import { TN_Z } from '../../kernel/terrain';
@@ -97,7 +98,7 @@ function tintCallisto(x, z, h, slope, fresh, dark, yel, hol, out) {
    here is a sixteenth of the lunar density for its size, the next
    a quarter, then the curve. See hCallisto().
    Seed: 13 January 1610, the night Galileo first saw all four. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'callisto', seed: 16100113,
   g: 1.235, R: 2410300,
   lander: [26.8, 8],

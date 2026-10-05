@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt } from '../../kernel/craters';
 import { fbm, ridged, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -109,7 +110,7 @@ function tintTriton(x, z, h, slope, fresh, dark, yel, hol, out) {
    few and fresh; the largest Voyager saw, Mazomba, is 27 km. See
    hTriton(). Seed: 25 August 1989, Voyager 2's closest approach, the
    last new world it showed anyone. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'triton', seed: 19890825,
   g: 0.779, R: 1353400,
   lander: [30.4, -15.2],

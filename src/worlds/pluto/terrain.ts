@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { craterAt } from '../../kernel/craters';
 import { fbm, ridged, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -83,7 +84,7 @@ function tintPluto(x, z, h, slope, fresh, dark, yel, hol, out) {
    the smaller they are: the Kuiper belt is short of small bodies
    (Singer et al. 2019), so there is almost nothing under a few
    hundred metres. See hPluto(). */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'pluto', seed: 19300218,
   g: 0.620, R: 1188300,
   lander: [23.9, 2.1],

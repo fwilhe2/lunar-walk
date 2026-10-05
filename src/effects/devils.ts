@@ -120,7 +120,7 @@ export const devils = (() => {
         u.uR.value = CURVE_R;
         u.uSway.value = t * 0.3 + k;
         u.uW.value = d.W; u.uH.value = d.H;
-        if (scene.fog) { u.fogColor.value.copy(scene.fog.color); u.fogDensity.value = scene.fog.density; }
+        if (scene.fog) { u.fogColor.value.copy(scene.fog.color); u.fogDensity.value = (scene.fog as THREE.FogExp2).density; }
       }
     },
   };

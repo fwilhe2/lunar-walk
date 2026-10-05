@@ -2,7 +2,7 @@ import { applyWorld, worldUI } from '../app/worlds';
 import { renderer } from '../render/renderer';
 import { overlay } from './hud';
 import { WORLD_IDS } from '../worlds/index';
-import { VIEW } from '../worlds/views';
+import { VIEW } from '../worlds/index';
 
 /* ── Boot: stream the opening rings, then hand over. ─────────── */
 /* ── World picker ─────────────────────────────────────────────
@@ -180,7 +180,7 @@ export const picker = (() => {
   // The overlay behind it is the click target for pointer lock.
   root.addEventListener('click', (e) => {
     e.stopPropagation();
-    const b = e.target.closest('[data-act]');
+    const b = (e.target as Element).closest<HTMLElement>('[data-act]');
     if (!b) return;
     const [a, id] = b.dataset.act.split(':');
     if (a === 'zoom') zoom(id);
@@ -200,7 +200,7 @@ export const picker = (() => {
   const unhover = () => root.querySelectorAll('.hov').forEach((n) => n.classList.remove('hov'));
   root.addEventListener('pointerover', (e) => {
     unhover();
-    const b = e.target.closest('button[data-id]');
+    const b = (e.target as Element).closest<HTMLElement>('button[data-id]');
     if (b && b.dataset.act) root.querySelectorAll('[data-id="' + b.dataset.id + '"]').forEach((n) => n.classList.add('hov'));
   });
   root.addEventListener('pointerleave', unhover);
@@ -216,7 +216,7 @@ export const picker = (() => {
     // Resolves once the zoom has finished: heavy main-thread work waits
     // for it, or the animation would stall halfway.
     settled() {
-      return new Promise((r) => setTimeout(r, Math.max(0, busyUntil - performance.now())));
+      return new Promise<void>((r) => setTimeout(r, Math.max(0, busyUntil - performance.now())));
     },
     select(id) {
       st.body = id;

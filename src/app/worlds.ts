@@ -9,7 +9,7 @@ import { geysers } from '../effects/geysers';
 import { plumes } from '../effects/plumes';
 import { terrainHeight } from '../kernel/terrain';
 import { WORLD } from '../kernel/world';
-import { EYE, FLY_CEILING, G_LIST, JET, setFlyCeiling } from '../player/constants';
+import { EYE, FLY_CEILING, JET, setFlyCeiling } from '../player/constants';
 import { gait } from '../player/gait';
 import { setGravity } from '../player/modes';
 import { mode, player, setModeRaw } from '../player/player';
@@ -33,9 +33,8 @@ import { terrainShadows } from '../terrain/shadows';
 import { chunkStreamer } from '../terrain/streamer';
 import { doseSv, el, setDoseSv, updateKeysHelp } from '../ui/hud';
 import { rover } from '../vehicles/rover';
-import { setWorldId, setWorldView, world, worldId } from '../worlds/index';
+import { VIEW, activateWorld, world, worldId } from '../worlds/index';
 import { setWorld } from '../worlds/terrains';
-import { VIEW } from '../worlds/views';
 
 /* Whatever shows which world is current registers here (the picker,
    src/ui/picker.ts), so switching worlds never has to know about it. */
@@ -53,11 +52,11 @@ export let preparing = null;
 export function applyWorld(id) {
   if (initialized && id === worldId && !preparing) return Promise.resolve();
   if (preparing === id) return preparing.done;
-  const job = preparing = { id };
+  const job: { id: any; done?: Promise<void> } = preparing = { id };
   bootShow(VIEW[id].name, 0, 'preparing textures');
   boot.hidden = false;
   worldUI.select(id);
-  job.done = Promise.all([regolithAsync(id), companionsAsync(VIEW[id].companions, worldUI.settled)]).then(() => new Promise((resolve) => setTimeout(() => {
+  job.done = Promise.all([regolithAsync(id), companionsAsync(VIEW[id].companions, worldUI.settled)]).then(() => new Promise<void>((resolve) => setTimeout(() => {
     if (preparing !== job) return;          // superseded: never resolves
     preparing = null;
     applyWorldNow(id);
@@ -69,8 +68,7 @@ export function applyWorld(id) {
 function applyWorldNow(id) {
   if (initialized && id === worldId) return;
   setInitialized(true);
-  setWorldId(id);
-  setWorldView(VIEW[id]);
+  activateWorld(id);
   setWorld(id);                    // the kernel: heights, craters, colour
   // Only a body with something to light its night keeps the sun down.
   if (!world.night && sunElev < 0.045) { setSunElev(0.045); updateSunDir(); }
@@ -159,7 +157,7 @@ function applyWorldNow(id) {
   // Whether the scene has fog is compiled into every program, so
   // every material in the scene needs a rebuild after that changes.
   scene.traverse((o) => {
-    const m = o.material;
+    const m = (o as THREE.Mesh).material;
     if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
     else if (m) m.needsUpdate = true;
   });
@@ -191,7 +189,7 @@ function applyWorldNow(id) {
   yawObj.rotation.y = world.look ? world.look[0] : -0.95;
   pitchObj.rotation.x = world.look ? world.look[1] : 0;
   yawObj.position.copy(player.pos);
-  setGravity(G_LIST[id]);
+  setGravity(VIEW[id].g);
 
   // ── chrome
   el.mode.textContent = 'EVA';

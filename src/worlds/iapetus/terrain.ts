@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { craterAt } from '../../kernel/craters';
 import { fbm, ridged, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { TN_Z } from '../../kernel/terrain';
@@ -68,7 +69,7 @@ function tintIapetus(x, z, h, slope, fresh, dark, yel, hol, out) {
    hIapetus(). Seed: 25 October 1671, when Giovanni Cassini found it —
    and noticed it vanished every time it went round to one side of
    Saturn, because that side is dark. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'iapetus', seed: 16711025,
   g: 0.223, R: 734500,
   lander: [16.8, 6.5],

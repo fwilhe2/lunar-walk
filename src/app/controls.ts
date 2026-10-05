@@ -6,7 +6,7 @@ import { lastHash, setLastHash, viewHash } from './view-hash';
 import { applyWorld } from './worlds';
 import { sound } from '../audio/sound';
 import { photoPending, setPhotoPending } from '../player/camera';
-import { G_EARTH, G_LIST } from '../player/constants';
+import { G_EARTH } from '../player/constants';
 import { setViewMotion, viewMotion } from '../player/gait';
 import { input, keys, touch } from '../player/input';
 import { setGravity, setMode } from '../player/modes';
@@ -55,7 +55,7 @@ function press(code) {
     else note(url);
   }
   if (code === 'KeyG') {
-    setGravity(player.gravity === G_LIST[worldId] ? G_EARTH : G_LIST[worldId]);
+    setGravity(player.gravity === world.g ? G_EARTH : world.g);
   }
   if (code === 'KeyF') setMode(mode === 'FLY' ? 'EVA' : 'FLY');
   if (code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');

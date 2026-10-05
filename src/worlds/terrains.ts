@@ -1,6 +1,7 @@
 /* Every world's terrain definition, keyed by id. Pure: no DOM, no
    three — the mesh workers import this too. */
 import { useTerrain } from '../kernel/terrain';
+import type { TerrainDef } from './types';
 import { terrain as mercury } from './mercury/terrain';
 import { terrain as venus } from './venus/terrain';
 import { terrain as moon } from './moon/terrain';
@@ -25,7 +26,7 @@ import { terrain as charon } from './charon/terrain';
 
 export const TERRAINS = { mercury, venus, moon, mars, phobos, deimos, vesta, ceres, io, europa, ganymede, callisto, mimas, enceladus, dione, titan, iapetus, miranda, triton, pluto, charon };
 
-export function setWorld(id) {
+export function setWorld(id: keyof typeof TERRAINS): TerrainDef {
   return useTerrain(TERRAINS[id]);
 }
 

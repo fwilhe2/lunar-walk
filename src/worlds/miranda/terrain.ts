@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { craterAt } from '../../kernel/craters';
 import { fbm, hash2, ridged, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
@@ -73,7 +74,7 @@ function tintMiranda(x, z, h, slope, fresh, dark, yel, hol, out) {
    Classes flagged old are dropped inside the corona. See hMiranda().
    Seed: 16 February 1948, when Gerard Kuiper found it on a plate taken
    at McDonald Observatory. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'miranda', seed: 19480216,
   g: 0.079, R: 235800,
   lander: [19.6, -12],

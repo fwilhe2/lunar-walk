@@ -64,13 +64,13 @@ export const composer = new EffectComposer(renderer, rt);
 const DEPTH_SPLIT = 400;
 class SplitRenderPass extends RenderPass {
   render(renderer, writeBuffer, readBuffer) {
-    const cam = this.camera, near = cam.near, far = cam.far;
+    const cam = this.camera as THREE.PerspectiveCamera, near = cam.near, far = cam.far;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
 
     cam.near = DEPTH_SPLIT * 0.98;
     cam.updateProjectionMatrix();
-    super.render(renderer, writeBuffer, readBuffer);
+    super.render(renderer, writeBuffer, readBuffer, undefined, undefined);
 
     cam.near = near;
     cam.far = DEPTH_SPLIT;
@@ -82,7 +82,7 @@ class SplitRenderPass extends RenderPass {
     const bg = this.scene.background;
     this.scene.background = null;
     this.clear = false;
-    super.render(renderer, writeBuffer, readBuffer);
+    super.render(renderer, writeBuffer, readBuffer, undefined, undefined);
     this.clear = true;
     this.scene.background = bg;
 
@@ -162,10 +162,10 @@ export const eyePass = (() => {
     depthTest: false, depthWrite: false,
   }));
   let cur = 0;
-  const pass = new Pass();
+  const pass = new Pass() as Pass & { uniforms: typeof adaptU; readback: () => number };
   pass.uniforms = adaptU;
   pass.render = (renderer, writeBuffer, readBuffer) => {
-    meter.material.uniforms.tSrc.value = readBuffer.texture;
+    (meter.material as THREE.ShaderMaterial).uniforms.tSrc.value = readBuffer.texture;
     renderer.setRenderTarget(meterRT);
     meter.render(renderer);
     adaptU.tPrev.value = adapt[cur].texture;
@@ -183,8 +183,8 @@ export const eyePass = (() => {
     // ShaderPass cloned its uniforms, so it gets the texture directly.
     gradePass.uniforms.tEye.value = adapt[cur].texture;
     if (inGrade) return;
-    expose.material.uniforms.tSrc.value = readBuffer.texture;
-    expose.material.uniforms.tEye.value = adapt[cur].texture;
+    (expose.material as THREE.ShaderMaterial).uniforms.tSrc.value = readBuffer.texture;
+    (expose.material as THREE.ShaderMaterial).uniforms.tEye.value = adapt[cur].texture;
     renderer.setRenderTarget(writeBuffer);
     expose.render(renderer);
   };

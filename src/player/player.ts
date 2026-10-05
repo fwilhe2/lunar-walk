@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { terrainHeight } from '../kernel/terrain';
-import { EYE, G_LIST, JET } from './constants';
+import { EYE, JET } from './constants';
+import { VIEW } from '../worlds/index';
 import { yawObj } from '../render/renderer';
 
 export const player = {
   pos: new THREE.Vector3(0, 0, 0),
   vel: new THREE.Vector3(),
   onGround: true,
-  gravity: G_LIST.moon,
+  gravity: VIEW.moon.g,
   crouch: 0, charge: 0,           // m sunk into the knees; 0–1 effort being wound up
   pushing: false, pushE: 0, pushU: 0,
   leanF: 0, leanS: 0, pvx: 0, pvz: 0, bend: 0, steadyY: null, smoothOff: 0, lastYaw: 0, turnAcc: 0,

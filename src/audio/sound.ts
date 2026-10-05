@@ -28,12 +28,12 @@ export const sound = (() => {
   let muted = false;
   try { muted = localStorage.getItem(STORE) === '1'; } catch (e) { /* no storage */ }
   let ctx = null, out = null, suitIn = null, airIn = null, airLP = null, airGain = null, noise = null;
-  const v = {};                                // the continuous voices
+  const v: Record<string, any> = {};           // the continuous voices
   let exertion = 0.15, nextBreath = 0, gust = 0.5, gustT = 0;
   let medium = { air: 0, lp: 20000, wind: 0, windLP: 400 };
   const LEVEL = 0.9;
 
-  const filt = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q ?? 0.707; return b; };
+  const filt = (type, f, q?) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q ?? 0.707; return b; };
   const amp = (g) => { const n = ctx.createGain(); n.gain.value = g; return n; };
   const chain = (...n) => { for (let i = 0; i < n.length - 1; i++) n[i].connect(n[i + 1]); return n[n.length - 1]; };
   function loopNoise(offset) {
@@ -148,7 +148,7 @@ export const sound = (() => {
     // On a click or key press: the first builds the graph.
     unlock() {
       if (!ctx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
+        const AC = window.AudioContext || (window as any).webkitAudioContext;
         if (!AC) return;
         try { build(new AC()); } catch (e) { return; }
       }
@@ -170,7 +170,7 @@ export const sound = (() => {
         : { air: 0, lp: 20000, wind: 0, windLP: 400 };                         // vacuum
       applyMedium();
     },
-    step(k, hard) { if (live()) thump(k, ctx.currentTime, hard); },
+    step(k, hard?) { if (live()) thump(k, ctx.currentTime, hard); },
     quindar() { if (live()) { beep(2525, ctx.currentTime, 0.25); beep(2475, ctx.currentTime + 1.1, 0.25); } },
     /* Once a frame. work: 0–1, how hard you are going; jets: axes
        firing; rover: null, or { v, drive }. */

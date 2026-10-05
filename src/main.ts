@@ -6,7 +6,6 @@ import './style.css';
 import './worlds/terrains';     // selects the Moon, so the kernel has a world from the start
 import './terrain/anchor';
 import './worlds/levels';
-import './worlds/views';
 import './worlds/index';
 import './render/renderer';
 import './render/lights';
@@ -77,6 +76,7 @@ import './ui/picker';
 
 import { boot, bootShow, everStarted, loading, setLoading } from './app/boot';
 import { demo } from './app/demo';
+import { frameHooks } from './app/hooks';
 import { seaView } from './app/lighting';
 import { clock, step } from './app/loop';
 import { goTo, parseView } from './app/view-hash';
@@ -96,6 +96,10 @@ import { terrainShadows } from './terrain/shadows';
 import { chunkStreamer } from './terrain/streamer';
 import { hud, overlay, showOverlay } from './ui/hud';
 import { world } from './worlds/index';
+
+// ?probe=low|medium|high: tooling (tools/probe/) drives the page.
+const probeTier = new URLSearchParams(location.search).get('probe');
+if (probeTier !== null) await import('./app/probe').then((m) => m.install(probeTier || 'low'));
 
 gradePass.uniforms.uRes.value.set(innerWidth, innerHeight);
 let elapsed = 0, bootMax = 0;
@@ -147,6 +151,7 @@ renderer.setAnimationLoop(() => {
   seaView();
   seaMirror.render();
   composer.render();
+  frameHooks.afterRender?.();
   // In the same task as the drawing, while the canvas still holds it.
   if (photoPending) { setPhotoPending(false); takePhoto(); }
 });

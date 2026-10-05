@@ -1,10 +1,11 @@
+import type { TerrainDef } from '../types';
 import { hSmall, tintMoonlet } from '../common/moonlet';
 
 /* Phobos: a 22 km captured asteroid, saturated at every scale,
    and cut by the grooves — parallel troughs, hundreds of metres
    apart and breaking into chains of pits along their length.
    Darkest natural surface in the inner system, albedo 0.071.    */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'phobos', seed: 18770818,
   g: 0.0057, R: 11100,
   craters: [

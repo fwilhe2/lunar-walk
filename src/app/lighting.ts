@@ -41,15 +41,15 @@ export function seaView() {
     const s = world.sky, depth = lvl - _uw.y;
     const k = 0.11 * Math.exp(-0.12 * depth);
     scene.fog.color.setRGB(s.horizon[0] * k, s.horizon[1] * k * 0.8, s.horizon[2] * k * 0.5, THREE.LinearSRGBColorSpace);
-    scene.fog.density = 0.045;
-    scene.background.copy(scene.fog.color);
+    (scene.fog as THREE.FogExp2).density = 0.045;
+    (scene.background as THREE.Color).copy(scene.fog.color);
   }
   if (under !== underSea) {
     underSea = under;
     skyDome.mesh.visible = !under && !!world.sky;
     if (!under) {
-      if (scene.fog) scene.fog.density = world.fog.density;
-      scene.background.setRGB(0, 0, 0);
+      if (scene.fog) (scene.fog as THREE.FogExp2).density = world.fog.density;
+      (scene.background as THREE.Color).setRGB(0, 0, 0);
       updateSkyColors();
     }
   }

@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { craterAt } from '../../kernel/craters';
 import { fbm, sstep, valueNoise } from '../../kernel/noise';
 
@@ -78,7 +79,7 @@ function tintEnceladus(x, z, h, slope, fresh, dark, yel, hol, out) {
   out[0] = v * (0.985 - ic * 0.12); out[1] = v * (0.995 - ic * 0.03); out[2] = v;
 }
 
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'enceladus', seed: 17890828,
   g: 0.113, R: 252100,
   lander: [21.9, -9.9],

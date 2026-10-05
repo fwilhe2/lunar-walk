@@ -364,7 +364,7 @@ function makeCompanion(spec) {
   if (spec.tilt) group.rotation.set(spec.tilt[0], spec.tilt[1], spec.tilt[2]);
   if (spec.pole) group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...spec.pole).normalize());
 
-  const uni = {
+  const uni: Record<string, any> = {
     dayMap: { value: T.day },
     sunDir: { value: new THREE.Vector3() },
     cloudShift: { value: 0 },

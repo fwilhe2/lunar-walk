@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { galileanPixels } from './galilean.pixels';
 
-export function galileanMaps(kind, px) {
+export function galileanMaps(kind, px?) {
   const W = 512, H = 256;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   c.getContext('2d').putImageData(new ImageData(px || galileanPixels(kind), W, H), 0, 0);

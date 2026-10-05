@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { AUX } from '../../kernel/terrain';
 import { cellCraters, cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, hash2, sstep, valueNoise } from '../../kernel/noise';
@@ -136,7 +137,7 @@ function hollowCell(ix, iz) {
   var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> HC_SHIFT;
   var hit = hcL[slot];
   if (hit !== null && hcX[slot] === ix && hcZ[slot] === iz) return hit;
-  var out = false;
+  var out: false | { x: number; z: number; r: number; dep: number } = false;
   var px = (ix + 0.1 + cellRnd(ix, iz, 59, 2) * 0.8) * MH_HCELL;
   var pz = (iz + 0.1 + cellRnd(ix, iz, 59, 3) * 0.8) * MH_HCELL;
   var f = mercHollowField(px, pz);
@@ -236,7 +237,7 @@ function tintMercury(x, z, h, slope, fresh, dark, yel, hol, out) {
    at small sizes is the Moon's; the bowls are as deep for their
    width. Fresh craters wear bright rays, and Mercury has some of the
    longest in the solar system. See hMercury(). */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'mercury', seed: 19740329,
   g: 3.70, R: 2439700,
   lander: [33.9, -3.1],

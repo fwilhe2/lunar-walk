@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { AUX } from '../../kernel/terrain';
 import { craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, hash2, smoothT, sstep, valueNoise } from '../../kernel/noise';
@@ -34,7 +35,12 @@ import { WORLD } from '../../kernel/world';
    changes from place to place (rg), as it does in every Galileo
    close-up; the last is young enough to wear the dark flanking
    margins of a triple band.                                       */
-var EU_FAM = [
+interface RidgeFamily {
+  a: number; sp: number; p: number; w0: number; w1: number; h0: number; h1: number; tr: number;
+  rg?: number; m?: number;
+  c?: number; s?: number; salt?: number;   // filled in below
+}
+var EU_FAM: RidgeFamily[] = [
   { a: 0.42, sp: 230,  p: 0.80, w0: 70,   w1: 90,   h0: 3,   h1: 7,   tr: 0.00, rg: 1 },
   { a: 1.63, sp: 290,  p: 0.75, w0: 80,   w1: 110,  h0: 4,   h1: 9,   tr: 0.25, rg: 1 },
   { a: 2.71, sp: 190,  p: 0.70, w0: 60,   w1: 70,   h0: 2.5, h1: 6,   tr: 0.00, rg: 1 },
@@ -298,7 +304,7 @@ function tintEuropa(x, z, h, slope, fresh, dark, yel, hol, out) {
    impact, land in clusters and are absent everywhere else, which
    is what clump does. Ice craters of this size are about as deep
    for their width as rock ones. See hEuropa().               */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'europa', seed: 16100108,
   g: 1.315, R: 1560800,
   lander: [30, 0],

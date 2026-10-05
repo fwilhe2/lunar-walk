@@ -1,3 +1,4 @@
+import type { TerrainDef } from '../types';
 import { cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, smoothT, sstep, valueNoise } from '../../kernel/noise';
 import { TN_Z } from '../../kernel/terrain';
@@ -136,7 +137,7 @@ function tintGanymede(x, z, h, slope, fresh, dark, yel, hol, out) {
    pits again past ~30 km. See hGanymede(). Seed: 7 January 1610, the
    first night Galileo turned a telescope on Jupiter and saw three of
    its moons, Ganymede among them. */
-export const terrain = {
+export const terrain: TerrainDef = {
   id: 'ganymede', seed: 16100107,
   g: 1.428, R: 2634100,
   lander: [24.6, -17.2],

@@ -1,5 +1,5 @@
 import { terrainHeight } from '../kernel/terrain';
-import { EYE, G_LIST } from './constants';
+import { EYE } from './constants';
 import { gait } from './gait';
 import { mode, player, setModeRaw } from './player';
 import { camera, pitchObj, yawObj } from '../render/renderer';
@@ -56,7 +56,7 @@ export function setMode(next) {
 
 export function setGravity(g) {
   player.gravity = g;
-  const own = g === G_LIST[worldId];
+  const own = g === world.g;
   el.g.textContent = own ? world.gTxt : '9.81 m/s²';
   el.body.textContent = own ? 'SURFACE' : 'TERRESTRIAL';
   el.body.style.color = own ? '' : '#7fb6ea';
