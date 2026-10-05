@@ -18,7 +18,7 @@ const base = fs.existsSync(BASE) ? JSON.parse(fs.readFileSync(BASE, 'utf8')) : {
 
 // A walk across a chunk's worth of lattice, as the worker queries it,
 // at a few places: the landing site, and well out in every direction.
-const SITES = [[0, 0], [3000, 2000], [-9000, 4000], [25000, -31000]];
+const SITES = [[0, 0], [3000, 2000], [-9000, 4000], [25000, -31000]] as const;
 function sweep(n: number) {
   let s = 0;
   for (const [ox, oz] of SITES) for (let i = 0; i < n; i++) s += terrainHeight(ox + (i % 257), oz + Math.floor(i / 257));

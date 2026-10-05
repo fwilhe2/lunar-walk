@@ -14,7 +14,7 @@ function* spread(n: number) {
   let s = 12345;
   const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) | 0) >>> 0) / 4294967296;
   for (let i = 0; i < n; i++) {
-    const r = [5, 60, 800, 9000, 60000][i % 5];
+    const r = [5, 60, 800, 9000, 60000][i % 5]!;   // i % 5 < 5
     yield [(rnd() - 0.5) * 2 * r, (rnd() - 0.5) * 2 * r, rnd()] as const;
   }
 }
@@ -58,7 +58,7 @@ describe.each(IDS)('%s', (id) => {
 
   test('pure: the same heights with a cold crater cache', () => {
     setWorld(id);
-    const pts = Array.from({ length: 2000 }, (_, i) => [Math.sin(i * 3.1) * 20000, Math.cos(i * 1.7) * 20000]);
+    const pts = Array.from({ length: 2000 }, (_, i) => [Math.sin(i * 3.1) * 20000, Math.cos(i * 1.7) * 20000] as const);
     const warm = pts.map(([x, z]) => terrainHeight(x, z));
     craterCacheReset();
     expect(pts.map(([x, z]) => terrainHeight(x, z))).toEqual(warm);

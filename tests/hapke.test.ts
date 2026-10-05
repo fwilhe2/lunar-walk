@@ -46,7 +46,8 @@ describe.each(sets)('%s', (_, p) => {
   test('the table, read as the shader reads it, is the function', () => {
     const u = hapkeUniforms();
     setHapke(u, p);
-    const tex = u.hpkLut.value!, N = tex.image.width, data = tex.image.data as Uint16Array;
+    // three types a 3D texture's data as 8-bit; hapkeLut() fills it with half floats
+    const tex = u.hpkLut.value!, N = tex.image.width, data = tex.image.data as unknown as Uint16Array;
     const at = (i: number, j: number, k: number) => THREE.DataUtils.fromHalfFloat(data[(k * N + j) * N + i]!);   // in range: clamped below
     const sample = (x: number, y: number, z: number) => {
       const c = [x, y, z].map((v) => Math.min(N - 1, Math.max(0, v * (N - 1))));
