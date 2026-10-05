@@ -3,7 +3,7 @@ import { session } from './boot';
 import { readInput } from './controls';
 import { demo } from './demo';
 import { stepHash } from './view-hash';
-import { sound } from '../audio/sound';
+import { sound, type RoverSound } from '../audio/sound';
 import { curtains } from '../effects/curtains';
 import { devils } from '../effects/devils';
 import { dust } from '../effects/dust';
@@ -36,7 +36,7 @@ import { world } from '../worlds/index';
 export const clock = new THREE.Clock();
 
 const _rx = new THREE.Vector3(), _ry = new THREE.Vector3(), _rt = new THREE.Vector3();
-function placeShadowRig(light, x, y, z) {
+function placeShadowRig(light: THREE.DirectionalLight, x: number, y: number, z: number) {
   const c = light.shadow.camera;
   const texel = (c.right - c.left) / light.shadow.mapSize.x;
   // The light camera's own axes: it looks down -KEY_DIR with +y up.
@@ -54,8 +54,8 @@ function placeShadowRig(light, x, y, z) {
    share of a run at this body's pace; the jets firing; the rover's
    motors, and its springs bottoming out when it lands off a crest. */
 let roverAir = 0;
-function stepSound(dt) {
-  let work = 0.05, jets = 0, rv = null;
+function stepSound(dt: number) {
+  let work = 0.05, jets = 0, rv: RoverSound | null = null;
   if (mode === 'EVA') {
     work = Math.min(1, Math.max(0, (effort.Wf - EFFORT.rest) / 500));
     if (world.jets && player.gas > 0) {
@@ -75,7 +75,7 @@ function stepSound(dt) {
 }
 
 const NO_KEYS = Object.freeze({ throttle: 0, steer: 0 });
-export function step(dt, t) {
+export function step(dt: number, t: number) {
   demo.update(dt);
   readInput(dt);
   const gh = mode === 'EVA' ? stepEVA(dt) : mode === 'FLY' ? stepFLY(dt) : stepROVER(dt);

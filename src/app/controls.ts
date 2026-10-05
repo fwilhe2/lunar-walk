@@ -35,7 +35,7 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 // What a key does once, when it goes down. The gamepad and the touch
 // controls press the same codes.
-function press(code) {
+function press(code: string) {
   if (code === 'Digit0') { demo.toggle(); return; }
   if (code === 'KeyM') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
   if (code === 'KeyQ') note('QUALITY ' + quality.cycle());
@@ -60,7 +60,7 @@ function press(code) {
   if (code === 'KeyR') setMode(mode === 'ROVER' ? 'EVA' : 'ROVER');
   // The number row reaches the first twelve; with Shift, the rest.
   const pick = WORLD_KEYS.indexOf(code) + (keys.ShiftLeft || keys.ShiftRight ? WORLD_KEYS.length : 0);
-  if (pick >= 0 && WORLD_KEYS.includes(code) && pick < WORLD_IDS.length) applyWorld(WORLD_IDS[pick]);
+  if (pick >= 0 && WORLD_KEYS.includes(code) && pick < WORLD_IDS.length) applyWorld(WORLD_IDS[pick]!);   // pick is in range by the tests before
   if (code === 'BracketLeft' || code === 'BracketRight') {
     // Below the horizon only where there is something to light the night.
     setSunElev(THREE.MathUtils.clamp(sunElev + (code === 'BracketRight' ? 0.035 : -0.035), world.night ? -1.35 : 0.045, 1.35));
@@ -71,7 +71,7 @@ function press(code) {
   // Previous and next world, for the pad's D-pad.
   if (code === 'WorldPrev' || code === 'WorldNext') {
     const i = WORLD_IDS.indexOf(worldId), n = WORLD_IDS.length;
-    applyWorld(WORLD_IDS[(i + (code === 'WorldNext' ? 1 : n - 1)) % n]);
+    applyWorld(WORLD_IDS[(i + (code === 'WorldNext' ? 1 : n - 1)) % n]!);   // the world on screen is one of them, so i >= 0
   }
 }
 
@@ -109,10 +109,12 @@ document.addEventListener('mousemove', (e) => {
   const hi = mode === 'ROVER' ? 0.35 : Math.PI / 2 - 0.02;
   pitchObj.rotation.x = THREE.MathUtils.clamp(pitchObj.rotation.x - e.movementY * k, lo, hi);
 });
-const padPrev = [];
-const PAD_PRESS = { 0: null, 2: 'KeyF', 3: 'KeyR', 8: 'KeyM', 9: 'Digit0', 11: 'KeyP', 12: 'BracketRight', 13: 'BracketLeft', 14: 'WorldPrev', 15: 'WorldNext' };
-const dead = (v, d) => (Math.abs(v) < d ? 0 : Math.sign(v) * (Math.abs(v) - d) / (1 - d));
-export function readInput(dt) {
+// Per pad, per button: whether it was down last frame (undefined: no such button).
+const padPrev: (boolean | undefined)[][] = [];
+// Button index to the key it presses; A (0) only holds, as Space.
+const PAD_PRESS: Partial<Record<number, string | null>> = { 0: null, 2: 'KeyF', 3: 'KeyR', 8: 'KeyM', 9: 'Digit0', 11: 'KeyP', 12: 'BracketRight', 13: 'BracketLeft', 14: 'WorldPrev', 15: 'WorldNext' };
+const dead = (v: number, d: number) => (Math.abs(v) < d ? 0 : Math.sign(v) * (Math.abs(v) - d) / (1 - d));
+export function readInput(dt: number) {
   const k = keys;
   let fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
   let side = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
@@ -120,16 +122,17 @@ export function readInput(dt) {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const gp of pads) {
     if (!gp || !gp.connected || gp.mapping !== 'standard') continue;
-    const b = (i) => gp.buttons[i] && gp.buttons[i].pressed;
+    const b = (i: number) => gp.buttons[i] && gp.buttons[i].pressed;
     // A round dead zone on each stick, then the rest rescaled to full.
-    const m = Math.hypot(gp.axes[0], gp.axes[1]), mk = dead(m, 0.15) / (m || 1);
-    const r = Math.hypot(gp.axes[2], gp.axes[3]), rk = dead(r, 0.12) / (r || 1);
-    const pf = -gp.axes[1] * mk, ps = gp.axes[0] * mk;
+    // The standard mapping has four axes, so axes[0–3] are there.
+    const m = Math.hypot(gp.axes[0]!, gp.axes[1]!), mk = dead(m, 0.15) / (m || 1);
+    const r = Math.hypot(gp.axes[2]!, gp.axes[3]!), rk = dead(r, 0.12) / (r || 1);
+    const pf = -gp.axes[1]! * mk, ps = gp.axes[0]! * mk;
     const trig = gp.buttons[7] ? gp.buttons[7].value : 0;
     let any = Math.abs(pf) + Math.abs(ps) + r * rk + trig > 0;
     if (Math.abs(pf) > Math.abs(fwd)) fwd = pf;
     if (Math.abs(ps) > Math.abs(side)) side = ps;
-    lx += gp.axes[2] * rk; ly += gp.axes[3] * rk;
+    lx += gp.axes[2]! * rk; ly += gp.axes[3]! * rk;
     if (b(4)) run = true;
     if (b(0)) jump = true;
     if (b(1)) down = true;
@@ -142,7 +145,7 @@ export function readInput(dt) {
       if (now && !prev[i]) {
         any = true;
         sound.unlock();
-        if (PAD_PRESS[i]) { if (PAD_PRESS[i] !== 'Digit0' && demo.on) demo.stop(); press(PAD_PRESS[i]); }
+        if (PAD_PRESS[i]) { if (PAD_PRESS[i] !== 'Digit0' && demo.on) demo.stop(); press(PAD_PRESS[i]!); }   // tested just before
       }
       prev[i] = now;
     }
@@ -177,16 +180,16 @@ const touchUI = (() => {
   const stick = byId('t-stick'), knob = byId('t-knob');
   const R = 55;
   // Capture throws for a pointer the browser no longer counts as down.
-  const capture = (t, e) => { try { t.setPointerCapture(e.pointerId); } catch (err) { /* already up */ } };
-  let stickId = null, sx = 0, sy = 0, lookId = null, lx = 0, ly = 0;
-  const hold = (id, key) => {
+  const capture = (t: Element, e: PointerEvent) => { try { t.setPointerCapture(e.pointerId); } catch (err) { /* already up */ } };
+  let stickId: number | null = null, sx = 0, sy = 0, lookId: number | null = null, lx = 0, ly = 0;
+  const hold = (id: string, key: 'jump' | 'down' | 'zoom') => {
     const b = byId(id);
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); capture(b, e); touch[key] = true; b.classList.add('on'); });
     const up = () => { touch[key] = false; b.classList.remove('on'); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
   };
   hold('t-jump', 'jump'); hold('t-down', 'down'); hold('t-zoom', 'zoom');
-  const tap = (id, code) => byId(id).addEventListener('pointerdown', (e) => { e.preventDefault(); press(code); });
+  const tap = (id: string, code: string) => byId(id).addEventListener('pointerdown', (e) => { e.preventDefault(); press(code); });
   tap('t-rover', 'KeyR'); tap('t-fly', 'KeyF');
   byId('t-menu').addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -220,7 +223,7 @@ const touchUI = (() => {
       lx = e.clientX; ly = e.clientY;
     }
   });
-  const end = (e) => {
+  const end = (e: PointerEvent) => {
     if (e.pointerId === stickId) { stickId = null; stick.hidden = true; touch.fwd = touch.side = 0; }
     if (e.pointerId === lookId) lookId = null;
   };

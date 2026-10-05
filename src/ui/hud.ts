@@ -29,7 +29,7 @@ export const el = {
 };
 
 // radio: it came over the loop, so it gets the Quindar tones.
-export function note(text, radio?) {
+export function note(text: string, radio?: boolean) {
   el.note.textContent = text;
   hudState.noteTimer = 3.5;
   if (radio) sound.quindar();
@@ -38,8 +38,10 @@ export function note(text, radio?) {
 // Keycaps in one right-aligned column, what they do beside them; two
 // pairs of columns, the mode's own controls above the rest. A key spec
 // is space-separated caps; '–' and '/' stand between them as text.
+// A key spec and what it does.
+type KeyRow = [keys: string, what: string];
 export function updateKeysHelp() {
-  let head, own, aside = '';
+  let head: string, own: KeyRow[], aside = '';
   if (mode === 'ROVER') {
     head = 'Rover';
     own = [['W S', 'throttle / brake'], ['A D', 'steer'], ['R', 'dismount'], ['F', 'fly']];
@@ -55,15 +57,15 @@ export function updateKeysHelp() {
     head = 'On foot';
     own = [['WASD', 'walk'], ['Shift', 'run'], ['Space', 'crouch, release to push'], ['R', 'rover'], ['F', 'fly']];
   }
-  const all = [
+  const all: KeyRow[] = [
     ['Esc', 'worlds'], ['1 – 9 − = ⌫', 'switch world · Shift: more'], ['[ ]', 'sun elevation'], ['G', 'gravity'],
     ['Z', 'zoom · right button'], ['P', 'photo'], ['H', 'hide HUD'], ['V', 'head motion'], ['L', 'copy link'],
     ['Q', 'quality'], ['M', 'sound'], ['0', 'demo'],
   ];
-  const cap = (t) => t === '–' || t === '/' ? '<i>' + t + '</i>' : '<b>' + t + '</b>';
+  const cap = (t: string) => t === '–' || t === '/' ? '<i>' + t + '</i>' : '<b>' + t + '</b>';
   // Each section starts on a fresh row, so the gap between the pairs is
   // set per section: after every left-hand label.
-  const rows = (list) => list.map(([k, what], i) => '<span class="kk">' + k.split(' ').map(cap).join('') +
+  const rows = (list: KeyRow[]) => list.map(([k, what], i) => '<span class="kk">' + k.split(' ').map(cap).join('') +
     '</span><span class="kl' + (i % 2 ? '' : ' gap') + '">' + what + '</span>').join('');
   byId('keys').innerHTML =
     '<h5>' + head + '</h5>' + rows(own) + (aside ? '<p>' + aside + '</p>' : '') + '<h5>General</h5>' + rows(all);
@@ -75,7 +77,7 @@ export const hud = byId('hud');
 // been down there, Esc only brings up the world picker and leaves the
 // view alone — you can still look at it, and photograph it (P). The
 // readout steps up out of the picker's way.
-export function showOverlay(on) {
+export function showOverlay(on: boolean) {
   overlay.classList.toggle('hidden', !on);
   hud.classList.toggle('lift', on);
 }

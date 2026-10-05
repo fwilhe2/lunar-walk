@@ -37,18 +37,21 @@ export function seaView() {
   camera.getWorldPosition(_uw);
   const lvl = world.sea === undefined ? -Infinity : world.sea - dropAt(_uw.x, _uw.z);
   const under = _uw.y < lvl && !!scene.fog;
+  // Under, there is fog (tested), and a world with a sea has a sky.
+  // The fog is always FogExp2 (applyWorld()), the background a Colour
+  // (render/renderer.ts); three types both as any of their kinds.
   if (under) {
-    const s = world.sky, depth = lvl - _uw.y;
+    const s = world.sky!, depth = lvl - _uw.y;
     const k = 0.11 * Math.exp(-0.12 * depth);
-    scene.fog.color.setRGB(s.horizon[0] * k, s.horizon[1] * k * 0.8, s.horizon[2] * k * 0.5, THREE.LinearSRGBColorSpace);
+    scene.fog!.color.setRGB(s.horizon[0] * k, s.horizon[1] * k * 0.8, s.horizon[2] * k * 0.5, THREE.LinearSRGBColorSpace);
     (scene.fog as THREE.FogExp2).density = 0.045;
-    (scene.background as THREE.Color).copy(scene.fog.color);
+    (scene.background as THREE.Color).copy(scene.fog!.color);
   }
   if (under !== underSea) {
     underSea = under;
     skyDome.mesh.visible = !under && !!world.sky;
     if (!under) {
-      if (scene.fog) (scene.fog as THREE.FogExp2).density = world.fog.density;
+      if (scene.fog) (scene.fog as THREE.FogExp2).density = world.fog!.density;   // scene fog only where the world has fog
       (scene.background as THREE.Color).setRGB(0, 0, 0);
       updateSkyColors();
     }
@@ -59,6 +62,7 @@ function updateKey() {
   const n = world.night, pri = liveCompanions[0];
   const rSun = Math.atan(world.sunSize / 12000);
   const wasNight = KEY.night, kx = KEY_XZ.x, kz = KEY_XZ.y;
+  // n and pri are both there whenever KEY.night is (tested here).
   KEY.night = !!(n && pri && sunElev < -rSun);
   if (!KEY.night) {
     KEY_DIR.copy(SUN_DIR); KEY_XZ.copy(SUN_XZ);
@@ -68,18 +72,18 @@ function updateKey() {
     KEY.U = 1;
     sun.color.set(world.sunColor);
   } else {
-    const C = _keyC.copy(pri.userData.pos).normalize();
+    const C = _keyC.copy(pri!.userData.pos).normalize();
     KEY_DIR.copy(C);
     KEY_XZ.set(C.x, C.z).normalize();
-    KEY.elev = Math.asin(C.y); KEY.tan = C.y / Math.max(1e-4, Math.hypot(C.x, C.z)); KEY.rad = n.radius;
+    KEY.elev = Math.asin(C.y); KEY.tan = C.y / Math.max(1e-4, Math.hypot(C.x, C.z)); KEY.rad = n!.radius;
     // A Lambert sphere lit by the sun, seen from phase angle a.
     const a = Math.acos(THREE.MathUtils.clamp(-SUN_DIR.dot(C), -1, 1));
     const phase = (Math.sin(a) + (Math.PI - a) * Math.cos(a)) / Math.PI;
-    KEY.U = 1 / n.ratio;
-    KEY.scale = n.ratio * phase * KEY.U;
-    sun.color.set(n.color);
+    KEY.U = 1 / n!.ratio;
+    KEY.scale = n!.ratio * phase * KEY.U;
+    sun.color.set(n!.color);
   }
-  KEY.stars = KEY.night ? n.stars : 1;
+  KEY.stars = KEY.night ? n!.stars : 1;
   eyePass.uniforms.uKey.value = world.eye[0] * (KEY.night ? 0.25 : 1);
   sun.intensity = world.sunPower * KEY.scale;
   TS.tsSun.value.y = KEY.rad;
@@ -93,7 +97,7 @@ function updateKey() {
   GROUND_U.rgMicro.value.z = KEY.night ? 0 : (world.micro[2] ?? 0.6);
   if (KEY.night !== wasNight) {
     eyePass.uniforms.uReset.value = 1;
-    if (session.initialized && !session.loading) note(KEY.night ? 'NIGHT · ' + n.label : 'SUNRISE', true);
+    if (session.initialized && !session.loading) note(KEY.night ? 'NIGHT · ' + n!.label : 'SUNRISE', true);
   }
   if (KEY_XZ.x !== kx || KEY_XZ.y !== kz) terrainShadows.invalidate();
 }

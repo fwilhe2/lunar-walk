@@ -33,13 +33,13 @@ import { terrainShadows } from '../terrain/shadows';
 import { chunkStreamer } from '../terrain/streamer';
 import { el, hudState, updateKeysHelp } from '../ui/hud';
 import { rover } from '../vehicles/rover';
-import { VIEW, activateWorld, world, worldId } from '../worlds/index';
+import { VIEW, activateWorld, world, worldId, type WorldId } from '../worlds/index';
 import { setWorld } from '../worlds/terrains';
 import { byId } from '../util/dom';
 
 /* Whatever shows which world is current registers here (the picker,
    src/ui/picker.ts), so switching worlds never has to know about it. */
-export const worldUI = {
+export const worldUI: { select: (id: WorldId) => void; settled: () => Promise<void> } = {
   select: (id) => {},
   settled: () => Promise.resolve(),
 };
@@ -49,11 +49,17 @@ export const worldUI = {
    task — while the loading screen shows and the page stays live; then
    applyWorldNow() swaps everything over at once. A later choice
    supersedes an earlier one still preparing. Resolves once applied. */
-export let preparing = null;
-export function applyWorld(id) {
+// done: set once the job is made, since its own callback checks for it.
+interface PrepJob { id: WorldId; done?: Promise<void> }
+export let preparing: PrepJob | null = null;
+export function applyWorld(id: WorldId) {
   if (session.initialized && id === worldId && !preparing) return Promise.resolve();
+  // Compares the job with an id, so it is never true: a second choice of
+  // the world being prepared starts a new job. Left as it behaves;
+  // `preparing?.id === id` is what it means.
+  // @ts-expect-error -- a job never equals a WorldId
   if (preparing === id) return preparing.done;
-  const job: { id: any; done?: Promise<void> } = preparing = { id };
+  const job: PrepJob = preparing = { id };
   bootShow(VIEW[id].name, 0, 'preparing textures');
   boot.hidden = false;
   worldUI.select(id);
@@ -66,7 +72,7 @@ export function applyWorld(id) {
   return job.done;
 }
 
-function applyWorldNow(id) {
+function applyWorldNow(id: WorldId) {
   if (session.initialized && id === worldId) return;
   session.initialized = true;
   activateWorld(id);
@@ -135,7 +141,7 @@ function applyWorldNow(id) {
   setHapke(rockSystem.hapke, { ...hp, B0: hp.B0 * 0.5, Bc0: hp.Bc0 * 0.5, c: hp.c * 0.6, theta: hp.theta + 8 });
   GROUND_U.rgMean.value = rego.mean;
   GROUND_U.rgMeanC.value.copy(rego.meanC);
-  GROUND_U.rgMicro.value.set(world.micro[0], world.micro[1], world.micro[2] ?? 0.6, 0);
+  GROUND_U.rgMicro.value.set(world.micro[0]!, world.micro[1]!, world.micro[2] ?? 0.6, 0);   // every row has at least two
   uSparkle.value = world.sparkle;
   // The soil colour that settles on rock tops: the regolith map's
   // mean, through the body's typical vertex albedo.
@@ -158,7 +164,7 @@ function applyWorldNow(id) {
   // Whether the scene has fog is compiled into every program, so
   // every material in the scene needs a rebuild after that changes.
   scene.traverse((o) => {
-    const m = (o as THREE.Mesh).material;
+    const m = (o as THREE.Mesh).material;   // undefined on what is not a mesh, which the test below skips
     if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
     else if (m) m.needsUpdate = true;
   });

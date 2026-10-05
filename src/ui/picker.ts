@@ -1,7 +1,7 @@
 import { applyWorld, worldUI } from '../app/worlds';
 import { renderer } from '../render/renderer';
 import { overlay } from './hud';
-import { WORLD_IDS } from '../worlds/index';
+import { WORLD_IDS, isWorldId, type WorldId } from '../worlds/index';
 import { VIEW } from '../worlds/index';
 import { byId } from '../util/dom';
 
@@ -15,8 +15,12 @@ import { byId } from '../util/dom';
    can't be walked yet are shown, dimmed — the walkable ones are
    exactly WORLD_IDS, so a new world lights up here once it is listed
    there and below. Radii in km; colours are only for the silhouettes. */
+interface Body { n?: string; r: number; c?: string; gas?: boolean }
+// _h: the html last written, so an unchanged one is not reparsed.
+type PickEl = HTMLElement & { _h?: string };
+
 export const picker = (() => {
-  const B = {
+  const BODIES = {
     sun: { r: 696000 },
     mercury: { r: 2440, c: '#a39d95' }, venus: { r: 6052, c: '#dcc596' },
     earth: { n: 'Earth', r: 6371, c: '#7d9cc4' }, moon: { r: 1737, c: '#bdb9b2' },
@@ -36,89 +40,105 @@ export const picker = (() => {
     oberon: { n: 'Oberon', r: 761, c: '#a59c94' },
     neptune: { n: 'Neptune', r: 24622, c: '#7193d8', gas: true }, triton: { n: 'Triton', r: 1353, c: '#d8cac2' },
     pluto: { r: 1188, c: '#d6b698' }, charon: { r: 606, c: '#a8a49f' },
-  };
+  } satisfies Record<string, Body>;
+  type BodyId = keyof typeof BODIES;
+  // Every entry as a Body, so the optional fields read on any of them.
+  const B: Record<BodyId, Body> = BODIES;
+  // One system: the planet (or the lone body) and its moons.
+  interface Sys { id: BodyId; moons: BodyId[] }
+  // What paint() makes an element from: layout() returns a list of them.
+  interface Item {
+    key: string; id?: BodyId | null; tag?: 'div' | 'button'; cls: string;
+    html?: string; act?: string; label?: string; style: Record<string, string>;
+  }
   // In order out from the sun; moons in order out from their planet.
-  const SYS = [
+  const SYS = ([
     ['mercury'], ['venus'], ['earth', 'moon'], ['mars', 'phobos', 'deimos'], ['vesta'], ['ceres'],
     ['jupiter', 'io', 'europa', 'ganymede', 'callisto'],
     ['saturn', 'mimas', 'enceladus', 'tethys', 'dione', 'rhea', 'titan', 'iapetus'],
     ['uranus', 'miranda', 'ariel', 'umbriel', 'titania', 'oberon'], ['neptune', 'triton'], ['pluto', 'charon'],
-  ].map(([id, ...moons]) => ({ id, moons }));
-  const sysOf = {};
+  ] satisfies [BodyId, ...BodyId[]][]).map(([id, ...moons]): Sys => ({ id, moons }));
+  // Filled for every body in SYS, and checked below for every world, so
+  // the lookups of a world's or a shown system's entry never miss.
+  const sysOf: Partial<Record<BodyId, BodyId>> = {};
   for (const s of SYS) for (const id of [s.id, ...s.moons]) sysOf[id] = s.id;
   for (const id of WORLD_IDS) if (!sysOf[id]) console.warn('world picker: no entry for', id);
-  const walk = (id) => WORLD_IDS.includes(id);
-  const name = (id) => walk(id) ? VIEW[id].name : B[id].n;
-  const members = (s) => [s.id, ...s.moons];
-  const avail = (s) => members(s).some(walk);
-  const first = (s) => members(s).find(walk);
-  const SYSM = Object.fromEntries(SYS.map((s) => [s.id, s]));
+  // The predicate also checks that every world has a body here.
+  const walk = (id: BodyId): id is WorldId => isWorldId(id);
+  const name = (id: BodyId) => walk(id) ? VIEW[id].name : B[id].n;
+  const members = (s: Sys) => [s.id, ...s.moons];
+  const avail = (s: Sys) => members(s).some(walk);
+  const first = (s: Sys) => members(s).find(walk);
+  // Asked only for systems' ids (st.view, zoom targets, sysOf's values).
+  const SYSM: Partial<Record<BodyId, Sys>> = Object.fromEntries(SYS.map((s) => [s.id, s]));
 
   const root = byId('picker');
-  const els = new Map();
+  const els = new Map<string, PickEl>();
   // cur: the keyboard's cursor, drawn like a hover.
-  const st = { level: 1, view: 'earth', body: 'moon', cur: 'earth' };
+  const st: { level: 1 | 2; view: BodyId; body: WorldId; cur: BodyId } = { level: 1, view: 'earth', body: 'moon', cur: 'earth' };
   const MINR = 1.3;
-  const px = (n) => n.toFixed(1) + 'px';
-  const halfW = (id, r) => id === 'saturn' ? r * 2.27 : (id === 'phobos' || id === 'deimos') ? r * 1.18 : r;
-  const on = (o, ok) => (o ? ' on' : '') + (ok ? '' : ' off');
-  const cur = (id) => id === st.cur ? ' hov' : '';
-  function kmpx(sc) {
+  const px = (n: number) => n.toFixed(1) + 'px';
+  const halfW = (id: BodyId, r: number) => id === 'saturn' ? r * 2.27 : (id === 'phobos' || id === 'deimos') ? r * 1.18 : r;
+  const on = (o: boolean, ok: boolean) => (o ? ' on' : '') + (ok ? '' : ' off');
+  const cur = (id: BodyId) => id === st.cur ? ' hov' : '';
+  function kmpx(sc: number) {
     const v = 1 / sc;
     if (v < 100) return '1 px ≈ ' + +v.toPrecision(2) + ' km';
     const p = Math.pow(10, Math.floor(Math.log10(v)) - 1);
     return '1 px ≈ ' + (Math.round(v / p) * p).toLocaleString('en').replace(/,/g, ' ') + ' km';
   }
   // Spread slots of the given widths over [x0, x1], spare room shared out.
-  function pack(ws, x0, x1) {
+  function pack(ws: number[], x0: number, x1: number) {
     const extra = Math.max(0, (x1 - x0 - ws.reduce((a, b) => a + b, 0)) / ws.length);
     let x = x0;
     return ws.map((w) => { const sw = w + extra, c = x + sw / 2; x += sw; return { c, sw }; });
   }
-  const sub = (id) => walk(id) ? VIEW[id].gTxt : B[id].gas ? 'no surface' : 'not yet';
-  const disc = (key, id, cx, cy, r, cls, op) => {
+  const sub = (id: BodyId) => walk(id) ? VIEW[id].gTxt : B[id].gas ? 'no surface' : 'not yet';
+  const disc = (key: string, id: BodyId, cx: number, cy: number, r: number, cls: string, op: string): Item => {
     const lumpy = id === 'phobos' || id === 'deimos';
     const w = lumpy ? r * 2.36 : r * 2, h = lumpy ? r * 1.68 : r * 2;
     return { key, id, cls: 'disc ' + cls + (lumpy ? ' lumpy' : ''),
       html: id === 'saturn' ? '<i class="ring sat"></i>' : id === 'uranus' ? '<i class="ring ura"></i>' : '',
       style: { left: px(cx - w / 2), top: px(cy - h / 2), width: px(w), height: px(h), 'font-size': px(r), '--c': B[id].c || '', opacity: op } };
   };
-  const lbl = (key, id, x, y, html, cls, op) => ({ key, id, cls: 'lbl ' + cls, html, style: { left: px(x), top: px(y), opacity: op } });
-  const hit = (key, id, x, w, h, act) => ({ key, id, tag: 'button', cls: 'hit' + (act ? '' : ' off'), act, label: name(id),
+  const lbl = (key: string, id: BodyId | null, x: number, y: number, html: string, cls: string, op: string): Item => ({ key, id, cls: 'lbl ' + cls, html, style: { left: px(x), top: px(y), opacity: op } });
+  const hit = (key: string, id: BodyId, x: number, w: number, h: number, act: string): Item => ({ key, id, tag: 'button', cls: 'hit' + (act ? '' : ' off'), act, label: name(id),
     style: { left: px(x), top: '0px', width: px(w), height: px(h) } });
 
-  function layout(W, H) {
-    const it = [], hb = Math.round(Math.max(96, Math.min(150, H * 0.19))), y = hb * 0.42, ly = hb * 0.72;
+  // Slots from pack() and the entries of sol/SYSM it reads are there by
+  // construction: one slot per width, one entry per system.
+  function layout(W: number, H: number) {
+    const it: Item[] = [], hb = Math.round(Math.max(96, Math.min(150, H * 0.19))), y = hb * 0.42, ly = hb * 0.72;
     it.push({ key: 'ecl', cls: 'ecl', style: { top: px(y) } });
     // Level one: one scale for the sun and every planet.
     const s1 = Math.min(hb * 0.3, W * 0.042) / B.jupiter.r;
     const P1 = pack(SYS.map((s) => Math.max(Math.min(64, W * 0.065), 2 * halfW(s.id, B[s.id].r * s1) + 12)), W * 0.07, W * 0.99);
-    const sol = {};
-    SYS.forEach((s, i) => (sol[s.id] = { ...P1[i], r: Math.max(MINR, B[s.id].r * s1) }));
+    const sol: Partial<Record<BodyId, { c: number; sw: number; r: number }>> = {};
+    SYS.forEach((s, i) => (sol[s.id] = { ...P1[i]!, r: Math.max(MINR, B[s.id].r * s1) }));
     const sunR = B.sun.r * s1, sunC = W * 0.03 - sunR;
     // Level two: one scale for the moons, the planet cropped at the left
     // when it is too big to show whole.
-    const L2 = st.level === 2, V = SYSM[st.view], sel = sysOf[st.body];
+    const L2 = st.level === 2, V = SYSM[st.view]!, sel = sysOf[st.body];
     let sc = s1, R = 0, full = true, pc = 0, edge = 0, K = 1, xp = 0;
-    const mpos = {};
+    const mpos: Partial<Record<BodyId, { c: number; sw: number; r: number }>> = {};
     if (L2) {
       const maxR = V.moons.length ? Math.max(...V.moons.map((m) => B[m].r)) : B[V.id].r;
       sc = hb * (V.moons.length ? 0.26 : 0.3) / maxR;
       R = B[V.id].r * sc; full = R <= hb * 0.36;
       pc = full ? W * 0.04 + R + 10 : W * 0.055 - R;
       edge = full ? pc + R : W * 0.055;
-      xp = sol[V.id].c; K = Math.min(sc / s1, 30);
+      xp = sol[V.id]!.c; K = Math.min(sc / s1, 30);
       const x0 = full ? edge + 44 : edge + 120, slot = Math.max(84, Math.min(120, W * 0.11));
       const P2 = pack(V.moons.map((m) => Math.max(2 * halfW(m, B[m].r * sc) + 16, slot)), x0, Math.min(W * 0.97, x0 + V.moons.length * slot * 1.15));
-      V.moons.forEach((m, i) => (mpos[m] = { ...P2[i], r: Math.max(MINR, B[m].r * sc) }));
+      V.moons.forEach((m, i) => (mpos[m] = { ...P2[i]!, r: Math.max(MINR, B[m].r * sc) }));
     }
     // Everything else flies out as if the camera zoomed onto the
     // planet's visible part. Dimming is opacity too, so it is set here.
-    const away = (c) => (full ? pc : edge) + (c - xp) * K;
-    const dim = (ok) => ok ? '1' : '0.28';
+    const away = (c: number) => (full ? pc : edge) + (c - xp) * K;
+    const dim = (ok: boolean) => ok ? '1' : '0.28';
     it.push(disc('d:sun', 'sun', L2 ? away(sunC) : sunC, y, sunR, 'sun', L2 ? '0' : '1'));
     for (const s of SYS) {
-      const S = sol[s.id], ok = avail(s), isP = L2 && s.id === V.id;
+      const S = sol[s.id]!, ok = avail(s), isP = L2 && s.id === V.id;
       let c = S.c, r = S.r, op = dim(ok), lx = S.c;
       if (isP) { c = pc; r = R; lx = full ? pc : edge + 46; op = dim(walk(s.id)); }
       else if (L2) { c = lx = away(S.c); r = S.r * Math.min(K, 3); op = '0'; }
@@ -146,19 +166,19 @@ export const picker = (() => {
 
   // Keyed: an element keeps its identity across levels, so moving
   // between them is a CSS transition rather than a rebuild.
-  function paint(items) {
+  function paint(items: Item[]) {
     const seen = new Set();
     for (const it of items) {
       const tag = it.tag || 'div';
-      let el = els.get(it.key);
+      let el: PickEl | null | undefined = els.get(it.key);
       if (el && el.tagName.toLowerCase() !== tag) { el.remove(); el = null; }
-      if (!el) { el = document.createElement(tag); if (tag === 'button') el.type = 'button'; els.set(it.key, el); root.appendChild(el); }
+      if (!el) { el = document.createElement(tag); if (tag === 'button') el.setAttribute('type', 'button'); els.set(it.key, el); root.appendChild(el); }
       if (el.className !== it.cls) el.className = it.cls;
       if (it.html !== undefined && el._h !== it.html) { el.innerHTML = it.html; el._h = it.html; }
       if (it.id) el.dataset.id = it.id;
       if (it.act) el.dataset.act = it.act; else el.removeAttribute('data-act');
       if (tag === 'button') { el.setAttribute('aria-label', it.label || ''); el.setAttribute('aria-disabled', it.act ? 'false' : 'true'); }
-      for (const k in it.style) el.style.setProperty(k, it.style[k]);
+      for (const k in it.style) el.style.setProperty(k, it.style[k]!);   // k is a key of it.style
       seen.add(it.key);
     }
     for (const [k, el] of els) if (!seen.has(k)) { el.remove(); els.delete(k); }
@@ -181,27 +201,29 @@ export const picker = (() => {
   // The overlay behind it is the click target for pointer lock.
   root.addEventListener('click', (e) => {
     e.stopPropagation();
-    const b = (e.target as Element).closest<HTMLElement>('[data-act]');
+    const b = (e.target as Element).closest<HTMLElement>('[data-act]');   // a click's target is an element
     if (!b) return;
-    const [a, id] = b.dataset.act.split(':');
+    // The selector matched data-act, and layout() wrote it as a verb and a body's id.
+    const [a, id] = b.dataset.act!.split(':') as [string, BodyId];
     if (a === 'zoom') zoom(id);
-    else if (a === 'body' && id !== st.body) applyWorld(id);
+    else if (a === 'body' && id !== st.body && walk(id)) applyWorld(id);
     else if (a === 'back') { st.level = 1; st.cur = st.view; render(); }
   });
   // Zooming in picks the system's first walkable world, unless you
   // are on one of its worlds already — that would only reload it.
-  function zoom(id) {
+  // id is a system with a world in it (avail).
+  function zoom(id: BodyId) {
     st.level = 2; st.view = id;
-    if (sysOf[st.body] === id) { st.cur = st.body; render(); } else applyWorld(first(SYSM[id]));
+    if (sysOf[st.body] === id) { st.cur = st.body; render(); } else applyWorld(first(SYSM[id]!)!);
   }
   // What the arrows step through: the systems you can visit, or the
   // walkable bodies of the one zoomed into.
-  const stops = () => st.level === 1 ? SYS.filter(avail).map((s) => s.id) : members(SYSM[st.view]).filter(walk);
+  const stops = () => st.level === 1 ? SYS.filter(avail).map((s) => s.id) : members(SYSM[st.view]!).filter(walk);
 
   const unhover = () => root.querySelectorAll('.hov').forEach((n) => n.classList.remove('hov'));
   root.addEventListener('pointerover', (e) => {
     unhover();
-    const b = (e.target as Element).closest<HTMLElement>('button[data-id]');
+    const b = (e.target as Element).closest<HTMLElement>('button[data-id]');   // a pointer event's target is an element
     if (b && b.dataset.act) root.querySelectorAll('[data-id="' + b.dataset.id + '"]').forEach((n) => n.classList.add('hov'));
   });
   root.addEventListener('pointerleave', unhover);
@@ -219,26 +241,26 @@ export const picker = (() => {
     settled() {
       return new Promise<void>((r) => setTimeout(r, Math.max(0, busyUntil - performance.now())));
     },
-    select(id) {
+    select(id: WorldId) {
       st.body = id;
-      if (st.level === 2) st.view = sysOf[id];
-      st.cur = st.level === 1 ? sysOf[id] : id;
+      if (st.level === 2) st.view = sysOf[id]!;
+      st.cur = st.level === 1 ? sysOf[id]! : id;
       render();
     },
     // While the picker is up, ← → move the cursor, ↓ zooms into the
     // system under it, ↑ back out, Enter goes there. True if taken.
-    key(code) {
+    key(code: string) {
       if (overlay.hidden || overlay.classList.contains('hidden')) return false;
       const list = stops();
       if (code === 'ArrowLeft' || code === 'ArrowRight') {
         const i = list.indexOf(st.cur), n = list.length;
-        st.cur = list[i < 0 ? 0 : (i + (code === 'ArrowRight' ? 1 : n - 1)) % n];
+        st.cur = list[i < 0 ? 0 : (i + (code === 'ArrowRight' ? 1 : n - 1)) % n]!;   // in range: some system is always walkable
       } else if (code === 'ArrowDown' && st.level === 1) { zoom(st.cur); return true; }
       else if (code === 'ArrowUp' && st.level === 2) { st.level = 1; st.cur = st.view; }
       else if (code === 'Enter' || code === 'NumpadEnter') {
         // Enter on the world you are on resumes it.
         if (st.level === 1) zoom(st.cur);
-        else if (st.cur !== st.body) applyWorld(st.cur);
+        else if (st.cur !== st.body) { if (walk(st.cur)) applyWorld(st.cur); }   // at level 2 every stop is walkable
         else renderer.domElement.requestPointerLock();
         return true;
       } else return code === 'ArrowUp' || code === 'ArrowDown';

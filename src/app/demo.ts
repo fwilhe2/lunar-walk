@@ -8,11 +8,11 @@ import { setMode } from '../player/modes';
 import { _demoAhead, _demoN } from '../player/physics';
 import { mode, player } from '../player/player';
 import { SUN_DIR, setSunElev, sunElev, updateSunDir } from '../render/lights';
-import { quality } from '../render/quality';
+import { quality, type Tier } from '../render/quality';
 import { pitchObj, yawObj } from '../render/renderer';
 import { liveCompanions } from '../sky/companions';
 import { hud, hudState, showOverlay } from '../ui/hud';
-import { world, worldId } from '../worlds/index';
+import { world, worldId, type WorldId } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
    DEMO — a slow walk, for a screensaver or a "walk with me" video.
@@ -28,19 +28,22 @@ import { world, worldId } from '../worlds/index';
    reach — and rests on each for a long time. The sun creeps very
    slowly, because on an airless world the shadows are the scenery.
    ═════════════════════════════════════════════════════════════ */
+// What the head rests on.
+type Gaze = 'ahead' | 'sun' | 'sky' | 'range';
 export const demo = (() => {
-  let on = false, lastWorld = null, sunWay = 1, prior = null;
-  let gaze = 'ahead', left = 0, actAge = 0, jumpIn = 10, hold = 0, prevGaze = '';
+  // prior: the quality setting the demo overrode, to put back.
+  let on = false, lastWorld: WorldId | null = null, sunWay = 1, prior: { id: Tier; auto: boolean } | null = null;
+  let gaze: Gaze = 'ahead', left = 0, actAge = 0, jumpIn = 10, hold = 0, prevGaze: Gaze | '' = '';
   let yawTarget = 0, pitchTarget = 0;
 
   const clearKeys = () => { for (const k in keys) keys[k] = false; };
-  const rnd = (a, b) => a + Math.random() * (b - a);
-  const wrap = (a) => { while (a > Math.PI) a -= 6.2832; while (a < -Math.PI) a += 6.2832; return a; };
+  const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+  const wrap = (a: number) => { while (a > Math.PI) a -= 6.2832; while (a < -Math.PI) a += 6.2832; return a; };
 
   // The direction (yaw, pitch) of the highest skyline within reach, or
   // null on ground with nothing worth turning to.
-  function findRange(gh) {
-    let best = null;
+  function findRange(gh: number) {
+    let best: { yaw: number; pitch: number } | null = null;
     for (let i = 0; i < 24; i++) {
       const yaw = i / 24 * 6.2832;
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -53,23 +56,23 @@ export const demo = (() => {
   }
 
   // Pick the next thing to look at. Returns [kind, seconds].
-  function choose(gh) {
-    const opts = [];
+  function choose(gh: number): [Gaze, number] {
+    const opts: Gaze[] = [];
     if (prevGaze !== 'ahead' || gaze !== 'ahead') opts.push('ahead');
     if (world.id !== 'venus') opts.push('sun');
     if (liveCompanions.length) opts.push('sky');
     if (findRange(gh)) opts.push('range');
     const pool = opts.filter((o) => o !== gaze);
-    const k = pool.length ? pool[Math.floor(Math.random() * pool.length)] : 'ahead';
+    const k = pool.length ? pool[Math.floor(Math.random() * pool.length)]! : 'ahead';   // in range: pool is not empty
     return [k, k === 'ahead' ? rnd(35, 70) : rnd(25, 50)];
   }
 
-  function aim(gh) {
+  function aim(gh: number) {
     if (gaze === 'sun') {
       yawTarget = Math.atan2(-SUN_DIR.x, -SUN_DIR.z);
       pitchTarget = Math.min(Math.asin(SUN_DIR.y), 0.55);
     } else if (gaze === 'sky' && liveCompanions.length) {
-      const c = liveCompanions[0].userData.pos;
+      const c = liveCompanions[0]!.userData.pos;   // [0] exists by the length test
       yawTarget = Math.atan2(-c.x, -c.z);
       pitchTarget = Math.min(Math.asin(c.clone().normalize().y), 0.6);
     } else if (gaze === 'range') {
@@ -109,7 +112,7 @@ export const demo = (() => {
     },
     toggle() { on ? this.stop() : this.start(); },
 
-    update(dt) {
+    update(dt: number) {
       if (!on) return;
 
       // Stay on foot. A world change (a key press) restarts the look.

@@ -17,15 +17,16 @@ import { byId } from '../util/dom';
    there — the horizon on the Moon is two and a half kilometres off,
    and everything on it looks the same distance away. */
 const HOME_X = 8, HOME_Z = -11;           // where landmark() stands the flag or beacon
+// pin: hold at the edge when off the tape.
+interface CompassMark { brg: number; glyph: string; color: string; pin?: boolean }
 const compass = (() => {
-  const cv = byId('compass', HTMLCanvasElement), g = cv.getContext('2d');
+  const cv = byId('compass', HTMLCanvasElement), g = cv.getContext('2d')!;   // a canvas's first 2d context is never refused
   const W = 420, H = 46, SPAN = 120, TAPE = 30;
   const NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  let dpr = 0, plate = null;
+  let dpr = 0, plate: CanvasGradient | null = null;
   return {
-    // marks: [{ brg, glyph, color, pin }] — pin: hold at the edge when off the tape.
-    draw(hdg, marks) {
+    draw(hdg: number, marks: readonly CompassMark[]) {
       const d = Math.min(devicePixelRatio || 1, 2);
       if (d !== dpr) {
         dpr = d; cv.width = W * d; cv.height = H * d;
@@ -36,9 +37,9 @@ const compass = (() => {
       }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, W, H);
-      g.fillStyle = plate;
+      g.fillStyle = plate!;   // made on the first draw, since dpr starts at 0
       g.fillRect(0, 0, W, TAPE);
-      const off = (b) => ((((b - hdg) % 360) + 540) % 360) - 180;
+      const off = (b: number) => ((((b - hdg) % 360) + 540) % 360) - 180;
       g.textAlign = 'center';
       for (let b = 0; b < 360; b += 5) {
         const o = off(b), px = W / 2 + o * W / SPAN;
@@ -49,7 +50,7 @@ const compass = (() => {
         g.fillRect(Math.round(px), TAPE - (major ? 9 : mid ? 6 : 4), 1, major ? 9 : mid ? 6 : 4);
         // Cardinal points by name; between them, every 30°, in tens of
         // degrees as a runway or a heading bug reads them: 24 is 240°.
-        if (major) { g.font = '600 11px ' + SANS; g.fillStyle = b === 0 ? '#e8b04b' : '#eef0f2'; g.fillText(NAMES[b / 45], px, 13); }
+        if (major) { g.font = '600 11px ' + SANS; g.fillStyle = b === 0 ? '#e8b04b' : '#eef0f2'; g.fillText(NAMES[b / 45]!, px, 13); }
         else if (b % 30 === 0) { g.font = '10px ui-monospace, Menlo, monospace'; g.fillStyle = 'rgba(143,152,162,.9)'; g.fillText(String(b / 10), px, 13); }
       }
       g.globalAlpha = 1;
@@ -73,8 +74,8 @@ const compass = (() => {
     },
   };
 })();
-const bearing = (dx, dz) => ((Math.atan2(dx, -dz) * 180 / Math.PI) + 360) % 360;
-const _cmpMarks = [];
+const bearing = (dx: number, dz: number) => ((Math.atan2(dx, -dz) * 180 / Math.PI) + 360) % 360;
+const _cmpMarks: CompassMark[] = [];
 export function drawCompass() {
   const hdg = ((-yawObj.rotation.y * 180 / Math.PI) % 360 + 360) % 360;
   const f = mode === 'ROVER' ? rover.state.pos : player.pos;
@@ -82,7 +83,8 @@ export function drawCompass() {
   _cmpMarks.length = 0;
   _cmpMarks.push({ brg: bearing(hx, hz), glyph: '▲', color: '#e8b04b', pin: true });
   if (!world.noSun && sunElev > -0.02) _cmpMarks.push({ brg: bearing(SUN_DIR.x, SUN_DIR.z), glyph: '●', color: '#fff3c8' });
-  if (liveCompanions.length) { const c = liveCompanions[0].userData.pos; _cmpMarks.push({ brg: bearing(c.x, c.z), glyph: '○', color: '#b8c7e0' }); }
+  // [0] exists by the length test.
+  if (liveCompanions.length) { const c = liveCompanions[0]!.userData.pos; _cmpMarks.push({ brg: bearing(c.x, c.z), glyph: '○', color: '#b8c7e0' }); }
   compass.draw(hdg, _cmpMarks);
   el.hdg.textContent = String(Math.round(hdg) % 360).padStart(3, '0') + '°';
   el.home.textContent = (world.landmark === 'beacon' ? 'BEACON ' : 'FLAG ') +
