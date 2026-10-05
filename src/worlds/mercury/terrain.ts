@@ -1,6 +1,6 @@
 import type { TerrainDef } from '../types';
 import { AUX } from '../../kernel/terrain';
-import { cellCraters, cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
+import { ccSlot, cellCraters, cellRnd, craterAt, rayBrightness } from '../../kernel/craters';
 import { fbm, hash2, sstep, valueNoise } from '../../kernel/noise';
 import { CRATER_LAYERS, HOL_LI, WORLD } from '../../kernel/world';
 
@@ -130,11 +130,11 @@ function mercScarp(x: number, z: number) {
    hollow province and a crater are there — so it is a pure function of
    the cell and cached like the craters are, direct-mapped: the crater
    test behind it scans three classes. false: no hollow in that cell. */
-var HC_BITS = 12, HC_SIZE = 1 << HC_BITS, HC_SHIFT = 32 - HC_BITS;
+var HC_BITS = 12, HC_SIZE = 1 << HC_BITS;
 var hcX = new Int32Array(HC_SIZE), hcZ = new Int32Array(HC_SIZE), hcL = new Array(HC_SIZE).fill(null);
 function hollowCacheReset() { hcL.fill(null); }
 function hollowCell(ix: number, iz: number) {
-  var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> HC_SHIFT;
+  var slot = ccSlot(ix, iz, HC_BITS);
   var hit = hcL[slot];
   if (hit !== null && hcX[slot] === ix && hcZ[slot] === iz) return hit;
   var out: false | { x: number; z: number; r: number; dep: number } = false;

@@ -14,7 +14,7 @@ export function cellRnd(cx: number, cz: number, salt: number, k: number): number
    than everything else in terrainHeight() put together. A miss or
    a collision just recomputes, which is always safe, because the
    list is a pure function of (layer, cell). */
-var CC_BITS = 13, CC_SIZE = 1 << CC_BITS, CC_SHIFT = 32 - CC_BITS;
+var CC_BITS = 13, CC_SIZE = 1 << CC_BITS;
 var ccX: Int32Array[] = [], ccZ: Int32Array[] = [], ccList: (Crater[] | null)[][] = [];
 export function craterCacheReset() {
   ccX = []; ccZ = []; ccList = [];
@@ -50,13 +50,18 @@ export interface Crater {
   rim: number;           // ray phase and rover scatter
 }
 
+// Multiply, add, multiply: an xor of the two products sends (1, 1)
+// and (-1, -1) to the same slot, and that pair sits in the 3×3 scan
+// around the origin — where every world lands you — so it missed
+// four times a query there. This mix leaves no 3×3 window within
+// 300 cells of the origin with a collision in it, at 12 bits or 13
+// (tests/craters.test.ts). Knobs and Mercury's hollows use it too.
+export function ccSlot(cx: number, cz: number, bits: number): number {
+  return Math.imul(Math.imul(cx, 0x27d4eb2d) + cz, 0x165667b1) >>> (32 - bits);
+}
+
 export function cellCraters(li: number, cx: number, cz: number): Crater[] {
-  // Multiply, add, multiply: an xor of the two products sends (1, 1)
-  // and (-1, -1) to the same slot, and that pair sits in the 3×3 scan
-  // around the origin — where every world lands you — so it missed
-  // four times a query there. This mix leaves no 3×3 window within
-  // 300 cells of the origin with a collision in it.
-  var slot = Math.imul(Math.imul(cx, 0x27d4eb2d) + cz, 0x165667b1) >>> CC_SHIFT;
+  var slot = ccSlot(cx, cz, CC_BITS);
   // li is a layer of the active world and slot is masked to the table's
   // size, so every index here is in range (hence the !s); the lists are
   // filled with null, so a slot is a list or null, never undefined.

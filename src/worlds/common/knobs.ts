@@ -1,9 +1,9 @@
-import { cellCraters, cellRnd } from '../../kernel/craters';
+import { ccSlot, cellCraters, cellRnd } from '../../kernel/craters';
 import { fbm, sstep, valueNoise } from '../../kernel/noise';
 import { CRATER_LAYERS, KNOB_LI, WORLD } from '../../kernel/world';
 
 export var CA_KCELL = 240, CA_KN = 0;
-var KC_BITS = 12, KC_SIZE = 1 << KC_BITS, KC_SHIFT = 32 - KC_BITS;
+var KC_BITS = 12, KC_SIZE = 1 << KC_BITS;
 type Knob = { x: number; z: number; r: number; H: number };
 var kcX = new Int32Array(KC_SIZE), kcZ = new Int32Array(KC_SIZE), kcL = new Array<Knob | false | null>(KC_SIZE).fill(null);
 // How much of a degraded crater rim is at (x, z): 1 on the crest of an
@@ -32,7 +32,7 @@ function knobRim(x: number, z: number) {
 // One knob per cell at most, decided at its own centre, so a pure
 // function of the cell; cached direct-mapped like the craters.
 function knobCell(ix: number, iz: number) {
-  var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> KC_SHIFT;
+  var slot = ccSlot(ix, iz, KC_BITS);
   // slot is masked to the table's size, which is filled with null.
   var hit = kcL[slot] as Knob | false | null;
   if (hit !== null && kcX[slot] === ix && kcZ[slot] === iz) return hit;
