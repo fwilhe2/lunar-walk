@@ -37,7 +37,7 @@ var IO_PX = 85221, IO_PZ = -124998;
 // A patera: its depth below the plain at (x, z), and in IO_PAT how
 // much of its dark floor is there, for the colour pass.
 var IO_PAT = 0, IO_PH = 0, IO_PK = 0;
-function ioPatera(x, z) {
+function ioPatera(x: number, z: number) {
   IO_PAT = 0; IO_PH = 0;
   var ix = Math.floor(x / IO_PCELL), iz = Math.floor(z / IO_PCELL);
   if (cellRnd(ix, iz, 43, 0) > 0.5) return 0;
@@ -79,7 +79,7 @@ function ioPatera(x, z) {
 // ones, a few kilometres high and up to forty long, so a whole one
 // fits on the skyline.
 var IO_MT = 0;
-function ioMountain(x, z) {
+function ioMountain(x: number, z: number) {
   IO_MT = 0;
   var ix = Math.floor(x / IO_MCELL), iz = Math.floor(z / IO_MCELL);
   if (cellRnd(ix, iz, 47, 0) > 0.45) return 0;
@@ -123,7 +123,7 @@ function ioMountain(x, z) {
 // Lava flow fields: long lobes, a few metres to tens thick, run out
 // over the plains in the fields around the vents. Shared with the
 // colour pass, which draws the young ones dark.
-function ioFlows(x, z) {
+function ioFlows(x: number, z: number) {
   var fk = sstep(0.45, 0.65, valueNoise(x * 0.00004 - 2, z * 0.00004 + 6));
   if (fk <= 0) return 0;
   // Warped, so the lobes wander and bulge instead of following the
@@ -133,7 +133,7 @@ function ioFlows(x, z) {
   return sstep(0.57, 0.6, fbm(wx * 0.00026 + 3.1, wz * 0.00016 - 1.7, 3)) * fk;
 }
 
-function hIo(x0, z0) {
+function hIo(x0: number, z0: number) {
   var x = x0 + IO_OX, z = z0 + IO_OZ;
   var nx = x * 0.00005, nz = z * 0.00005;
   // Plains: flat over tens of kilometres, a few hundred metres of
@@ -161,7 +161,7 @@ function hIo(x0, z0) {
   return h;
 }
 
-function tintIo(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintIo(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Io is the most colourful body in the solar system, and nearly all
   // of it is sulphur in one form or another: cream and pale yellow

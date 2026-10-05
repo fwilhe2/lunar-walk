@@ -1,9 +1,10 @@
 import { craterCacheReset, levelSite } from './craters';
 import { WORLD, setActive } from './world';
+import type { TerrainDef } from '../worlds/types';
 
 /* Switch the kernel to another world. Every cache is keyed by cell,
    not by world, so whatever the last one built has to go. */
-export function useTerrain(def) {
+export function useTerrain(def: TerrainDef): TerrainDef {
   if (WORLD === def) return def;
   setActive(def);
   AUX.fill(0);
@@ -16,7 +17,7 @@ export function useTerrain(def) {
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
-export function terrainHeight(x, z) {
+export function terrainHeight(x: number, z: number): number {
   return WORLD.height(x, z);
 }
 
@@ -37,8 +38,9 @@ export var TN_Z = 0;
 // surfaceTint(): Europa's non-ice material and salt (0, 1), Mercury's
 // hollows (2). Zero everywhere else.
 export var AUX = new Float64Array(3);
-export function surfaceTint(x, z, h, slope, fresh, a0, a1, a2, out) {
+export function surfaceTint(x: number, z: number, h: number, slope: number, fresh: number,
+  a0: number, a1: number, a2: number, out: number[]): void {
   WORLD.tint(x, z, h, slope, fresh, a0, a1, a2, out);
 }
 
-export function setTintNormalZ(v) { TN_Z = v; }
+export function setTintNormalZ(v: number) { TN_Z = v; }

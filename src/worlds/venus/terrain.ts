@@ -29,11 +29,11 @@ var GRB_SP = [1450, 2100];
 
 // Where the old crust still stands above the flows. Shared with the
 // colour pass: tessera is swept barer than the plains it interrupts.
-function tesseraMask(x, z) {
+function tesseraMask(x: number, z: number) {
   return sstep(0.44, 0.62, fbm(x * 0.000085 + 5.5, z * 0.000085 - 2.2, 3));
 }
 
-function hVenus(x, z) {
+function hVenus(x: number, z: number) {
   var nx = x * 0.0011, nz = z * 0.0011;
 
   var h = (fbm(nx, nz, 5) - 0.5) * 54;                          // regional swell
@@ -79,7 +79,7 @@ function hVenus(x, z) {
     // Fracture swarms: flat-floored graben a hundred-odd metres
     // across, in two families, cutting the flows they post-date.
     for (var gi = 0; gi < 2; gi++) {
-      var gu = (x * GRB_C[gi] + z * GRB_S[gi]) / GRB_SP[gi];
+      var gu = (x * GRB_C[gi]! + z * GRB_S[gi]!) / GRB_SP[gi]!;
       var gl = Math.floor(gu);
       if (hash2(gl, 419 + gi * 57) > 0.38) continue;
       var gt = gu - gl - 0.5;
@@ -103,7 +103,7 @@ function hVenus(x, z) {
    crests reach it.                                               */
 var FROST_H = 420;
 
-function tintVenus(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintVenus(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Venus is one rock. A planet's worth of basalt went down in a
   // single resurfacing and nothing since has had the chance to

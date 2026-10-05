@@ -14,11 +14,11 @@ import { WORLD } from '../../kernel/world';
    km, segment by segment along strike as faults run; the site is on a
    rim, a cliff dropping in front of you. */
 var DI_OX = -24800, DI_OZ = -2000;
-var DI_F = [[Math.cos(0.25), Math.sin(0.25), 5200, 0.42], [Math.cos(1.35), Math.sin(1.35), 7000, 0.3]];
-function diGraben(x, z) {
+var DI_F: [number, number, number, number][] = [[Math.cos(0.25), Math.sin(0.25), 5200, 0.42], [Math.cos(1.35), Math.sin(1.35), 7000, 0.3]];
+function diGraben(x: number, z: number) {
   var best = 0;
   for (var k = 0; k < 2; k++) {
-    var F = DI_F[k], s = x * F[0] + z * F[1], t = z * F[0] - x * F[1];
+    var F = DI_F[k]!, s = x * F[0] + z * F[1], t = z * F[0] - x * F[1];
     var L = F[2], li = Math.floor(t / L);
     if (cellRnd(li, k, 103, 0) > F[3]) continue;
     // Faults run in segments that overlap and step aside.
@@ -37,7 +37,7 @@ function diGraben(x, z) {
   }
   return -best;
 }
-function hDione(x0, z0) {
+function hDione(x0: number, z0: number) {
   var x = x0 + DI_OX, z = z0 + DI_OZ;
   var h = (fbm(x * 0.00002 + 3, z * 0.00002 - 1, 4) - 0.5) * 2200;
   h += (fbm(x * 0.0003 - 1, z * 0.0003 + 4, 3) - 0.5) * 70;
@@ -48,7 +48,7 @@ function hDione(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintDione(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintDione(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // The trailing face is darkened and reddened by what Saturn's
   // magnetosphere sweeps onto it — plains about 0.5 against Dione's
@@ -56,7 +56,7 @@ function tintDione(x, z, h, slope, fresh, dark, yel, hol, out) {
   // the brightest thing in view: the wisps.
   var n1 = valueNoise(x * 0.0007 + 3, z * 0.0007 - 2), n2 = valueNoise(x * 0.05, z * 0.05);
   var cliff = sstep(0.35, 0.75, slope);
-  v = (0.62 + (n1 - 0.5) * 0.1 + (n2 - 0.5) * 0.06 + fresh * WORLD.halo) * (1 - cliff) + (1.45 + (n2 - 0.5) * 0.1) * cliff;
+  v = (0.62 + (n1 - 0.5) * 0.1 + (n2 - 0.5) * 0.06 + fresh * WORLD.halo!) * (1 - cliff) + (1.45 + (n2 - 0.5) * 0.1) * cliff;
   out[0] = v * (1.02 - cliff * 0.04); out[1] = v * (0.99 + cliff * 0.01); out[2] = v * (0.95 + cliff * 0.07);
 }
 

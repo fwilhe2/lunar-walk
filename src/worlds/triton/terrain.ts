@@ -25,10 +25,10 @@ var TR_OX = -1250, TR_OZ = 1000, TR_CELL = 30000;
 export var TR_CAP = 0, TR_CV = 0;
 // The cap's margin, wandering east–west a few kilometres south of the
 // site, lobed and ragged.
-function trCap(x, z) {
+function trCap(x: number, z: number) {
   return sstep(-1500, 1500, z - 4000 + (fbm(x * 0.00006 + 2.1, z * 0.00006, 3) - 0.5) * 22000 + (valueNoise(x * 0.0005, z * 0.0005 + 7) - 0.5) * 2500);
 }
-function trCantaloupe(x, z) {
+function trCantaloupe(x: number, z: number) {
   var cx = Math.floor(x / TR_CELL), cz = Math.floor(z / TR_CELL);
   var d1 = 1e12, d2 = 1e12, dep = 0;
   for (var dz = -1; dz <= 1; dz++) {
@@ -51,7 +51,7 @@ function trCantaloupe(x, z) {
 // Double ridges across the cantaloupe terrain: two crests and a trough,
 // a few kilometres across, one at most per 45 km lane.
 var TR_RC = Math.cos(0.8), TR_RS = Math.sin(0.8);
-function trRidge(x, z) {
+function trRidge(x: number, z: number) {
   var s = x * TR_RC + z * TR_RS, t = z * TR_RC - x * TR_RS;
   var li = Math.floor(t / 45000);
   if (cellRnd(li, 0, 83, 0) > 0.6) return 0;
@@ -62,7 +62,7 @@ function trRidge(x, z) {
   return H * (Math.exp(-(a - 0.8) * (a - 0.8) * 2.2) + Math.exp(-(a + 0.8) * (a + 0.8) * 2.2)) * sstep(0.3, 0.45, valueNoise(s * 0.00001 + li, li * 0.3));
 }
 
-function hTriton(x0, z0) {
+function hTriton(x0: number, z0: number) {
   var x = x0 + TR_OX, z = z0 + TR_OZ;
   var cap = trCap(x, z), cn = 1 - cap;
   TR_CAP = cap;
@@ -80,7 +80,7 @@ function hTriton(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintTriton(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintTriton(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Triton's cap is nitrogen ice, the brightest ground in the outer
   // solar system after Enceladus, faintly pink-cream from organics
@@ -95,7 +95,7 @@ function tintTriton(x, z, h, slope, fresh, dark, yel, hol, out) {
   // Streaks: noise stretched twenty to one along the wind.
   var su = x1 * 0.766 - z1 * 0.643, sv = x1 * 0.643 + z1 * 0.766;
   var stk = sstep(0.55, 0.75, valueNoise(su * 0.00025 + 3.3, sv * 0.0000125)) * sstep(0.25, 0.5, valueNoise(su * 0.00003, sv * 0.00003 + 9));
-  var cl = fresh * WORLD.halo;
+  var cl = fresh * WORLD.halo!;
   var cv = 0;
   if (cap < 1) { trCantaloupe(x1, z1); cv = TR_CV; }
   var vc = (1.35 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06) * (1 - stk * 0.42);

@@ -26,7 +26,7 @@ var CA_OX = 0, CA_OZ = 0;
 var CA_VX = 775000, CA_VZ = 60000, CA_RL = 28000;
 // Arc length along a ring is measured from the line through the site,
 // where the angle is near zero, so atan2's wrap falls 1,500 km away.
-function caRings(x, z) {
+function caRings(x: number, z: number) {
   var dx = x - CA_VX, dz = z - CA_VZ;
   var rho = Math.sqrt(dx * dx + dz * dz);
   var li = Math.floor(rho / CA_RL);
@@ -48,7 +48,7 @@ function caRings(x, z) {
   return -D * g * g * (3 - 2 * g) + (rho > cen ? D * 0.12 * g : 0);
 }
 
-function hCallisto(x0, z0) {
+function hCallisto(x0: number, z0: number) {
   var x = x0 + CA_OX, z = z0 + CA_OZ;
   var h = (fbm(x * 0.00003, z * 0.00003, 4) - 0.5) * 900;           // regional swells
   h += (fbm(x * 0.0003 + 5, z * 0.0003 - 3, 3) - 0.5) * 70;         // rolling plain
@@ -63,7 +63,7 @@ function hCallisto(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintCallisto(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintCallisto(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Callisto is dark: a lag of non-ice material, grey-brown and a
   // little red, at a reflectance of about 0.2 — what is left when the
@@ -75,7 +75,7 @@ function tintCallisto(x, z, h, slope, fresh, dark, yel, hol, out) {
   // to clean ice: bright halos and rays.
   callistoKnobs(x, z, true);
   var n1 = valueNoise(x * 0.0007 + 1.3, z * 0.0007 - 4.4), n2 = valueNoise(x * 0.045, z * 0.045);
-  var cl = fresh * WORLD.halo + rayBrightness(x, z);
+  var cl = fresh * WORLD.halo! + rayBrightness(x, z);
   var fz = sstep(0.06, 0.32, TN_Z + (n2 - 0.5) * 0.12) * (0.55 + 0.45 * n1);
   var fr = fz + sstep(0.4, 0.75, CA_KN + (n2 - 0.5) * 0.25) * 0.95 + sstep(0.3, 0.6, slope) * 0.3 + cl;
   fr = fr > 1 ? 1 : fr;

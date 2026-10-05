@@ -35,7 +35,7 @@ var CH_TC = Math.cos(0.30), CH_TS = Math.sin(0.30);   // graben trend, ENE
 var CH_OX = -517632, CH_OZ = -142543;
 var CH_MK = 0;   // how near the last query was to a massif: 1 inside its moat, 0 out on the plain
 
-function charonMassifs(x, z) {
+function charonMassifs(x: number, z: number) {
   var h = 0, mk = 0;
   var cx = Math.floor(x / CH_MCELL), cz = Math.floor(z / CH_MCELL);
   for (var dz = -1; dz <= 1; dz++) {
@@ -75,7 +75,7 @@ function charonMassifs(x, z) {
   return h;
 }
 
-function charonGraben(x, z) {
+function charonGraben(x: number, z: number) {
   var s = x * CH_TC + z * CH_TS, t = z * CH_TC - x * CH_TS;
   var li = Math.floor(t / CH_LANE);
   if (cellRnd(li, 0, 83, 0) > 0.5) return 0;
@@ -91,7 +91,7 @@ function charonGraben(x, z) {
   return -w * (0.25 + cellRnd(li, 0, 83, 3) * 0.3) * seg * (1 - sstep(0.55, 1.4, tt));
 }
 
-function hCharon(x0, z0) {
+function hCharon(x0: number, z0: number) {
   var x = x0 + CH_OX, z = z0 + CH_OZ;
   var h = (fbm(x * 0.00005, z * 0.00005, 4) - 0.5) * 520;         // the flood's own swell
   h += (fbm(x * 0.0004 + 7, z * 0.0004 - 2, 3) - 0.5) * 45;         // hummocks
@@ -104,7 +104,7 @@ function hCharon(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintCharon(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintCharon(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Charon is water ice, grey and nearly neutral — a reflectance of
   // about 0.4, four times Pluto's tholin — in broad, soft units of
@@ -116,7 +116,7 @@ function tintCharon(x, z, h, slope, fresh, dark, yel, hol, out) {
   var m2 = valueNoise(x * 0.00013 - 4.2, z * 0.00013 + 1.9);
   var m3 = valueNoise(x * 0.06, z * 0.06);
   var org = sstep(0.78, 0.88, valueNoise(x * 0.00021 + 9.3, z * 0.00021 - 3.1));
-  var cl = fresh * WORLD.halo + rayBrightness(x, z) * 0.7;
+  var cl = fresh * WORLD.halo! + rayBrightness(x, z) * 0.7;
   v = (0.84 + m2 * 0.16 + m1 * 0.10) * (0.94 + m3 * 0.12) + slope * 0.22;
   v += cl * (1 - org * 2.2);
   v = v < 0.45 ? 0.45 : v > 1.45 ? 1.45 : v;

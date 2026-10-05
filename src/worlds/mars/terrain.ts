@@ -15,16 +15,16 @@ export var WIND_A = 0.9271, WIND_C = Math.cos(WIND_A), WIND_S = Math.sin(WIND_A)
 // dust it sits on and has to be shaded differently.
 // Across one dune: a long stoss slope, then the slip face at the angle
 // of repose. u counts dunes; its fraction is the place in one.
-function duneProfile(u) {
+function duneProfile(u: number) {
   var f = u - Math.floor(u);
   return f < 0.78 ? smoothT(f / 0.78) : 1 - (f - 0.78) / 0.22;
 }
 
-function duneMask(x, z) {
+function duneMask(x: number, z: number) {
   return sstep(0.46, 0.66, fbm(x * 0.00042 + 12.1, z * 0.00042 - 5.4, 3));
 }
 
-function hMars(x, z) {
+function hMars(x: number, z: number) {
   var nx = x * 0.0016, nz = z * 0.0016;
 
   var reg = fbm(nx, nz, 5);
@@ -100,7 +100,7 @@ function hMars(x, z) {
    holds up to two, each a meandering line through a point in the cell,
    kept within a cell of it so the 3×3 scan finds every one. */
 var DV_CELL = 1600;
-function devilTracks(x, z) {
+function devilTracks(x: number, z: number) {
   var cx = Math.floor(x / DV_CELL), cz = Math.floor(z / DV_CELL), best = 0;
   for (var dz = -1; dz <= 1; dz++) {
     for (var dx = -1; dx <= 1; dx++) {
@@ -128,17 +128,17 @@ function devilTracks(x, z) {
   return best;
 }
 
-function windStreak(x, z) {
+function windStreak(x: number, z: number) {
   var b = 0;
   for (var si = 0; si < STREAK_LI.length; si++) {
-    var li = STREAK_LI[si], L = CRATER_LAYERS[li];
+    var li = STREAK_LI[si]!, L = CRATER_LAYERS[li]!;
     var inv = 1 / L.cell;
     var ccx = Math.floor(x * inv), ccz = Math.floor(z * inv);
     for (var dz = -1; dz <= 1; dz++) {
       for (var dx = -1; dx <= 1; dx++) {
         var list = cellCraters(li, ccx + dx, ccz + dz);
         for (var i = 0; i < list.length; i++) {
-          var c = list[i];
+          var c = list[i]!;
           var ox = x - c.x, oz = z - c.z;
           var far = Math.min(c.r * 6, L.cell * 0.88);
           if (ox * ox + oz * oz > far * far) continue;
@@ -156,7 +156,7 @@ function windStreak(x, z) {
   return b > 1 ? 1 : b;
 }
 
-function tintMars(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintMars(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   // Mars is two rocks: bright ferric dust that settles out of the
   // air onto anything flat, and the dark basaltic sand underneath
   // it. Everything the wind touches — slip faces, steep ground,

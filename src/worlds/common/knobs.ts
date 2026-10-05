@@ -4,19 +4,20 @@ import { CRATER_LAYERS, KNOB_LI, WORLD } from '../../kernel/world';
 
 export var CA_KCELL = 240, CA_KN = 0;
 var KC_BITS = 12, KC_SIZE = 1 << KC_BITS, KC_SHIFT = 32 - KC_BITS;
-var kcX = new Int32Array(KC_SIZE), kcZ = new Int32Array(KC_SIZE), kcL = new Array(KC_SIZE).fill(null);
+type Knob = { x: number; z: number; r: number; H: number };
+var kcX = new Int32Array(KC_SIZE), kcZ = new Int32Array(KC_SIZE), kcL = new Array<Knob | false | null>(KC_SIZE).fill(null);
 // How much of a degraded crater rim is at (x, z): 1 on the crest of an
 // old one, falling off a fifth of a radius either side.
-function knobRim(x, z) {
+function knobRim(x: number, z: number) {
   var k = 0;
   for (var ki = 0; ki < KNOB_LI.length; ki++) {
-    var li = KNOB_LI[ki], L = CRATER_LAYERS[li];
+    var li = KNOB_LI[ki]!, L = CRATER_LAYERS[li]!;
     var ccx = Math.floor(x / L.cell), ccz = Math.floor(z / L.cell);
     for (var dz = -1; dz <= 1; dz++) {
       for (var dx = -1; dx <= 1; dx++) {
         var list = cellCraters(li, ccx + dx, ccz + dz);
         for (var i = 0; i < list.length; i++) {
-          var c = list[i], ox = x - c.x, oz = z - c.z, rr = c.r * 1.35;
+          var c = list[i]!, ox = x - c.x, oz = z - c.z, rr = c.r * 1.35;
           var d2 = ox * ox + oz * oz;
           if (d2 > rr * rr || c.age > 0.55) continue;
           var e = (Math.sqrt(d2) / c.r - 1.04) / 0.2;
@@ -30,11 +31,12 @@ function knobRim(x, z) {
 }
 // One knob per cell at most, decided at its own centre, so a pure
 // function of the cell; cached direct-mapped like the craters.
-function knobCell(ix, iz) {
+function knobCell(ix: number, iz: number) {
   var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> KC_SHIFT;
-  var hit = kcL[slot];
+  // slot is masked to the table's size, which is filled with null.
+  var hit = kcL[slot] as Knob | false | null;
   if (hit !== null && kcX[slot] === ix && kcZ[slot] === iz) return hit;
-  var out: false | { x: number; z: number; r: number; H: number } = false;
+  var out: Knob | false = false;
   var px = (ix + 0.2 + cellRnd(ix, iz, 71, 2) * 0.6) * CA_KCELL;
   var pz = (iz + 0.2 + cellRnd(ix, iz, 71, 3) * 0.6) * CA_KCELL;
   var p = (0.015 + 0.06 * sstep(0.5, 0.72, fbm(px * 0.00009 + 3.3, pz * 0.00009 - 1.7, 2)) + 0.4 * knobRim(px, pz)) * (WORLD.knobP || 1);
@@ -54,7 +56,7 @@ function knobCell(ix, iz) {
 // for small ones); with apron set, CA_AP: how much of the dark lag
 // that has slumped off it lies around its foot, for the colour pass.
 export var CA_AP = 0;
-export function callistoKnobs(x, z, apron?) {
+export function callistoKnobs(x: number, z: number, apron?: boolean) {
   CA_KN = 0; CA_AP = 0;
   var cx = Math.floor(x / CA_KCELL), cz = Math.floor(z / CA_KCELL);
   var best = 0, reach = apron ? 1.7 : 1;

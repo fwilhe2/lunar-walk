@@ -27,7 +27,7 @@ export var EN_LANE = 35000, EN_TC = Math.cos(0.35), EN_TS = Math.sin(0.35);
 export var EN_OX = 4286, EN_OZ = -11742;
 
 // Distance across the nearest stripe (m), and its lane, or 1e9.
-export function enStripe(x, z) {
+export function enStripe(x: number, z: number) {
   var s = x * EN_TC + z * EN_TS, t = z * EN_TC - x * EN_TS;
   var li = Math.floor(t / EN_LANE);
   // Sinuous, gently, and offset in steps where the fracture jogs.
@@ -36,7 +36,7 @@ export function enStripe(x, z) {
   return t - c;
 }
 
-function hEnceladus(x0, z0) {
+function hEnceladus(x0: number, z0: number) {
   var x = x0 + EN_OX, z = z0 + EN_OZ;
   var h = (fbm(x * 0.00008, z * 0.00008, 4) - 0.5) * 360;
   // Funiscular terrain: ropey ridges a kilometre apart, roughly along
@@ -65,7 +65,7 @@ function hEnceladus(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintEnceladus(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintEnceladus(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Enceladus is snow: fine water ice fallen back from the jets, as
   // white as anything in the solar system. Near the stripes it gives

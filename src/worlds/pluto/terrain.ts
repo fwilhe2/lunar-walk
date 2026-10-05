@@ -23,7 +23,7 @@ var PL_FROST = 1200;
 
 // Where the ice crust stands up in ranges. Shared with nothing: the
 // colour follows height, not the mask.
-function plutoRange(x, z) {
+function plutoRange(x: number, z: number) {
   return sstep(0.51, 0.68, fbm(x * 0.000045 - 6.1, z * 0.000045 + 3.3, 3));
 }
 
@@ -33,7 +33,7 @@ function plutoRange(x, z) {
 // Craters are left where they are, so the spawn fade holds.
 var PL_OX = -13000, PL_OZ = -9000;
 
-function hPluto(x0, z0) {
+function hPluto(x0: number, z0: number) {
   var x = x0 + PL_OX, z = z0 + PL_OZ;
   var nx = x * 0.00009, nz = z * 0.00009;
   var h = (fbm(nx, nz, 4) - 0.5) * 900;                          // regional relief
@@ -52,7 +52,7 @@ function hPluto(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintPluto(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintPluto(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Tholin is dark and deep red — reflectance under a tenth — in a
   // mottle of darker and more orange patches as the haze fallout
@@ -63,7 +63,7 @@ function tintPluto(x, z, h, slope, fresh, dark, yel, hol, out) {
   var m2 = valueNoise(x * 0.00016 - 1.7, z * 0.00016 + 4.4);
   var m3 = valueNoise(x * 0.05, z * 0.05);
   var o = sstep(0.45, 0.75, m2);
-  v = (0.82 + m1 * 0.36) * (0.93 + m3 * 0.14) * (1 + fresh * WORLD.halo) * (1 + slope * 0.25);
+  v = (0.82 + m1 * 0.36) * (0.93 + m3 * 0.14) * (1 + fresh * WORLD.halo!) * (1 + slope * 0.25);
   out[0] = v * (0.24 + o * 0.14);
   out[1] = v * (0.140 + o * 0.075);
   out[2] = v * (0.095 + o * 0.035);

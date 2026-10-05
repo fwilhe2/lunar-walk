@@ -28,7 +28,7 @@ var TI_OX = 8750, TI_OZ = -3750, TI_CELL = 6000;
 
 // Depressions: the nearest one's contribution to the height, given
 // the ground it is cut into. Floors sit at a level of their own.
-function tiDepress(x, z) {
+function tiDepress(x: number, z: number) {
   var cx = Math.floor(x / TI_CELL), cz = Math.floor(z / TI_CELL), out = 0;
   for (var j = -1; j <= 1; j++) for (var i = -1; i <= 1; i++) {
     var gx = cx + i, gz = cz + j;
@@ -60,7 +60,7 @@ function tiDepress(x, z) {
 }
 
 // Valleys, as distance from a sinuous line field: width w, depth d.
-function tiValley(x, z, f, w, salt) {
+function tiValley(x: number, z: number, f: number, w: number, salt: number) {
   var wx = (valueNoise(x * f * 0.5 + salt, z * f * 0.5) - 0.5) * 1.6;
   var wz = (valueNoise(x * f * 0.5, z * f * 0.5 - salt) - 0.5) * 1.6;
   var n = fbm(x * f + wx, z * f + wz, 2);
@@ -69,14 +69,14 @@ function tiValley(x, z, f, w, salt) {
 }
 
 // The plateau country: how much of the upland stands at a point.
-function tiPlateau(x, z) {
+function tiPlateau(x: number, z: number) {
   return sstep(0.50, 0.56, fbm(x * 0.00011 + 4.1, z * 0.00011 - 7.3, 4) + (z + 3000) * 0.000025);
 }
 
 // Where liquid has run: channel floors and the strip along the shore,
 // 0–1. Gravel lies there — the Huygens site was a field of rounded
 // ice cobbles on an outwash plain (Tomasko et al. 2005).
-export function tiGravel(x0, z0, h) {
+export function tiGravel(x0: number, z0: number, h: number) {
   var x = x0 + TI_OX, z = z0 + TI_OZ;
   var c = tiValley(x, z, 0.00035, 0.035, 2.1) + tiValley(x + 900, z - 400, 0.0021, 0.05, 5.3);
   var sh = h > 0 && h < 3 ? 1 - sstep(0.5, 3, h) : 0;
@@ -84,7 +84,7 @@ export function tiGravel(x0, z0, h) {
   return c > 1 ? 1 : c;
 }
 
-function hTitan(x0, z0) {
+function hTitan(x0: number, z0: number) {
   var x = x0 + TI_OX, z = z0 + TI_OZ;
   // The coast: land rising southward, sea deepening to the north.
   var b = (z + 420) * 0.006 + 10 + (fbm(x * 0.00005 + 1.7, z * 0.00005 - 2.9, 4) - 0.5) * 260
@@ -107,7 +107,7 @@ function hTitan(x0, z0) {
   return h;
 }
 
-function tintTitan(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintTitan(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Titan's ground is organic sediment — what the haze rains out,
   // sorted and moved by liquid — over water-ice bedrock. Through the

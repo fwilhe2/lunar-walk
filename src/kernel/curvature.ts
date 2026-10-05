@@ -31,7 +31,7 @@ import { CURVE_R } from './world';
    reaches your eye line about two kilometres out and keeps going.
    Nothing but the haze ever closes it off.                        */
 export var CURVE_D0 = 400, CURVE_D02 = CURVE_D0 * CURVE_D0;
-export function curveDrop(dx, dz) {
+export function curveDrop(dx: number, dz: number): number {
   var d2 = dx * dx + dz * dz - CURVE_D02;
   return d2 > 0 ? d2 / (2 * CURVE_R) : 0;
 }

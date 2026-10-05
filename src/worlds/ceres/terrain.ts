@@ -22,7 +22,7 @@ import { WORLD } from '../../kernel/world';
    from the centre, looking down into it. OC_FAC is how much facula there is at
    the last query point, for the colour pass. */
 var OC_X = 4000, OC_Z = -1400, OC_R = 46000, OC_FAC = 0;
-function ceOccator(x, z) {
+function ceOccator(x: number, z: number) {
   var ox = x - OC_X, oz = z - OC_Z, r = Math.sqrt(ox * ox + oz * oz);
   OC_FAC = 0;
   if (r > OC_R * 1.9) return 0;
@@ -71,7 +71,7 @@ function ceOccator(x, z) {
   return h;
 }
 
-function hCeres(x, z) {
+function hCeres(x: number, z: number) {
   var h = (fbm(x * 0.00002 + 3, z * 0.00002 - 1, 4) - 0.5) * 2500;
   h += (fbm(x * 0.0003 - 2, z * 0.0003 + 6, 3) - 0.5) * 60;
   h += (fbm(x * 0.003 + 4, z * 0.003, 2) - 0.5) * 7;
@@ -81,7 +81,7 @@ function hCeres(x, z) {
   return h + craterAt(x, z);
 }
 
-function tintCeres(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintCeres(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Ceres is dark, a reflectance of about 0.09, and nearly grey —
   // carbonaceous rock, clays and salts. Fresh craters are a little
@@ -90,7 +90,7 @@ function tintCeres(x, z, h, slope, fresh, dark, yel, hol, out) {
   ceOccator(x, z);
   var fac = OC_FAC;
   var n1 = valueNoise(x * 0.0008 + 1.7, z * 0.0008 - 2.2), n2 = valueNoise(x * 0.05, z * 0.05);
-  var cl = fresh * WORLD.halo;
+  var cl = fresh * WORLD.halo!;
   v = (0.62 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.08 + slope * 0.18 + cl) ;
   out[0] = v * 1.0; out[1] = v * 0.99; out[2] = v * (0.98 + cl * 0.06);
   if (fac > 0) {

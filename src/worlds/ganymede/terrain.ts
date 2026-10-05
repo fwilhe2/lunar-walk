@@ -32,7 +32,7 @@ var GA_OX = 270900, GA_OZ = 500;
 var GA_M = 0, GA_GT = 0.5;
 // One groove set: the height it makes at (sl, tt), which are along
 // and across the band, local to the patch and so never large.
-function gaGrooves(pi, li, sl, tt) {
+function gaGrooves(pi: number, li: number, sl: number, tt: number) {
   var b = (cellRnd(pi, li, 69, 0) - 0.5) * 1.1;
   var u = tt * Math.cos(b) + sl * Math.sin(b);
   var lam = 3000 + cellRnd(pi, li, 69, 1) * 6000, A = 150 + cellRnd(pi, li, 69, 2) * 300;
@@ -48,7 +48,7 @@ function gaGrooves(pi, li, sl, tt) {
   GA_GT = p1 * 0.7 + p2 * 0.3;
   return (A * (p1 - 0.5) + (30 + A * 0.25) * (p2 - 0.5)) * am;
 }
-function gaSulcus(x, z) {
+function gaSulcus(x: number, z: number) {
   GA_M = 0; GA_GT = 0.5;
   var s = x * GA_C + z * GA_S, t = z * GA_C - x * GA_S;
   var li = Math.floor(t / GA_LANE);
@@ -78,7 +78,7 @@ function gaSulcus(x, z) {
 // Furrows on the dark terrain: arcuate troughs a few kilometres wide
 // with raised rims, one at most per 60 km lane.
 var GA_FC = Math.cos(0.35), GA_FS = Math.sin(0.35);
-function gaFurrow(x, z) {
+function gaFurrow(x: number, z: number) {
   var s = x * GA_FC + z * GA_FS, t = z * GA_FC - x * GA_FS + s * s * 1.2e-7;
   var li = Math.floor(t / 60000);
   if (cellRnd(li, 0, 73, 0) > 0.5) return 0;
@@ -89,7 +89,7 @@ function gaFurrow(x, z) {
   return -d * (1 - sstep(0.5, 1.05, a)) + d * 0.3 * Math.exp(-(a - 1.25) * (a - 1.25) * 9);
 }
 
-function hGanymede(x0, z0) {
+function hGanymede(x0: number, z0: number) {
   var x = x0 + GA_OX, z = z0 + GA_OZ;
   var h = (fbm(x * 0.00003 + 2, z * 0.00003, 4) - 0.5) * 800;
   var sul = gaSulcus(x, z), m = GA_M, dk = 1 - m;
@@ -103,7 +103,7 @@ function hGanymede(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintGanymede(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintGanymede(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Ganymede's dark terrain is Callisto's lag, a little brighter —
   // about 0.3 — with the same frost on crests and poleward slopes. The
@@ -115,7 +115,7 @@ function tintGanymede(x, z, h, slope, fresh, dark, yel, hol, out) {
   var m = GA_M, gt = GA_GT;
   callistoKnobs(x, z, true);
   var n1 = valueNoise(x * 0.0007 + 1.3, z * 0.0007 - 4.4), n2 = valueNoise(x * 0.045, z * 0.045);
-  var cl = fresh * WORLD.halo + rayBrightness(x, z);
+  var cl = fresh * WORLD.halo! + rayBrightness(x, z);
   var fz = sstep(0.06, 0.32, TN_Z + (n2 - 0.5) * 0.12) * (0.5 + 0.5 * n1);
   var dkv = (0.85 + (n1 - 0.5) * 0.2) * (0.93 + n2 * 0.14) * (1 - CA_AP * 0.2);
   var brv = (1.75 + (n1 - 0.5) * 0.2 + (gt - 0.5) * 0.5 + slope * 0.4) * (0.95 + n2 * 0.1);

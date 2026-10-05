@@ -44,25 +44,25 @@ export var MH_HOL = 0;
 
 // Where the smooth plains lie. Shared with the colour pass: they are
 // the brighter, redder unit.
-function mercPlains(x, z) {
+function mercPlains(x: number, z: number) {
   return sstep(0.55, 0.68, fbm(x * 0.000032 + 4.4, z * 0.000032 - 1.7, 3));
 }
 
 // Where hollows gather: in craters (the classes flagged hol), on their
 // floors, walls and peaks, and only in some of them — a coarse field
 // of provinces decides which. 1 on a crater floor inside one.
-function mercHollowField(x, z) {
+function mercHollowField(x: number, z: number) {
   var f = sstep(0.55, 0.65, fbm(x * 0.00006 - 7.1, z * 0.00006 + 2.3, 2));
   if (f <= 0) return 0;
   var k = 0;
   for (var hi = 0; hi < HOL_LI.length; hi++) {
-    var li = HOL_LI[hi], L = CRATER_LAYERS[li];
+    var li = HOL_LI[hi]!, L = CRATER_LAYERS[li]!;
     var ccx = Math.floor(x / L.cell), ccz = Math.floor(z / L.cell);
     for (var dz = -1; dz <= 1; dz++) {
       for (var dx = -1; dx <= 1; dx++) {
         var list = cellCraters(li, ccx + dx, ccz + dz);
         for (var i = 0; i < list.length; i++) {
-          var c = list[i], ox = x - c.x, oz = z - c.z, rr = c.r * 1.15;
+          var c = list[i]!, ox = x - c.x, oz = z - c.z, rr = c.r * 1.15;
           if (ox * ox + oz * oz > rr * rr) continue;
           // Fresh craters have not had time to grow any; old ones have
           // lost theirs to the regolith.
@@ -80,7 +80,7 @@ function mercHollowField(x, z) {
 // as much as the rest of the scarp together. A pure function of the
 // lane, so a miss just recomputes.
 var SC_LI = 0.5, SC = { on: false, H: 0, k: 0, A: 0, ph: 0, fr: 0, lb: 0 };
-function scarpLane(li) {
+function scarpLane(li: number) {
   if (li === SC_LI) return SC;
   SC_LI = li;
   SC.on = cellRnd(li, 0, 97, 0) <= 0.6;
@@ -93,7 +93,7 @@ function scarpLane(li) {
   return SC;
 }
 
-function mercScarp(x, z) {
+function mercScarp(x: number, z: number) {
   var u = x * MH_TC + z * MH_TS, s = z * MH_TC - x * MH_TS;
   var li = Math.floor(u / MH_LANE);
   var P = scarpLane(li);
@@ -133,7 +133,7 @@ function mercScarp(x, z) {
 var HC_BITS = 12, HC_SIZE = 1 << HC_BITS, HC_SHIFT = 32 - HC_BITS;
 var hcX = new Int32Array(HC_SIZE), hcZ = new Int32Array(HC_SIZE), hcL = new Array(HC_SIZE).fill(null);
 function hollowCacheReset() { hcL.fill(null); }
-function hollowCell(ix, iz) {
+function hollowCell(ix: number, iz: number) {
   var slot = Math.imul(Math.imul(ix, 0x27d4eb2d) + iz, 0x165667b1) >>> HC_SHIFT;
   var hit = hcL[slot];
   if (hit !== null && hcX[slot] === ix && hcZ[slot] === iz) return hit;
@@ -150,7 +150,7 @@ function hollowCell(ix, iz) {
   return out;
 }
 
-function mercHollows(x, z) {
+function mercHollows(x: number, z: number) {
   MH_HOL = 0;
   // Hollows only stand inside a province (fbm over 0.55), and reach at
   // most 400 m from their centres, over which the field can fall by
@@ -180,7 +180,7 @@ function mercHollows(x, z) {
   return -best;
 }
 
-function mercWrinkles(x, z) {
+function mercWrinkles(x: number, z: number) {
   var u = (x * MH_TS - z * MH_TC) / 11000 + valueNoise(x * 0.00012, z * 0.00012) * 1.7;
   var lane = Math.floor(u);
   if (hash2(lane, 733) > 0.55) return 0;
@@ -189,7 +189,7 @@ function mercWrinkles(x, z) {
   return Math.exp(-tt * tt * 30) * (40 + hash2(lane, 734) * 60) + Math.exp(-(tt - 0.04) * (tt - 0.04) * 400) * (18 + hash2(lane, 735) * 30);
 }
 
-function hMercury(x0, z0) {
+function hMercury(x0: number, z0: number) {
   var x = x0 + MH_OX, z = z0 + MH_OZ;
   var nx = x * 0.00012, nz = z * 0.00012;
   var pk = mercPlains(x, z), ik = 1 - pk;
@@ -207,7 +207,7 @@ function hMercury(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintMercury(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintMercury(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Mercury is grey, a little brighter than the Moon on average and
   // a little less brown, and its colour units are subtle: the smooth
@@ -219,7 +219,7 @@ function tintMercury(x, z, h, slope, fresh, dark, yel, hol, out) {
   // of the same stuff round every cluster.
   var pl = mercPlains(x + MH_OX, z + MH_OZ);
   var lrm = sstep(0.52, 0.7, fbm(x * 0.00011 - 6.1, z * 0.00011 + 3.9, 3)) * (1 - pl);
-  var cl = fresh * WORLD.halo + rayBrightness(x, z);
+  var cl = fresh * WORLD.halo! + rayBrightness(x, z);
   v = 0.78 + pl * 0.10 - lrm * 0.20 + slope * 0.26 + cl;
   v *= 0.9 + valueNoise(x * 0.0012 + 3, z * 0.0012) * 0.12 + valueNoise(x * 0.07, z * 0.07) * 0.08;
   var hb = hol * hol;

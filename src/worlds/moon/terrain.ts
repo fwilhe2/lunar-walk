@@ -4,7 +4,7 @@ import { fbm, ridged, sstep, valueNoise } from '../../kernel/noise';
 import { WORLD } from '../../kernel/world';
 
 /* ── The Moon ───────────────────────────────────────────────── */
-function hMoon(x, z) {
+function hMoon(x: number, z: number) {
   var nx = x * 0.0021, nz = z * 0.0021;
 
   var h = (fbm(nx, nz, 5) - 0.5) * 16;                              // broad mare swell
@@ -42,7 +42,7 @@ function hMoon(x, z) {
    view a few kilometres from the landing site. */
 var RL_LANE = 14000, RL_C = Math.cos(1.1), RL_S = Math.sin(1.1), RL_O = 10750;
 
-export function moonRille(x, z) {
+export function moonRille(x: number, z: number) {
   var s = x * RL_C + z * RL_S, t = z * RL_C - x * RL_S + RL_O;
   var li = Math.floor(t / RL_LANE);
   if (cellRnd(li, 0, 91, 0) > 0.45) return 0;
@@ -74,11 +74,11 @@ export function moonRille(x, z) {
 
 // Highland mask alone — the worker uses it to colour anorthosite
 // brighter than mare basalt.
-function highlandMask(x, z) {
+function highlandMask(x: number, z: number) {
   return sstep(0.55, 0.75, fbm(x * 0.00016 + 7.7, z * 0.00016 - 3.1, 3));
 }
 
-function tintMoon(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintMoon(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Steep walls shed dust and expose brighter bedrock, crater
   // floors pool dark fines, highlands are anorthosite rather
@@ -90,7 +90,7 @@ function tintMoon(x, z, h, slope, fresh, dark, yel, hol, out) {
   v += slope * 0.30;
   v += rayBrightness(x, z);
   v += highlandMask(x, z) * 0.22;
-  v += fresh * WORLD.halo;
+  v += fresh * WORLD.halo!;
   v *= 0.88 + valueNoise(x * 0.07, z * 0.07) * 0.26;
   // The blast zone: LROC sees every Apollo descent stage in a halo of
   // soil some 10% brighter, a hundred-odd metres across, where the

@@ -21,7 +21,7 @@ import { WORLD } from '../../kernel/world';
    for the colour pass. */
 var MI_UX = Math.sin(56 * Math.PI / 180), MI_UZ = -Math.cos(56 * Math.PI / 180);
 var MI_CM = 0, MI_BAND = 0;
-function mirScarp(x, z) {
+function mirScarp(x: number, z: number) {
   // t: across the margin, toward the plateau; s: along it.
   var t = x * MI_UX + z * MI_UZ, s = z * MI_UX - x * MI_UZ;
   t += (valueNoise(s * 0.00004, 2.2) - 0.5) * 5000;
@@ -46,7 +46,7 @@ function mirScarp(x, z) {
   }
   return h;
 }
-function hMiranda(x, z) {
+function hMiranda(x: number, z: number) {
   var h = (fbm(x * 0.00003 + 1, z * 0.00003 - 4, 4) - 0.5) * 1800;
   h += mirScarp(x, z);
   var ok = 1 - MI_CM;
@@ -57,7 +57,7 @@ function hMiranda(x, z) {
   return h + craterAt(x, z);
 }
 
-function tintMiranda(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintMiranda(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Miranda is grey ice, about 0.3, a little darker than its sister
   // moons. The corona bands alternate, bright ones near 0.4 and dark
@@ -65,7 +65,7 @@ function tintMiranda(x, z, h, slope, fresh, dark, yel, hol, out) {
   mirScarp(x, z);
   var cm = MI_CM, bd = MI_BAND;
   var n1 = valueNoise(x * 0.0008 + 2, z * 0.0008 - 3), n2 = valueNoise(x * 0.05, z * 0.05);
-  v = (1.0 + (n1 - 0.5) * 0.14 + (n2 - 0.5) * 0.08) * (1 + cm * (bd - 0.5) * 0.65) + slope * 0.45 + fresh * WORLD.halo;
+  v = (1.0 + (n1 - 0.5) * 0.14 + (n2 - 0.5) * 0.08) * (1 + cm * (bd - 0.5) * 0.65) + slope * 0.45 + fresh * WORLD.halo!;
   out[0] = v * 0.985; out[1] = v * 0.99; out[2] = v;
 }
 

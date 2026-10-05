@@ -2,7 +2,7 @@ import { hash2, sstep, valueNoise } from './noise';
 import { CRATER_LAYERS, RAY_LI, WORLD } from './world';
 
 // Decorrelated random streams per cell: k picks the stream.
-export function cellRnd(cx, cz, salt, k) {
+export function cellRnd(cx: number, cz: number, salt: number, k: number): number {
   return hash2(Math.imul(cx, 73) + Math.imul(salt, 151) + Math.imul(k, 7919),
                Math.imul(cz, 89) + Math.imul(salt, 197) - Math.imul(k, 104729));
 }
@@ -15,29 +15,57 @@ export function cellRnd(cx, cz, salt, k) {
    a collision just recomputes, which is always safe, because the
    list is a pure function of (layer, cell). */
 var CC_BITS = 13, CC_SIZE = 1 << CC_BITS, CC_SHIFT = 32 - CC_BITS;
-var ccX = [], ccZ = [], ccList = [];
+var ccX: Int32Array[] = [], ccZ: Int32Array[] = [], ccList: (Crater[] | null)[][] = [];
 export function craterCacheReset() {
   ccX = []; ccZ = []; ccList = [];
   for (var li = 0; li < CRATER_LAYERS.length; li++) {
     ccX.push(new Int32Array(CC_SIZE));
     ccZ.push(new Int32Array(CC_SIZE));
-    ccList.push(new Array(CC_SIZE).fill(null));
+    ccList.push(new Array<Crater[] | null>(CC_SIZE).fill(null));
   }
 }
 
-export function cellCraters(li, cx, cz) {
+/** A complex crater's shape past the simple-to-complex transition. */
+export interface ComplexProfile {
+  ff: number;            // flat floor, as a fraction of r
+  e: number;             // wall exponent
+  hp: number;            // central peak height, m
+  pr: number;            // peak (or pit) base, as a fraction of r
+  nt: number;            // number of terraces
+  pd: number;            // central pit depth, m (pitD)
+  ta: number;            // terrace crispness
+  nx: number; nz: number;   // noise offsets for the scalloped rim and the floor
+}
+
+/** One crater, as cellCraters() derives it. */
+export interface Crater {
+  x: number; z: number;  // centre, m
+  r: number;             // rim radius, m
+  depth: number;         // floor below the surroundings, m
+  H: number;             // rim height, m
+  cx: ComplexProfile | null;   // null for a simple bowl
+  dh: number;            // bowl curvature: depth + H
+  k: number;             // how far the crest is rounded off
+  age: number;           // freshness, 1 = new
+  rim: number;           // ray phase and rover scatter
+}
+
+export function cellCraters(li: number, cx: number, cz: number): Crater[] {
   // Multiply, add, multiply: an xor of the two products sends (1, 1)
   // and (-1, -1) to the same slot, and that pair sits in the 3×3 scan
   // around the origin — where every world lands you — so it missed
   // four times a query there. This mix leaves no 3×3 window within
   // 300 cells of the origin with a collision in it.
   var slot = Math.imul(Math.imul(cx, 0x27d4eb2d) + cz, 0x165667b1) >>> CC_SHIFT;
-  var hit = ccList[li][slot];
-  if (hit !== null && ccX[li][slot] === cx && ccZ[li][slot] === cz) return hit;
+  // li is a layer of the active world and slot is masked to the table's
+  // size, so every index here is in range (hence the !s); the lists are
+  // filled with null, so a slot is a list or null, never undefined.
+  var hit = ccList[li]![slot] as Crater[] | null;
+  if (hit !== null && ccX[li]![slot] === cx && ccZ[li]![slot] === cz) return hit;
 
-  var L = CRATER_LAYERS[li];
+  var L = CRATER_LAYERS[li]!;
   var dK = WORLD.depthK;
-  var out = [];
+  var out: Crater[] = [];
   // Secondaries arrive in clusters, all thrown out by one distant
   // impact, so a class with clump set only fills the cells that fall
   // inside a coarse field of clusters. Still a function of the cell.
@@ -78,7 +106,7 @@ export function cellCraters(li, cx, cz) {
     // continuous form, each joining the simple bowl exactly at the
     // transition, so the population has no step in it; other bodies
     // scale by their own transition. s is the diameter in transitions.
-    var s = WORLD.Dtr ? 2 * r / WORLD.Dtr : 0, cpx = null;
+    var s = WORLD.Dtr ? 2 * r / WORLD.Dtr : 0, cpx: ComplexProfile | null = null;
     if (s > 1) {
       depth *= Math.pow(s, -0.699);                      // d ∝ D^0.301
       if (s > 2.15) H *= Math.pow(s / 2.15, -0.601);     // h ∝ D^0.399, from 22.8 km on the Moon
@@ -103,7 +131,7 @@ export function cellCraters(li, cx, cz) {
       var pk = sstep(0.8, 1.2, 2 * r / WORLD.pitD);
       cpx.pd = depth * 0.4 * pk * (0.5 + 0.5 * age);
       cpx.hp *= 1 - pk;
-      if (pk > 0) cpx.pr = 0.18 + 0.05 * jp;
+      if (pk > 0) cpx.pr = 0.18 + 0.05 * jp!;   // assigned wherever cpx is
     }
     var o = 1 - age;
     out.push({
@@ -117,7 +145,7 @@ export function cellCraters(li, cx, cz) {
       rim: 0.26 + j * 0.24,          // ray phase and rover scatter
     });
   }
-  ccX[li][slot] = cx; ccZ[li][slot] = cz; ccList[li][slot] = out;
+  ccX[li]![slot] = cx; ccZ[li]![slot] = cz; ccList[li]![slot] = out;
   return out;
 }
 
@@ -135,18 +163,18 @@ export function cellCraters(li, cx, cz) {
 export var CR_ALB = 0;
 export var CUBE_K = 1 / (1 - 1 / (1.9 * 1.9 * 1.9)), CUBE_0 = 1 / (1.9 * 1.9 * 1.9);
 
-export function craterField(x, z) {
+export function craterField(x: number, z: number): number {
   var h = 0, alb = 0;
   var ramp = WORLD.rampart;
   for (var li = 0; li < CRATER_LAYERS.length; li++) {
-    var L = CRATER_LAYERS[li];
+    var L = CRATER_LAYERS[li]!;
     var inv = 1 / L.cell;
     var ccx = Math.floor(x * inv), ccz = Math.floor(z * inv);
     for (var dz = -1; dz <= 1; dz++) {
       for (var dx = -1; dx <= 1; dx++) {
         var list = cellCraters(li, ccx + dx, ccz + dz);
         for (var i = 0; i < list.length; i++) {
-          var c = list[i];
+          var c = list[i]!;
           var ox = x - c.x, oz = z - c.z;
           var d2 = ox * ox + oz * oz;
           var reach = c.r * 1.9;
@@ -164,7 +192,7 @@ export function craterField(x, z) {
             }
             d += (pm * 1.07 - d) * 0.6 * sstep(0.3, 0.7, d) * (1 - sstep(1.3, 1.85, d));
           }
-          var hin, X = c.cx;
+          var hin: number, X = c.cx;
           if (X === null) {
             hin = c.dh * d * d - c.depth;
           } else {
@@ -233,7 +261,7 @@ export function craterField(x, z) {
    ground, stands tens of metres off zero, and fading that away dug a
    pit round the flag with walls steeper than anything you could walk. */
 export var CF0 = 0;
-export function craterAt(x, z) {
+export function craterAt(x: number, z: number): number {
   var cf = craterField(x, z);
   var d0 = x * x + z * z;
   if (d0 < 900) { var f0 = sstep(12, 30, Math.sqrt(d0)); cf = CF0 + (cf - CF0) * f0; CR_ALB *= f0; }
@@ -243,17 +271,17 @@ export function craterAt(x, z) {
 /* Bright ejecta rays streaking away from fresh large impacts.
    Only the classes flagged rays are scanned; extent is capped below
    the cell size so the 3×3 neighbourhood still finds everything. */
-export function rayBrightness(x, z) {
+export function rayBrightness(x: number, z: number): number {
   var b = 0;
   for (var ri = 0; ri < RAY_LI.length; ri++) {
-    var li = RAY_LI[ri], L = CRATER_LAYERS[li];
+    var li = RAY_LI[ri]!, L = CRATER_LAYERS[li]!;
     var inv = 1 / L.cell;
     var ccx = Math.floor(x * inv), ccz = Math.floor(z * inv);
     for (var dz = -1; dz <= 1; dz++) {
       for (var dx = -1; dx <= 1; dx++) {
         var list = cellCraters(li, ccx + dx, ccz + dz);
         for (var i = 0; i < list.length; i++) {
-          var c = list[i];
+          var c = list[i]!;
           if (c.age < 0.82) continue;
           var ox = x - c.x, oz = z - c.z;
           var far = Math.min(c.r * 7, L.cell * 0.88);

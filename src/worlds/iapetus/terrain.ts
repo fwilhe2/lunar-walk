@@ -24,7 +24,7 @@ import { WORLD } from '../../kernel/world';
    pole. The ridge's crest is 22 km south; the slope you see faces
    north, and is white. */
 var IA_ZR = 21800;
-function iaRidge(x, z) {
+function iaRidge(x: number, z: number) {
   var cz = IA_ZR + (valueNoise(x * 0.00001, 3.1) - 0.5) * 6000;
   var t = (z - cz) / 20000; if (t < 0) t = -t;
   if (t >= 1) return 0;
@@ -37,7 +37,7 @@ function iaRidge(x, z) {
   h += H * 0.07 * (ridged(x * 0.0003 + 5, z * 0.0003 - 1, 3) - 0.35) * f * (1 - f) * 4;
   return h;
 }
-function hIapetus(x, z) {
+function hIapetus(x: number, z: number) {
   var h = (fbm(x * 0.00002 + 4, z * 0.00002 - 2, 4) - 0.5) * 2500;
   h += iaRidge(x, z);
   h += (fbm(x * 0.0003 - 1, z * 0.0003 + 3, 3) - 0.5) * 80;
@@ -47,14 +47,14 @@ function hIapetus(x, z) {
   return h + craterAt(x, z);
 }
 
-function tintIapetus(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintIapetus(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   // Iapetus sorted into two materials with almost nothing between: a
   // reddish-brown lag at 0.03–0.05 and water frost at 0.5–0.6. Frost
   // where it is cold — slopes that face the pole, here north, and
   // steep walls the sun reaches only at a slant — lag everywhere else.
   // Patchy: the boundary is a mottle at every scale (Denk et al. 2010).
   var n1 = valueNoise(x * 0.0009 + 3.1, z * 0.0009 - 1.2), n2 = valueNoise(x * 0.012, z * 0.012), n3 = valueNoise(x * 0.06, z * 0.06);
-  var fz = TN_Z * 1.4 + slope * 0.25 + (n1 - 0.5) * 0.35 + (n2 - 0.5) * 0.2 + (n3 - 0.5) * 0.08 - 0.06 + fresh * WORLD.halo;
+  var fz = TN_Z * 1.4 + slope * 0.25 + (n1 - 0.5) * 0.35 + (n2 - 0.5) * 0.2 + (n3 - 0.5) * 0.08 - 0.06 + fresh * WORLD.halo!;
   var fr = sstep(0.0, 0.12, fz);
   var dkv = 0.16 * (0.9 + n3 * 0.2), fv = 1.75 * (0.95 + n3 * 0.1);
   out[0] = dkv * 1.30 + (fv * 1.0 - dkv * 1.30) * fr;

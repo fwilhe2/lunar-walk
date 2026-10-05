@@ -7,7 +7,7 @@ import { WORLD } from '../../kernel/world';
    Craters on craters, and under them a regional swell of kilometres —
    a body 400 km across holds relief like that — with a few troughs, the
    chasmata, cutting across in long shallow lines. */
-function hMimas(x, z) {
+function hMimas(x: number, z: number) {
   var h = (fbm(x * 0.00002 + 1, z * 0.00002 - 3, 4) - 0.5) * 3000;
   h += (fbm(x * 0.0003 - 4, z * 0.0003 + 2, 3) - 0.5) * 90;
   h += (fbm(x * 0.003 + 6, z * 0.003, 2) - 0.5) * 8;
@@ -23,13 +23,13 @@ function hMimas(x, z) {
   return h + craterAt(x, z);
 }
 
-function tintMimas(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintMimas(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Mimas is clean water ice, the second-brightest of Saturn's inner
   // moons after Enceladus, a little grey; crater walls a shade bluer
   // where fresher ice shows.
   var n1 = valueNoise(x * 0.0008 + 2, z * 0.0008 - 1), n2 = valueNoise(x * 0.05, z * 0.05);
-  v = (1.0 + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.06) * (1 + slope * 0.12 + fresh * WORLD.halo);
+  v = (1.0 + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.06) * (1 + slope * 0.12 + fresh * WORLD.halo!);
   out[0] = v * (0.985 - slope * 0.02); out[1] = v * 0.993; out[2] = v * (1.0 + slope * 0.02);
 }
 

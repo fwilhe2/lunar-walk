@@ -14,8 +14,9 @@ import { WORLD } from '../../kernel/world';
 var GRV_A = [0.32, 1.19, 2.35];      // three families, three bearings
 var GRV_S = [430, 560, 330];         // and three spacings
 
-export function hSmall(x, z) {
-  var rel = WORLD.relief, fine = WORLD.fine;
+export function hSmall(x: number, z: number) {
+  // Phobos and Deimos, the only worlds that call this, set all four moonlet fields.
+  var rel = WORLD.relief!, fine = WORLD.fine!;
   var nx = x * 0.00055, nz = z * 0.00055;
 
   var h = (fbm(nx, nz, 5) - 0.5) * rel;                          // the body's own shape
@@ -25,10 +26,10 @@ export function hSmall(x, z) {
 
   // Grooves: parallel troughs 100–200 m wide, only in some lanes,
   // and deepening into chains of pits along their length.
-  var gv = WORLD.groove;
+  var gv = WORLD.groove!;
   if (gv > 0) {
     for (var gi = 0; gi < 3; gi++) {
-      var a = GRV_A[gi], sp = GRV_S[gi];
+      var a = GRV_A[gi]!, sp = GRV_S[gi]!;
       var u = (x * Math.cos(a) + z * Math.sin(a)) / sp;
       var lane = Math.floor(u);
       if (hash2(lane, 977 + gi * 31) > 0.42) continue;
@@ -41,12 +42,12 @@ export function hSmall(x, z) {
   return h + craterAt(x, z);
 }
 
-export function tintMoonlet(x, z, h, slope, fresh, dark, yel, hol, out) {
+export function tintMoonlet(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Both moons are D-type: near-black, and spectrally red. Phobos
   // has two units, a redder one over most of the body and a bluer
   // one dug out around the big crater; the mask stands in for it.
-  v = 0.40 * WORLD.albedoK + slope * 0.12 + fresh * WORLD.halo * 0.4;
+  v = 0.40 * WORLD.albedoK! + slope * 0.12 + fresh * WORLD.halo! * 0.4;
   v *= 0.86 + valueNoise(x * 0.05, z * 0.05) * 0.30;
   v = v < 0.16 ? 0.16 : v > 0.85 ? 0.85 : v;
   var u = sstep(0.42, 0.62, fbm(x * 0.00035 + 3.3, z * 0.00035 - 9.1, 3));

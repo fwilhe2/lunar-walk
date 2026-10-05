@@ -37,10 +37,12 @@ import { WORLD } from '../../kernel/world';
    margins of a triple band.                                       */
 interface RidgeFamily {
   a: number; sp: number; p: number; w0: number; w1: number; h0: number; h1: number; tr: number;
-  rg?: number; m?: number;
-  c?: number; s?: number; salt?: number;   // filled in below
+  rg?: number; m: number;
+  c: number; s: number; salt: number;
 }
-var EU_FAM: RidgeFamily[] = [
+// The rows give the first eight (and rg, m where they differ); the loop
+// below fills c, s, salt and m in before anything reads them, hence the cast.
+var EU_FAM = [
   { a: 0.42, sp: 230,  p: 0.80, w0: 70,   w1: 90,   h0: 3,   h1: 7,   tr: 0.00, rg: 1 },
   { a: 1.63, sp: 290,  p: 0.75, w0: 80,   w1: 110,  h0: 4,   h1: 9,   tr: 0.25, rg: 1 },
   { a: 2.71, sp: 190,  p: 0.70, w0: 60,   w1: 70,   h0: 2.5, h1: 6,   tr: 0.00, rg: 1 },
@@ -48,12 +50,12 @@ var EU_FAM: RidgeFamily[] = [
   { a: 1.05, sp: 2300, p: 0.38, w0: 450,  w1: 650,  h0: 45,  h1: 110, tr: 0.55 },
   { a: 2.20, sp: 3700, p: 0.45, w0: 650,  w1: 850,  h0: 80,  h1: 140, tr: 0.60 },
   { a: 0.13, sp: 9500, p: 0.50, w0: 1000, w1: 1100, h0: 130, h1: 150, tr: 0.62, m: 2.6 },
-];
+] as RidgeFamily[];
 for (var fi = 0; fi < EU_FAM.length; fi++) {
-  EU_FAM[fi].c = Math.cos(EU_FAM[fi].a);
-  EU_FAM[fi].s = Math.sin(EU_FAM[fi].a);
-  EU_FAM[fi].salt = 311 + fi * 97;
-  EU_FAM[fi].m = EU_FAM[fi].m || 1;   // reach, in half-widths: > 1 for dark margins
+  EU_FAM[fi]!.c = Math.cos(EU_FAM[fi]!.a);
+  EU_FAM[fi]!.s = Math.sin(EU_FAM[fi]!.a);
+  EU_FAM[fi]!.salt = 311 + fi * 97;
+  EU_FAM[fi]!.m = EU_FAM[fi]!.m || 1;   // reach, in half-widths: > 1 for dark margins
 }
 var EU_BAND_C = Math.cos(2.55), EU_BAND_S = Math.sin(2.55), EU_BAND_SP = 26000;
 var EU_RAFT = 1500;        // chaos raft cell
@@ -66,14 +68,14 @@ var EU_LENT = 14000;       // lenticula cell
 export var EU_DARK = 0, EU_YEL = 0;
 
 // Where the shell has broken into chaos. Shared with the colour pass.
-function euChaos(x, z) {
+function euChaos(x: number, z: number) {
   return fbm(x * 0.000055 + 2.7, z * 0.000055 - 8.4, 4);
 }
 
 // Ridge families [f0, f1) over warped coordinates, on top of h.
-function euRidges(xw, zw, f0, f1, h) {
+function euRidges(xw: number, zw: number, f0: number, f1: number, h: number) {
   for (var fi = f0; fi < f1; fi++) {
-    var F = EU_FAM[fi];
+    var F = EU_FAM[fi]!;
     var u = (xw * F.c + zw * F.s) / F.sp;
     var lane = Math.floor(u);
     if (hash2(lane, F.salt) > F.p) continue;
@@ -107,7 +109,7 @@ function euRidges(xw, zw, f0, f1, h) {
 /* Everything older than the chaos, as relief above the local base:
    the ridge fabric, the bands, and the youngest ridges. A chaos raft
    is a piece of exactly this, moved. */
-function euPre(x, z) {
+function euPre(x: number, z: number) {
   var wx = (valueNoise(x * 0.00012 + 3.1, z * 0.00012 - 7.7) - 0.5) * 1300
          + (valueNoise(x * 0.0007, z * 0.0007 + 5.5) - 0.5) * 260;
   var wz = (valueNoise(x * 0.00012 - 11.3, z * 0.00012 + 2.9) - 0.5) * 1300
@@ -145,7 +147,7 @@ function euPre(x, z) {
 // there. Craters are left where they are, so the spawn fade holds.
 var EU_OX = 1500, EU_OZ = 300;
 
-function hEuropa(x0, z0) {
+function hEuropa(x0: number, z0: number) {
   var x = x0 + EU_OX, z = z0 + EU_OZ;
   var nx = x * 0.00012, nz = z * 0.00012;
   // The shell is flat at long wavelengths: a few hundred metres of
@@ -273,7 +275,7 @@ function hEuropa(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
-function tintEuropa(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintEuropa(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Europa is water ice, and most of it is nearly white: a
   // geometric albedo of 0.67, ten times the Moon's. What darkens it
@@ -286,7 +288,7 @@ function tintEuropa(x, z, h, slope, fresh, dark, yel, hol, out) {
   // with rays across everything around it.
   var d = dark + (valueNoise(x * 0.00031 + 5.1, z * 0.00031 - 2.3) - 0.5) * 0.34
                + (valueNoise(x * 0.021, z * 0.021) - 0.5) * 0.14;
-  var cl = fresh * WORLD.halo + rayBrightness(x, z) * 0.8;
+  var cl = fresh * WORLD.halo! + rayBrightness(x, z) * 0.8;
   d -= slope * 0.25 + cl * 1.4;
   d = d < -1 ? -1 : d > 1 ? 1 : d;
   var t = d > 0 ? d : 0;

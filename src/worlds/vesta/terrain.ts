@@ -18,7 +18,7 @@ import { WORLD } from '../../kernel/world';
    front of you. VE_DK is how much dark material is at the last query,
    for the colour pass. */
 var VE_LANE = 34000, VE_OX = -100000, VE_OZ = 74250;
-function veTrough(x0, z) {
+function veTrough(x0: number, z: number) {
   var x = x0 + VE_OX;
   var t = z + VE_OZ + (valueNoise(x * 0.00002, 5.5) - 0.5) * 6000;
   var li = Math.floor(t / VE_LANE);
@@ -34,7 +34,7 @@ function veTrough(x0, z) {
   // Walls: steep, degraded, gullied; floor rubble.
   return -D * (1 - g) + D * 0.06 * (ridged(x * 0.0005 + li, z * 0.0005, 3) - 0.35) * g * (1 - g) * 4;
 }
-function hVesta(x, z) {
+function hVesta(x: number, z: number) {
   var h = (fbm(x * 0.00002 - 3, z * 0.00002 + 1, 4) - 0.5) * 3500;
   h += veTrough(x, z);
   h += (fbm(x * 0.0003 + 2, z * 0.0003 - 6, 3) - 0.5) * 120;
@@ -44,7 +44,7 @@ function hVesta(x, z) {
   return h + craterAt(x, z);
 }
 
-function tintVesta(x, z, h, slope, fresh, dark, yel, hol, out) {
+function tintVesta(x: number, z: number, h: number, slope: number, fresh: number, dark: number, yel: number, hol: number, out: number[]) {
   var v;
   // Vesta is bright for a rocky body, about 0.4 — basalt, its pyroxene
   // giving it a faint warm cast — with dark material, carbonaceous
@@ -53,7 +53,7 @@ function tintVesta(x, z, h, slope, fresh, dark, yel, hol, out) {
   // out of the slopes (Reddy et al. 2012; McCord et al. 2012).
   var n1 = valueNoise(x * 0.0007 + 4.4, z * 0.0007 - 2), n2 = valueNoise(x * 0.05, z * 0.05);
   var dkm = sstep(0.62, 0.78, fbm(x * 0.00012 + 9, z * 0.00012 - 3, 3)) * (0.6 + 0.4 * n1);
-  var cl = fresh * WORLD.halo + rayBrightness(x, z);
+  var cl = fresh * WORLD.halo! + rayBrightness(x, z);
   v = (1.0 + (n1 - 0.5) * 0.14 + (n2 - 0.5) * 0.1 + slope * 0.35 + cl) * (1 - dkm * 0.65);
   out[0] = v * 1.04; out[1] = v * 1.0; out[2] = v * 0.93;
 }
