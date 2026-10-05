@@ -328,9 +328,11 @@ Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's ord
 **As built:** kind 14. Occator as a fixed landform with its pit, dome and faculae; polygonal crater rims (`poly`, a new crater option). Found on the way: chunk bounding spheres were centred at y = 0 with ~700 m radius, so ground kilometres below zero (Occator's floor) was frustum-culled; they are now fitted to each chunk's heights. Picker gets Vesta and Ceres as systems of their own between Mars and Jupiter. 1.75 µs per query.
 
 ### 13f. Iapetus — the two-faced moon and its ridge
-- [ ] Kernel row (kind 15): R 734.5 km, g 0.223 m/s². **Equatorial ridge** up to 13–20 km high and ~20 km wide (Porco et al. 2005), with the site on its flank so the ridge fills the horizon; huge landslides off crater walls (Singer et al. 2012, long runout); heavily cratered, saturated at large sizes.
-- [ ] Colour: the boundary of **Cassini Regio** — dark (0.03–0.05) lag on sun-facing, warmer slopes, bright (0.5–0.6) ice on poleward and shaded slopes, with a sharp, patchy transition (thermal segregation, Spencer & Denk 2010). Colour-only.
-- [ ] Sky: Saturn 1.94° across, **rings open** — Iapetus' orbit is inclined ~15° to Saturn's equator, so the rings show as an ellipse, not a line. Reuse the ring capability; Titan and Hyperion as moving points. Saturn moves? Iapetus is locked, so no.
+- [x] Kernel row (kind 15): R 734.5 km, g 0.223 m/s². **Equatorial ridge** up to 13–20 km high and ~20 km wide (Porco et al. 2005), with the site on its flank so the ridge fills the horizon; huge landslides off crater walls (Singer et al. 2012, long runout); heavily cratered, saturated at large sizes.
+- [x] Colour: the boundary of **Cassini Regio** — dark (0.03–0.05) lag on sun-facing, warmer slopes, bright (0.5–0.6) ice on poleward and shaded slopes, with a sharp, patchy transition (thermal segregation, Spencer & Denk 2010). Colour-only.
+- [x] Sky: Saturn 1.94° across, **rings open** — Iapetus' orbit is inclined ~15° to Saturn's equator, so the rings show as an ellipse, not a line. Reuse the ring capability; Titan and Hyperion as moving points. Saturn moves? Iapetus is locked, so no.
+
+**As built:** kind 15. Ridge 22 km south, ~6.5 km high at the site's longitude, massifs and saddles along it, base 40 km wide (a 13 km, 20 km-wide ridge would need 50° flanks; heights kept where slopes stay under ~37°). Lag/frost sorting by aspect and noise. Saturn's rings open 12°. Landslides not done. 2.2 µs per query.
 
 ### 13g. Miranda — Verona Rupes
 - [ ] Kernel row (kind 16): R 235.8 km, g 0.079 m/s² (jets, beacon). **Coronae**: concentric bands of parallel ridges and troughs (Inverness's chevron, Arden's racetrack), next to old rolling cratered terrain; **Verona Rupes**, a fault scarp 5–10 km high (Pappalardo et al. 1997) on the skyline.
