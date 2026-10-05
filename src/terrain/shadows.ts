@@ -22,9 +22,9 @@ import { chunkGroup, chunkStreamer } from './streamer';
 
      1. Height clipmaps. The streamed chunk meshes are rendered top-
         down, orthographically, into a height texture per level, the
-        highest surface winning — which is the fine mesh wherever the
-        levels overlap, since coarse chunks are sunk beneath it. This
-        is the mesh you see, curvature drop and all, so the shadows
+        highest surface winning. Levels do not overlap: a coarse chunk
+        leaves out the quads finer ground stands on (terrain/streamer.ts).
+        This is the mesh you see, curvature drop and all, so the shadows
         land on exactly the ground that is drawn; no second height
         source is involved.
      2. Horizon maps. For each texel, march toward the sun through

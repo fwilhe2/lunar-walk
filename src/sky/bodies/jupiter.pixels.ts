@@ -103,7 +103,7 @@ export function jupiterPixels(W: number, H: number) {
   };
 
   // The named features, at stated longitudes: [lon, lat, half-width
-  // in longitude, half-height in latitude, colour, spin].
+  // in longitude, half-height in latitude, colour].
   const GRS = [60, -22.5, 7.0, 4.9] as const;
   const OVALS: [lon: number, lat: number, rx: number, ry: number, rgb: [number, number, number]][] = [[112, -33, 3.2, 2.2, [226, 216, 200]]];                  // oval BA
   for (let k = 0; k < 8; k++) OVALS.push([150 + k * 24 + hash2(k, 5) * 8, -40.5, 1.5, 1.0, [236, 232, 222]]);

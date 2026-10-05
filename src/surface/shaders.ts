@@ -38,7 +38,7 @@ export const TS = {
    (Zebker et al. 2014) — and wears a faint breath of capillary
    ripples that the wind of half a metre a second can raise. */
 // → glsl/lake.glsl (GLSL.LAKE)
-// → glsl/lake-surface.glsl (GLSL.GROUND_SPARKLE)
+// → glsl/lake-surface.glsl (spliced into GLSL.GROUND_SPARKLE at // #lake-surface)
 
 // → glsl/ground-sparkle.glsl (GLSL.GROUND_SPARKLE)
 
