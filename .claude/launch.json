@@ -9,18 +9,6 @@
       ],
       "port": 5174,
       "autoPort": true
-    },
-    {
-      "name": "orig",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "5180",
-        "--directory",
-        "/private/tmp/claude-501/-Users-I531928-workspace-lunar-walk/1bd6bd62-63b6-463a-995f-f56e670b94f8/scratchpad/orig"
-      ],
-      "port": 5180
     }
   ]
 }
