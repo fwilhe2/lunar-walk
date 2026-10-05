@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SITE_H } from './boot';
+import { session } from './boot';
 import { readInput } from './controls';
 import { demo } from './demo';
 import { stepHash } from './view-hash';
@@ -29,7 +29,7 @@ import { TS } from '../surface/shaders';
 import { terrainShadows } from '../terrain/shadows';
 import { chunkStreamer } from '../terrain/streamer';
 import { drawCompass } from '../ui/compass';
-import { doseSv, el, hudSpeed, hudTimer, noteTimer, setDoseSv, setHudTimer, setNoteTimer } from '../ui/hud';
+import { el, hudState } from '../ui/hud';
 import { rover } from '../vehicles/rover';
 import { world } from '../worlds/index';
 
@@ -119,28 +119,28 @@ export function step(dt, t) {
   }
   relayAim(COMPANION_AIM);
   // A tall plume's top stays in sunlight well after sunset below it.
-  if (plumes.on) plumes.update(_camWorld, SITE_H, THREE.MathUtils.smoothstep(sunElev, -0.25, 0.0), KEY.U);
+  if (plumes.on) plumes.update(_camWorld, session.siteH, THREE.MathUtils.smoothstep(sunElev, -0.25, 0.0), KEY.U);
   curtains.update(KEY.U);
-  if (geysers.on) geysers.update(SITE_H, THREE.MathUtils.smoothstep(sunElev, -0.15, 0.0), KEY.U);
+  if (geysers.on) geysers.update(session.siteH, THREE.MathUtils.smoothstep(sunElev, -0.15, 0.0), KEY.U);
 
   dust.update(dt, player.gravity, world.dustDrag);
   dust.light();
   stepSound(dt);
   stepHash(dt);
-  if (world.dose) setDoseSv(doseSv + (world.dose * dt / 86400));
+  if (world.dose) hudState.doseSv += world.dose * dt / 86400;
 
-  if (noteTimer > 0 && (setNoteTimer(noteTimer - (dt))) <= 0) el.note.textContent = '';
+  if (hudState.noteTimer > 0 && (hudState.noteTimer -= dt) <= 0) el.note.textContent = '';
 
-  setHudTimer(hudTimer - (dt));
-  if (hudTimer <= 0) {
-    setHudTimer(0.1);
-    el.v.textContent = hudSpeed.toFixed(2) + ' m/s';
+  if ((hudState.timer -= dt) <= 0) {
+    hudState.timer = 0.1;
+    el.v.textContent = hudState.speed.toFixed(2) + ' m/s';
     el.met.textContent = Math.round(effort.W / 10) * 10 + ' W · ' + Math.round(effort.hr) + ' bpm' + (effort.winded ? ' · winded' : '');
     el.a.textContent = Math.max(0, player.pos.y - EYE - gh).toFixed(2) + ' m';
     el.p.textContent = Math.round(focus.x) + ' E · ' + Math.round(-focus.z) + ' N';
     drawCompass();
     el.s.textContent = (sunElev * 180 / Math.PI).toFixed(1) + '°';   // the demo moves it
-    if (world.dose) el.dose.textContent = doseSv < 1 ? (doseSv * 1000).toFixed(1) + ' mSv' : doseSv.toFixed(3) + ' Sv';
+    const dose = hudState.doseSv;
+    if (world.dose) el.dose.textContent = dose < 1 ? (dose * 1000).toFixed(1) + ' mSv' : dose.toFixed(3) + ' Sv';
     // How hard the push being wound up is, and what it will launch you at.
     const charging = mode === 'EVA' && player.charge > 0;
     el.pushLine.hidden = !charging;

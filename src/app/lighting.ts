@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { initialized, loading } from './boot';
+import { session } from './boot';
 import { KEY, KEY_DIR, KEY_XZ, SUN_DIR, SUN_XZ, ambLight, hemiLight, sun, sunElev } from '../render/lights';
 import { eyePass } from '../render/post';
 import { camera, scene } from '../render/renderer';
@@ -93,7 +93,7 @@ function updateKey() {
   GROUND_U.rgMicro.value.z = KEY.night ? 0 : (world.micro[2] ?? 0.6);
   if (KEY.night !== wasNight) {
     eyePass.uniforms.uReset.value = 1;
-    if (initialized && !loading) note(KEY.night ? 'NIGHT · ' + n.label : 'SUNRISE', true);
+    if (session.initialized && !session.loading) note(KEY.night ? 'NIGHT · ' + n.label : 'SUNRISE', true);
   }
   if (KEY_XZ.x !== kx || KEY_XZ.y !== kz) terrainShadows.invalidate();
 }

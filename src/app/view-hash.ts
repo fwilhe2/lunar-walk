@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { boot, loading, setLoading } from './boot';
+import { boot, session } from './boot';
 import { demo } from './demo';
 import { updateSkyColors } from './lighting';
 import { applyWorld, preparing } from './worlds';
@@ -35,7 +35,7 @@ export function viewHash() {
   return h;
 }
 export function stepHash(dt) {
-  if ((hashTimer -= dt) > 0 || demo.on || loading) return;
+  if ((hashTimer -= dt) > 0 || demo.on || session.loading) return;
   hashTimer = 1;
   const h = viewHash();
   if (h === lastHash) return;
@@ -66,7 +66,7 @@ export function goTo(v) {
   yawObj.position.copy(player.pos);
   dust.clear();
   // Stream the new place in behind the loading screen, as a new world does.
-  setLoading(true); boot.hidden = false;
+  session.loading = true; boot.hidden = false;
   chunkStreamer.update(v.x, v.z);
   rockSystem.update(v.x, v.z);
   lastHash = viewHash();

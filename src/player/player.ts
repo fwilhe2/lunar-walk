@@ -19,6 +19,8 @@ export const player = {
 player.pos.y = terrainHeight(0, 0) + EYE;
 yawObj.rotation.y = -0.95;   // opens facing the flag, with Earth up to the right
 
-export let mode = 'EVA';   // EVA | FLY | ROVER
+export type Mode = 'EVA' | 'FLY' | 'ROVER';
+export let mode: Mode = 'EVA';
 
-export function setModeRaw(v) { return (mode = v); }
+// Without the transition setMode() (modes.ts) makes: for a fresh world.
+export function setModeRaw(v: Mode) { mode = v; }

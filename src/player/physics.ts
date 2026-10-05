@@ -14,7 +14,7 @@ import { lander } from '../props/lander';
 import { rockSystem } from '../props/rocks';
 import { camera, pitchObj, yawObj } from '../render/renderer';
 import { prints } from '../surface/stamps';
-import { note, setHudSpeed } from '../ui/hud';
+import { hudState, note } from '../ui/hud';
 import { rover } from '../vehicles/rover';
 import { world } from '../worlds/index';
 
@@ -365,7 +365,7 @@ export function stepEVA(dt) {
   // The body always moves fully; only the view is steadied.
   body.update(p.pos.x + right.x * g8.x + fwd.x * (bf + fOut), p.pos.y + g8.y + p.eyeOff + smooth - bd - fDrop,
               p.pos.z + right.z * g8.x + fwd.z * (bf + fOut), yawObj.rotation.y, g8.swing, g8.amt, p.leanF + fTh * fDir, p.leanS, p.bend);
-  setHudSpeed(hs);
+  hudState.speed = hs;
   return gh;
 }
 
@@ -400,7 +400,7 @@ export function stepFLY(dt) {
   if (player.pos.y > gh + FLY_CEILING) { player.pos.y = gh + FLY_CEILING; player.vel.y = Math.min(0, player.vel.y); }
 
   yawObj.position.copy(player.pos);
-  setHudSpeed(v);
+  hudState.speed = v;
   return gh;
 }
 
@@ -451,6 +451,6 @@ export function stepROVER(dt) {
   player.pos.set(s.pos.x, s.y + EYE, s.pos.z);
   player.vel.set(0, 0, 0);
 
-  setHudSpeed(Math.abs(s.vel));
+  hudState.speed = Math.abs(s.vel);
   return terrainHeight(s.pos.x, s.pos.z);
 }

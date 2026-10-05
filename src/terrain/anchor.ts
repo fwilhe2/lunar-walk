@@ -17,6 +17,4 @@ export function terrainNormal(x, z, eps = 0.6) {
 export let curveAX = 128, curveAZ = 128;
 export const dropAt = (x, z) => curveDrop(x - curveAX, z - curveAZ);
 
-export function setCurveAX(v) { return (curveAX = v); }
-
-export function setCurveAZ(v) { return (curveAZ = v); }
+export function setCurveAnchor(ax: number, az: number) { curveAX = ax; curveAZ = az; }

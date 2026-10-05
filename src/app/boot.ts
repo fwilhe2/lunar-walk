@@ -8,20 +8,18 @@
    and every visit after it is immediate.
    ═════════════════════════════════════════════════════════════ */
 export const boot = document.getElementById('boot');
-export let initialized = false;
-export let SITE_H = 0;                   // ground at the landing site
-export let loading, everStarted = false;
-export function bootShow(name, frac, text) {
+/* Where the session stands, written from several modules (worlds.ts,
+   view-hash.ts, controls.ts, main.ts), hence one object rather than
+   module bindings, which only their own module may assign. */
+export const session = {
+  initialized: false,    // the first world has been applied
+  loading: false,        // a world or a shared view is streaming in behind the loading screen
+  everStarted: false,    // you have been down on the surface (pointer locked) at least once
+  siteH: 0,              // ground at the landing site
+};
+export function bootShow(name: string, frac: number, text: string) {
   boot.innerHTML = '<div class="t">' + name + '</div><div class="bar"><i style="width:' + (frac * 100).toFixed(1) + '%"></i></div>' +
     '<div class="n">' + text + '</div>';
 }
-
-export function setEverStarted(v) { return (everStarted = v); }
-
-export function setLoading(v) { return (loading = v); }
-
-export function setInitialized(v) { return (initialized = v); }
-
-export function setSITE_H(v) { return (SITE_H = v); }
 
 

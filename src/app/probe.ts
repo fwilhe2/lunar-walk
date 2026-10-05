@@ -3,7 +3,7 @@
    small API (window.lw.probe) that the Node runner calls through
    page.evaluate(). Nothing here is part of the app proper. */
 import * as THREE from 'three';
-import { loading } from './boot';
+import { session } from './boot';
 import { updateSkyColors } from './lighting';
 import { applyWorld, preparing } from './worlds';
 import { frameHooks } from './hooks';
@@ -11,13 +11,13 @@ import { terrainHeight } from '../kernel/terrain';
 import { EYE } from '../player/constants';
 import { keys } from '../player/input';
 import { setMode } from '../player/modes';
-import { mode, player } from '../player/player';
+import { mode, player, type Mode } from '../player/player';
 import { setSunElev, sunElev, updateSunDir } from '../render/lights';
 import { eyePass } from '../render/post';
 import { quality } from '../render/quality';
 import { camera, pitchObj, renderer, scene, yawObj } from '../render/renderer';
 import { chunkStreamer } from '../terrain/streamer';
-import { VIEW, WORLD_IDS, world, worldId } from '../worlds/index';
+import { VIEW, WORLD_IDS, world, worldId, type WorldId } from '../worlds/index';
 
 let frame = 0;
 let shot: { type: string; resolve: (url: string) => void } | null = null;
@@ -35,7 +35,7 @@ const probe = {
   // Loading done, nothing left to stream, then a few frames for the
   // terrain-shadow pass, which is spread over five.
   async idle(extra = 8) {
-    while (preparing || loading || chunkStreamer.pending() > 0) await sleep(50);
+    while (preparing || session.loading || chunkStreamer.pending() > 0) await sleep(50);
     await probe.frames(extra);
   },
   // The frame as a data URL. The eye is snapped to the scene first: at a
@@ -46,7 +46,7 @@ const probe = {
     return new Promise((resolve) => { shot = { type: png ? 'image/png' : 'image/jpeg', resolve }; });
   },
   // Put the viewer somewhere: { world, x, z, h (above ground), yaw, pitch, mode, sun (rad) }.
-  async at(o: { world?: string; x?: number; z?: number; h?: number; yaw?: number; pitch?: number; mode?: string; sun?: number }) {
+  async at(o: { world?: WorldId; x?: number; z?: number; h?: number; yaw?: number; pitch?: number; mode?: Mode; sun?: number }) {
     // applyWorld() prepares textures first, then applies: wait for both.
     if (o.world && o.world !== worldId) { await applyWorld(o.world); await probe.idle(2); }
     if (o.sun !== undefined) { setSunElev(o.sun); updateSunDir(); updateSkyColors(); }

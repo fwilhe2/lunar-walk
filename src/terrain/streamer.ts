@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { scene } from '../render/renderer';
 import { groundMat } from '../surface/ground';
-import { setCurveAX, setCurveAZ } from './anchor';
+import { setCurveAnchor } from './anchor';
 import { VIEW } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
@@ -189,7 +189,7 @@ export const chunkStreamer = (() => {
     // the player's own feet stays under a centimetre.
     const a0x = (Math.floor(px / 256) + 0.5) * 256;
     const a0z = (Math.floor(pz / 256) + 0.5) * 256;
-    setCurveAX(a0x); setCurveAZ(a0z);   // everything on the ground shares it
+    setCurveAnchor(a0x, a0z);   // everything on the ground shares it
 
     // On low quality the 1 km ring stops a chunk short where a coarser
     // level follows it: 32 fewer draws, and the 4 km chunks take over.

@@ -2,7 +2,15 @@ import { sound } from '../audio/sound';
 import { mode } from '../player/player';
 import { world } from '../worlds/index';
 
-export let noteTimer = 0;
+/* The readout's own state, advanced by the loop (app/loop.ts), the
+   physics and the pointer-lock handler. */
+export const hudState = {
+  locked: false,         // the pointer is locked: you are on the surface, not in the picker
+  noteTimer: 0,          // s until the note line clears
+  timer: 0,              // s until the readout refreshes
+  speed: 0,              // m/s, as the physics last reported it
+  doseSv: 0,             // what you have soaked up since arriving, where that is worth showing
+};
 export const el = {
   mode: document.getElementById('r-mode'),
   g: document.getElementById('r-g'), body: document.getElementById('r-body'),
@@ -18,13 +26,11 @@ export const el = {
   gasLine: document.getElementById('r-gasline'), gas: document.getElementById('r-gas'),
   dose: document.getElementById('r-dose'), rate: document.getElementById('r-rate'),
 };
-// What you have soaked up since arriving, where that is worth showing.
-export let doseSv = 0;
 
 // radio: it came over the loop, so it gets the Quindar tones.
 export function note(text, radio?) {
   el.note.textContent = text;
-  noteTimer = 3.5;
+  hudState.noteTimer = 3.5;
   if (radio) sound.quindar();
 }
 
@@ -72,15 +78,3 @@ export function showOverlay(on) {
   overlay.classList.toggle('hidden', !on);
   hud.classList.toggle('lift', on);
 }
-export let locked = false;
-export let hudTimer = 0, hudSpeed = 0;
-
-export function setLocked(v) { return (locked = v); }
-
-export function setDoseSv(v) { return (doseSv = v); }
-
-export function setNoteTimer(v) { return (noteTimer = v); }
-
-export function setHudTimer(v) { return (hudTimer = v); }
-
-export function setHudSpeed(v) { return (hudSpeed = v); }

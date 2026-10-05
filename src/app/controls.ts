@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { setEverStarted } from './boot';
+import { session } from './boot';
 import { demo } from './demo';
 import { updateSkyColors } from './lighting';
 import { lastHash, setLastHash, viewHash } from './view-hash';
@@ -14,7 +14,7 @@ import { mode, player } from '../player/player';
 import { setSunElev, sunElev, updateSunDir } from '../render/lights';
 import { quality } from '../render/quality';
 import { FOV0, camera, pitchObj, renderer, yawObj } from '../render/renderer';
-import { el, hud, locked, note, overlay, setLocked, showOverlay } from '../ui/hud';
+import { el, hud, hudState, note, overlay, showOverlay } from '../ui/hud';
 import { picker } from '../ui/picker';
 import { WORLD_IDS, WORLD_KEYS, world, worldId } from '../worlds/index';
 
@@ -96,12 +96,12 @@ document.getElementById('demoStart').addEventListener('click', (e) => {
   demo.start();
 });
 document.addEventListener('pointerlockchange', () => {
-  setLocked(document.pointerLockElement === renderer.domElement);
-  if (locked) { setEverStarted(true); overlay.classList.add('paused'); demo.stop(); }
-  showOverlay(!locked && !demo.on);
+  hudState.locked = document.pointerLockElement === renderer.domElement;
+  if (hudState.locked) { session.everStarted = true; overlay.classList.add('paused'); demo.stop(); }
+  showOverlay(!hudState.locked && !demo.on);
 });
 document.addEventListener('mousemove', (e) => {
-  if (!locked) return;
+  if (!hudState.locked) return;
   // Slower through the long lens, so a pixel of mouse is still about
   // a pixel of view.
   const k = 0.0022 * camera.fov / FOV0;
@@ -229,7 +229,7 @@ const touchUI = (() => {
   return {
     start() {
       touch.on = true; root.hidden = false;
-      setEverStarted(true);
+      session.everStarted = true;
       overlay.classList.add('paused');
       if (demo.on) demo.stop();
       showOverlay(false);

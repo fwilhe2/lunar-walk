@@ -74,7 +74,7 @@ import './app/boot';
 import './app/worlds';
 import './ui/picker';
 
-import { boot, bootShow, everStarted, loading, setLoading } from './app/boot';
+import { boot, bootShow, session } from './app/boot';
 import { demo } from './app/demo';
 import { frameHooks } from './app/hooks';
 import { seaView } from './app/lighting';
@@ -119,19 +119,19 @@ renderer.setAnimationLoop(() => {
     quality.resize();
   }
   if (preparing) { clock.getDelta(); return; }
-  if (loading) {
+  if (session.loading) {
     const left = chunkStreamer.pending();
     bootMax = Math.max(bootMax, left);
     bootShow(world.name, bootMax ? 1 - left / bootMax : 0, left > 0 ? 'generating surface · ' + left + ' sectors left' : 'done');
     chunkStreamer.update(player.pos.x, player.pos.z);
     if (left === 0) {
-      setLoading(false);
+      session.loading = false;
       bootMax = 0;
       // Build every shadow level now, so the first frame has them.
       terrainShadows.update(player.pos.x, player.pos.z, player.pos.y - EYE, true);
       boot.hidden = true;
       hud.hidden = false;
-      if (!everStarted) { overlay.hidden = false; hud.classList.add('lift'); }
+      if (!session.everStarted) { overlay.hidden = false; hud.classList.add('lift'); }
       if (demo.on) showOverlay(false);
       clock.getDelta();
       quality.settle();

@@ -11,7 +11,7 @@ import { SUN_DIR, setSunElev, sunElev, updateSunDir } from '../render/lights';
 import { quality } from '../render/quality';
 import { pitchObj, yawObj } from '../render/renderer';
 import { liveCompanions } from '../sky/companions';
-import { hud, locked, showOverlay } from '../ui/hud';
+import { hud, hudState, showOverlay } from '../ui/hud';
 import { world, worldId } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
@@ -105,7 +105,7 @@ export const demo = (() => {
         prior = null;
       }
       hud.classList.remove('demo');
-      if (!locked) showOverlay(true);
+      if (!hudState.locked) showOverlay(true);
     },
     toggle() { on ? this.stop() : this.start(); },
 

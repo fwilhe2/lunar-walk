@@ -1,13 +1,13 @@
 import { terrainHeight } from '../kernel/terrain';
 import { EYE } from './constants';
 import { gait } from './gait';
-import { mode, player, setModeRaw } from './player';
+import { mode, player, setModeRaw, type Mode } from './player';
 import { camera, pitchObj, yawObj } from '../render/renderer';
 import { el, note, updateKeysHelp } from '../ui/hud';
 import { rover } from '../vehicles/rover';
 import { world } from '../worlds/index';
 
-export function setMode(next) {
+export function setMode(next: Mode) {
   if (next === mode) return;
   if (next === 'ROVER' && !world.rover) {
     // A wheel needs weight on it to make traction, and at six

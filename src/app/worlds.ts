@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SITE_H, boot, bootShow, initialized, setInitialized, setLoading, setSITE_H } from './boot';
+import { boot, bootShow, session } from './boot';
 import { updateSkyColors } from './lighting';
 import { sound } from '../audio/sound';
 import { curtains } from '../effects/curtains';
@@ -28,10 +28,10 @@ import { setHapke } from '../surface/hapke';
 import { regolithAsync, regolithFor } from '../surface/regolith';
 import { TS } from '../surface/shaders';
 import { PRINT_U, printHapke, stampSystems } from '../surface/stamps';
-import { setCurveAX, setCurveAZ } from '../terrain/anchor';
+import { setCurveAnchor } from '../terrain/anchor';
 import { terrainShadows } from '../terrain/shadows';
 import { chunkStreamer } from '../terrain/streamer';
-import { el, setDoseSv, updateKeysHelp } from '../ui/hud';
+import { el, hudState, updateKeysHelp } from '../ui/hud';
 import { rover } from '../vehicles/rover';
 import { VIEW, activateWorld, world, worldId } from '../worlds/index';
 import { setWorld } from '../worlds/terrains';
@@ -50,7 +50,7 @@ export const worldUI = {
    supersedes an earlier one still preparing. Resolves once applied. */
 export let preparing = null;
 export function applyWorld(id) {
-  if (initialized && id === worldId && !preparing) return Promise.resolve();
+  if (session.initialized && id === worldId && !preparing) return Promise.resolve();
   if (preparing === id) return preparing.done;
   const job: { id: any; done?: Promise<void> } = preparing = { id };
   bootShow(VIEW[id].name, 0, 'preparing textures');
@@ -66,15 +66,15 @@ export function applyWorld(id) {
 }
 
 function applyWorldNow(id) {
-  if (initialized && id === worldId) return;
-  setInitialized(true);
+  if (session.initialized && id === worldId) return;
+  session.initialized = true;
   activateWorld(id);
   setWorld(id);                    // the kernel: heights, craters, colour
   // Only a body with something to light its night keeps the sun down.
   if (!world.night && sunElev < 0.045) { setSunElev(0.045); updateSunDir(); }
   // You always arrive at the origin, whose anchor cell centre is
   // this. Set before anything is placed on the ground.
-  setCurveAX(128); setCurveAZ(128);
+  setCurveAnchor(128, 128);
 
   // ── light
   sun.color.set(world.sunColor);
@@ -178,8 +178,8 @@ function applyWorldNow(id) {
   // ── you
   setFlyCeiling(world.fly);
   setModeRaw('EVA');
-  setSITE_H(terrainHeight(0, 0));
-  player.pos.set(0, SITE_H + EYE, 0);
+  session.siteH = terrainHeight(0, 0);
+  player.pos.set(0, session.siteH + EYE, 0);
   player.vel.set(0, 0, 0);
   player.onGround = true;
   player.crouch = 0; player.charge = 0; player.pushing = false; gait.reset(); player.lift = 0; player.eyeOff = 0;
@@ -196,7 +196,7 @@ function applyWorldNow(id) {
   el.world.textContent = world.name;
   el.site.textContent = world.site;
   el.note.textContent = '';
-  setDoseSv(0);
+  hudState.doseSv = 0;
   el.doseLine.hidden = !world.dose;
   if (world.dose) el.rate.textContent = world.dose + ' Sv/day';
   document.getElementById('p-title').textContent = world.title;
@@ -205,7 +205,7 @@ function applyWorldNow(id) {
   worldUI.select(id);
   updateKeysHelp();
 
-  setLoading(true);
+  session.loading = true;
   boot.hidden = false;
   chunkStreamer.update(0, 0);
   rockSystem.update(0, 0);
