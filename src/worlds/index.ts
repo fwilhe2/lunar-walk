@@ -44,7 +44,7 @@ const gText = (g: number) => (g < 1 ? g.toPrecision(2) : g.toPrecision(3)) + ' m
 export const VIEW = Object.fromEntries(WORLD_IDS.map((id) => {
   const g = TERRAINS[id].g;
   return [id, { ...VIEWS[id], id, name: id.toUpperCase(), g, gTxt: gText(g) }];
-})) as Record<WorldId, World>;
+})) as Record<WorldId, World>;   // fromEntries types its keys as string; they are WORLD_IDS
 
 // The world on screen; activateWorld() switches it (app/worlds.ts).
 export let world: World = VIEW.moon;

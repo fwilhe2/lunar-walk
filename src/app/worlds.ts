@@ -161,9 +161,9 @@ function applyWorldNow(id: WorldId) {
   // Whether the scene has fog is compiled into every program, so
   // every material in the scene needs a rebuild after that changes.
   scene.traverse((o) => {
-    const m = (o as THREE.Mesh).material;   // undefined on what is not a mesh, which the test below skips
-    if (Array.isArray(m)) m.forEach((x) => (x.needsUpdate = true));
-    else if (m) m.needsUpdate = true;
+    if (!('material' in o)) return;          // meshes, points, lines, sprites
+    const m = o.material;
+    for (const x of Array.isArray(m) ? m : [m]) if (x instanceof THREE.Material) x.needsUpdate = true;
   });
 
   // The key light last: it overrides the sun, sparkle and grain

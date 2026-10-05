@@ -43,6 +43,19 @@ Everything is under `src/`, one module per concern, and the import graph has **n
 
 Comments refer to other parts by file (`terrain/shadows.ts`); older history (commits, `ROADMAP.md`) uses the single file's section numbers (§5b etc.).
 
+## Types
+
+`tsconfig.json` is `strict` with `noUncheckedIndexedAccess` and `verbatimModuleSyntax`; the kernel config inherits them. Conventions, so new code reads like the rest:
+
+- Annotate at boundaries (parameters, exported APIs, empty containers); let inference do the rest. Types come from data where there is data: `WorldId` from `TERRAINS`, `CompanionId` from `COMPANIONS`, `TexKey` from `TEXGEN`, `Tier` from `TIER_IDS`, `BodyId` from the picker's table, the texgen protocol (`JobArgs`/`JobResult`) from `JOBS`. Tables are checked with `satisfies` (views: `{ … } satisfies WorldView`; `KINDS satisfies Record<LanderKind, LanderSpec>`), so a misspelt name is a compile error.
+- Kinds are literal unions (`Mode`, `LanderKind`, `LandmarkKind`, `ToneMap`, `SurfaceKind`, `ViewMotion`, `GalileanMoon` …), never `string`, never `enum`.
+- `noUncheckedIndexedAccess` in numeric code: an index in range by construction gets `a[i]!`, with one comment per block saying why; fixed-size data are tuples. A lookup that can miss is handled.
+- Shader uniforms: `TypedShaderMaterial<U>` (`util/three.ts`) keeps a material's uniforms typed (a `declare` field — nothing at run time); a uniform that starts empty is `new THREE.Uniform<T | null>(null)`. Same idea for passes (`TypedShaderPass`, `render/post.ts`) and companions' `userData` (`CompanionGroup`).
+- Outside data is checked where it enters: `parseView()` (`isWorldId`, own keys only), `isTier()` for `localStorage` and `?probe=`, `byId()` (`util/dom.ts`) for the elements `index.html` must have. Worker messages are typed contracts (`workers/mesh.protocol.ts`, `TexgenRequest`), not checked at run time — both ends are one build.
+- State written from several modules lives in one object (`session` in `app/boot.ts`, `hudState` in `ui/hud.ts`), not in module bindings behind generated setters.
+- No `any`; an `as` only where TypeScript cannot follow, with a comment (the worker scopes' `postMessage`, `runJob()`, the cache slots that are filled with null, `Object.fromEntries`).
+- Purely type-level changes leave the built bundle byte-identical; comparing `dist/assets/*.js` before and after is the cheapest proof that a change is one.
+
 ## The central invariant
 
 All terrain math lives in `src/kernel/` and the worlds' `terrain.ts` files. The main thread **and** the mesh worker import the same modules and select the same `TerrainDef` before asking (`setWorld(id)` from `worlds/terrains.ts`), so both sides compute identical heights. `terrainHeight(x, z)` is the single source of truth for the surface. It feeds:
@@ -119,7 +132,7 @@ If the sun ever has to move in azimuth, all three need rebuilding for the new di
 
 ## Surface materials (`surface/patch.ts`)
 
-The ground's GLSL lives in `src/surface/glsl/*.glsl` and is read through the getters on `GLSL` (`surface/shaders.ts`) at compile time. In the dev server a saved `.glsl` file hot-swaps: `glsl/index.ts` accepts its own update, copies the sources into the original `SRC` object (kept across reloads in `import.meta.hot.data`), bumps `glslState.version`, and every material that went through `surfacePatch()` recompiles under a new program cache key — the scene, the place you are standing and the light stay as they are. Keep the literal `import.meta.hot.accept(` there; Vite finds self-accepting modules by that text. Snippets compose by string replacement (`// #lake-surface` in `ground-sparkle.glsl`; prints' `HAPKE_GROUND` is cut from `hapke.glsl`), so there is still one copy of each piece of maths.
+The ground's GLSL lives in `src/surface/glsl/*.glsl` and is read through the getters on `GLSL` (`surface/shaders.ts`) at compile time. In the dev server a saved `.glsl` file hot-swaps: `glsl/index.ts` accepts its own update, copies the sources into the original `SRC` object (kept across reloads in `import.meta.hot.data`), bumps `glslState.version`, and every material that went through `surfacePatch()` recompiles under a new program cache key — the scene, the place you are standing and the light stay as they are. Keep `import.meta.hot!.accept(` there: Vite finds self-accepting modules by the text `import.meta.hot.accept(` in the transformed module, which is what esbuild makes of it (TypeScript cannot narrow `import.meta.hot`, hence the `!`). Snippets compose by string replacement (`// #lake-surface` in `ground-sparkle.glsl`; prints' `HAPKE_GROUND` is cut from `hapke.glsl`), so there is still one copy of each piece of maths.
 
 Every `MeshStandardMaterial` in the scene goes through `surfacePatch(material, kind, hapke, extra)`, kinds `ground` / `print` / `rock` / `object`:
 

@@ -75,6 +75,7 @@ const tex = () => new THREE.Uniform<THREE.Texture | null>(null);
 const DEPTH_SPLIT = 400;
 class SplitRenderPass extends RenderPass {
   render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {
+    // RenderPass types its camera as any Camera; this one is given the scene's PerspectiveCamera.
     const cam = this.camera as THREE.PerspectiveCamera, near = cam.near, far = cam.far;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
