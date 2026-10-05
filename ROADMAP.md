@@ -348,6 +348,9 @@ Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's ord
 ### 13h½. Mimas — Saturn 38° across
 - [x] Kernel row (kind 18): R 198.2 km, g 0.064 m/s²; saturated craters, regional swell, chasmata. Saturn-facing site (Herschel is on the leading face, where Saturn is below the horizon). Saturn 38° across with edge-on rings, five moons outside. Jets and beacon. 2.2 µs per query.
 
+### 13h¾. Dione — the wispy cliffs
+- [x] Kernel row (kind 19): R 561.4 km, g 0.232; cratered plains, two crossing families of graben with bright fresh-ice walls; site on a rim, the trough toward Saturn (18.4°, a crescent at this sun azimuth). 1.7 µs per query.
+
 ### 13i. Realism pass over the existing worlds
 Each item gets a probe shot before and after.
 - [x] **Zodiacal light** on the airless bodies: a cone along the ecliptic above the point where the sun set, visible once the sun is a few degrees below the horizon and the eye has opened — the glow Apollo crews sketched from orbit. Brightness scaled by 1/r² of the body's distance from the sun (invisible past Jupiter against the Milky Way, so only Mercury, Moon, Phobos, Deimos and the belt).

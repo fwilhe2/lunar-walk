@@ -800,6 +800,24 @@ var WORLDS = {
     Dtr: 40000,
   },
 
+  /* Dione: cratered plains, fewer craters on the trailing side, where
+     the site is, than on the leading, and cut by the chasmata. See
+     hDione(). Seed: 21 March 1684, when Giovanni Cassini found it. */
+  dione: {
+    id: 'dione', kind: 19, seed: 16840321,
+    g: 0.232, R: 561400,
+    lander: [-17.2, 27],
+    craters: [
+      { cell: 40960, salt:  7, rMin: 5000, rMax: 20000, count: 1, prob: 0.35, ageK: 1.3 },
+      { cell: 10240, salt: 13, rMin: 1200, rMax:  5000, count: 1, prob: 0.60, ageK: 1.6 },
+      { cell:  2560, salt: 29, rMin:  300, rMax:  1200, count: 2, prob: 0.60, ageK: 2.0 },
+      { cell:   640, salt: 41, rMin:   60, rMax:   300, count: 2, prob: 0.55, ageK: 2.2, rocks: 1 },
+      { cell:   160, salt: 53, rMin:   15, rMax:    60, count: 1, prob: 0.50, ageK: 2.4, rocks: 1 },
+    ],
+    craterAmp: 1, depthK: 0.9, rampart: 0, halo: 0.3,
+    Dtr: 20000,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -2984,6 +3002,51 @@ function hMimas(x, z) {
   return h + craterAt(x, z);
 }
 
+/* ── Dione ──────────────────────────────────────────────────────
+   Voyager saw bright wisps across Dione's trailing face and took them
+   for frost from vents; Cassini came close and found cliffs. The wisps
+   are chasmata — sets of parallel graben, troughs a kilometre or two
+   wide between fault scarps hundreds of metres high — whose walls are
+   fresh, clean ice, bright against plains darkened by the particles
+   Saturn's magnetosphere sweeps onto that side (Wagner et al. 2006).
+   Two sets cross here, one younger than the other, in lanes of 5 and 7
+   km, segment by segment along strike as faults run; the site is on a
+   rim, a cliff dropping in front of you. */
+var DI_OX = -24800, DI_OZ = -2000;
+var DI_F = [[Math.cos(0.25), Math.sin(0.25), 5200, 0.42], [Math.cos(1.35), Math.sin(1.35), 7000, 0.3]];
+function diGraben(x, z) {
+  var best = 0;
+  for (var k = 0; k < 2; k++) {
+    var F = DI_F[k], s = x * F[0] + z * F[1], t = z * F[0] - x * F[1];
+    var L = F[2], li = Math.floor(t / L);
+    if (cellRnd(li, k, 103, 0) > F[3]) continue;
+    // Faults run in segments that overlap and step aside.
+    var sg = s / 9000 + cellRnd(li, k, 103, 1) * 7, si = Math.floor(sg), sf = sg - si;
+    var on = cellRnd(si, li * 7 + k, 103, 2) < 0.7 ? 1 : 0;
+    if (!on) continue;
+    var taper = sstep(0, 0.15, sf) * (1 - sstep(0.85, 1, sf));
+    var cen = (li + 0.5) * L + (cellRnd(si, li * 7 + k, 103, 3) - 0.5) * L * 0.3;
+    var w = 500 + 700 * cellRnd(li, k, 103, 4), D = (200 + 350 * cellRnd(si, li * 7 + k, 103, 5)) * taper;
+    // Walls about 40°: a scarp as wide as it is deep, on each side.
+    var ww = D * 1.1 + 60;
+    var a = t - cen; if (a < 0) a = -a;
+    if (a > w + ww) continue;
+    var g = 1 - sstep(w, w + ww, a);
+    if (D * g > best) best = D * g;
+  }
+  return -best;
+}
+function hDione(x0, z0) {
+  var x = x0 + DI_OX, z = z0 + DI_OZ;
+  var h = (fbm(x * 0.00002 + 3, z * 0.00002 - 1, 4) - 0.5) * 2200;
+  h += (fbm(x * 0.0003 - 1, z * 0.0003 + 4, 3) - 0.5) * 70;
+  h += (fbm(x * 0.003 + 2, z * 0.003 - 3, 2) - 0.5) * 7;
+  h += (fbm(x * 0.03, z * 0.03 + 1, 2) - 0.5) * 0.9;
+  h += (fbm(x * 0.15 - 3, z * 0.15, 2) - 0.5) * 0.15;
+  h += diGraben(x, z);
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2996,7 +3059,8 @@ function terrainHeight(x, z) {
        : WK === 11 ? hCallisto(x, z) : WK === 12 ? hGanymede(x, z)
        : WK === 13 ? hTriton(x, z) : WK === 14 ? hCeres(x, z)
        : WK === 15 ? hIapetus(x, z) : WK === 16 ? hMiranda(x, z)
-       : WK === 17 ? hVesta(x, z) : WK === 18 ? hMimas(x, z) : hSmall(x, z);
+       : WK === 17 ? hVesta(x, z) : WK === 18 ? hMimas(x, z)
+       : WK === 19 ? hDione(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -3400,6 +3464,16 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     var n1 = valueNoise(x * 0.0008 + 2, z * 0.0008 - 1), n2 = valueNoise(x * 0.05, z * 0.05);
     v = (1.0 + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.06) * (1 + slope * 0.12 + fresh * WORLD.halo);
     out[0] = v * (0.985 - slope * 0.02); out[1] = v * 0.993; out[2] = v * (1.0 + slope * 0.02);
+
+  } else if (WK === 19) {
+    // The trailing face is darkened and reddened by what Saturn's
+    // magnetosphere sweeps onto it — plains about 0.5 against Dione's
+    // 1.0 leading-side ice — and the chasma walls are clean, fresh ice,
+    // the brightest thing in view: the wisps.
+    var n1 = valueNoise(x * 0.0007 + 3, z * 0.0007 - 2), n2 = valueNoise(x * 0.05, z * 0.05);
+    var cliff = sstep(0.35, 0.75, slope);
+    v = (0.62 + (n1 - 0.5) * 0.1 + (n2 - 0.5) * 0.06 + fresh * WORLD.halo) * (1 - cliff) + (1.45 + (n2 - 0.5) * 0.1) * cliff;
+    out[0] = v * (1.02 - cliff * 0.04); out[1] = v * (0.99 + cliff * 0.01); out[2] = v * (0.95 + cliff * 0.07);
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -3975,6 +4049,44 @@ const VIEW = {
     look: [-1.674, 0.66],
   },
 
+  /* Dione has Enceladus's sun, in the same units, on a trailing face
+     darkened to about half of Dione's leading-side ice, and cut by
+     cliffs of clean ice twice as bright. Saturn is 377,000 km off, 18.4°
+     across, 33° up in the south-west from the site (40°N, 45° east of
+     the point beneath it), and never moves; at this hour the sun is
+     not far from it, so it shows a thick crescent with its rings a
+     line across it. Mimas, Enceladus and Tethys pass in front of it; Rhea
+     and Titan go round outside. */
+  dione: {
+    name: 'DIONE', site: 'Padua Chasmata', gTxt: '0.23 m/s²',
+    title: 'Dione Walk', sub: 'Padua Chasmata · 0.024 g · surface unbounded',
+    fine: 'The wisps Voyager saw on Dione\'s trailing face are cliffs: fresh ice walls hundreds<br>' +
+          'of metres high along graben. One drops away in front of you, under Saturn, 18° wide.<br>' +
+          '<b>Esc</b> picks another world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 0.378, sunSize: 5.9, sunHDR: [60, 57, 52],
+    corona: 1600, coronaColor: [0.68, 0.66, 0.62],
+    hemi: [0x1a1b1e, 0x3e4044, 6.0], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 210, mapTint: [1.0, 0.995, 0.985], pits: 30, grain: 0.6, clods: 0.5, pebbles: 70,
+    // Dione's photometry (Buratti & Veverka 1984; Verbiscer & Veverka
+    // 1989): bright, backscattering grains, moderately rough.
+    hapke: { w: 0.85, b: 0.30, c: 0.50, B0: 0.8, h: 0.01, theta: 25, Bc0: 0.35, hc: 0.004 },
+    micro: [0.3, 0.25, 0.35], sparkle: 2.0,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.5,
+    dustColor: 0xb8b7b4, dustDrag: 0, stampColor: 0xa6a4a0, soil: 0xb5b3b0,
+    rockTint: [0.99, 1.0, 1.02], rockAlb: [0.55, 0.25], rockN: 0.4, talus: 400,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
+    exposure: 1.0, eye: [0.36, 0.05, 15], starGain: 0.006, bloom: [0.5, 0.65, 3.0],
+    companions: ['saturn-dio', 'mimas-dio', 'enceladus-dio', 'tethys-dio', 'rhea-dio', 'titan-dio'],
+    // Night: Saturn, 18.4° across at albedo 0.47 — 1.2% of the sun.
+    night: { ratio: 0.012, radius: 0.161, color: 0xfff0d8, label: 'SATURNLIT', stars: 12 },
+    relay: 0.1,
+    look: [2.142, 0.3],
+  },
+
   /* Iapetus is 9.5 AU out with Saturn: 15 W/m², a ninetieth of the
      Moon's. Light is kept in units a hundred times the Moon's, Titan's,
      because the dark lag here is darker than lunar soil and in Europa's
@@ -4443,7 +4555,7 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'vesta', 'ceres', 'io', 'europa', 'ganymede', 'callisto', 'mimas', 'enceladus', 'titan', 'iapetus', 'miranda', 'triton', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'vesta', 'ceres', 'io', 'europa', 'ganymede', 'callisto', 'mimas', 'enceladus', 'dione', 'titan', 'iapetus', 'miranda', 'triton', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
@@ -9020,6 +9132,16 @@ const MIM = (() => {
   return { J: F(rel.map((v) => v / d)), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: a, ang: Math.asin(60268 / d) };
 })();
 
+/* Saturn from Dione, 40°N, 45° east of the point beneath it, on the
+   edge of the trailing face: 377,396 km off, 18.4° across, 33° up in
+   the south-west. */
+const DIO = (() => {
+  const F = siteFrame(40, 45), a = 377396, R = 561.4, b = 40 * DEG, l = 45 * DEG;
+  const rel = [a - R * Math.cos(b) * Math.cos(l), -R * Math.cos(b) * Math.sin(l), -R * Math.sin(b)];
+  const d = Math.hypot(...rel);
+  return { J: F(rel.map((v) => v / d)), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: a, ang: Math.asin(60268 / d) };
+})();
+
 const IAP = (() => {
   const F = siteFrame(1.7, -50), t = 12 * DEG;
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), pole: F([-Math.sin(t), 0, Math.cos(t)]), aE: 3560820 };
@@ -9277,6 +9399,24 @@ const COMPANIONS = {
     kepler: { a: 435910, R: 788.9, rate: -0.0219, phase: 4.3, frame: MIR } },
   'oberon-mir': { tex: 'oberon', r: 1, gain: 1.0, bright: 0.36,
     kepler: { a: 583520, R: 761.4, rate: -0.0234, phase: 5.6, frame: MIR } },
+
+  /* Saturn from Dione: 18.4° across, rings edge-on; three moons inside
+     Dione's orbit crossing it, two outside. */
+  'saturn-dio': {
+    tex: 'saturn', r: COMPANION_DIST * Math.sin(DIO.ang), dir: DIO.J, pole: DIO.Z, oblate: 0.902, spin: 0.011,
+    gain: 1.0, bright: 0.15, limb: 0.9, rings: [66900 / 60268, 140500 / 60268],
+    atmo: [0.55, 0.52, 0.45], atmoK: 0.06, atmoR: 1.004,
+  },
+  'mimas-dio': { tex: 'mimas', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 185539, R: 198.2, rate: 0.0258, phase: 1.2, frame: DIO } },
+  'enceladus-dio': { tex: 'enceladus', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 238020, R: 252.1, rate: 0.0135, phase: 2.6, frame: DIO } },
+  'tethys-dio': { tex: 'tethys', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 294619, R: 531.1, rate: 0.0061, phase: 4.0, frame: DIO } },
+  'rhea-dio': { tex: 'rhea', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 527108, R: 763.8, rate: -0.0053, phase: 5.1, frame: DIO } },
+  'titan-dio': { tex: 'titan', r: 1, gain: 1.0, bright: 0.13, atmo: [0.9, 0.62, 0.32], atmoK: 0.5, atmoR: 1.12,
+    kepler: { a: 1221870, R: 2574.7, rate: -0.0112, phase: 0.4, frame: DIO } },
 
   /* Saturn from Mimas: 38° across at true size, the rings edge-on; the
      outer moons along the ring line at their synodic rates about Mimas,
@@ -12233,7 +12373,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { mimas: 0.064, vesta: 0.25, miranda: 0.079, iapetus: 0.223, ceres: 0.284, triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { dione: 0.232, mimas: 0.064, vesta: 0.25, miranda: 0.079, iapetus: 0.223, ceres: 0.284, triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
