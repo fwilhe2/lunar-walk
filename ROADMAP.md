@@ -341,7 +341,9 @@ Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's ord
 **As built:** kind 16. Site on Inverness Corona's outer bands, a 6 km scarp 12 km NE under Uranus (22.8°); jets and beacon. Uranus and four moons; Uranian moon maps added to the small-moon generator. 1.6 µs per query.
 
 ### 13h. Vesta — Rheasilvia and the troughs (if time allows)
-- [ ] Kernel row: R 262.7 km, g 0.25 m/s²; Divalia Fossa troughs 10–20 km wide, km deep; Rheasilvia central mound. Bright basaltic regolith (albedo 0.4) with dark carbonaceous spots.
+- [x] Kernel row: R 262.7 km, g 0.25 m/s²; Divalia Fossa troughs 10–20 km wide, km deep; Rheasilvia central mound. Bright basaltic regolith (albedo 0.4) with dark carbonaceous spots.
+
+**As built:** kind 17. Site on the north rim of a 5 km-deep trough; Rheasilvia itself is 400 km south, below the horizon. 2.3 µs per query.
 
 ### 13i. Realism pass over the existing worlds
 Each item gets a probe shot before and after.
