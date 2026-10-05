@@ -114,9 +114,9 @@ export const devils = (() => {
       // dust goes up in puffs, bands a couple of widths apart.
       float u = vX / ( rc * ( 0.7 + 0.55 * nf ) ), uu = u * u;
       float chord = 0.5 * max( 0.0, 1.0 - uu ) + 0.5 * ( sqrt( max( 0.0, 1.0 - uu ) ) - sqrt( max( 0.0, 0.36 - uu ) ) );
-      float puff = 0.35 + 1.3 * smoothstep( 0.2, 0.8, vnoise( vec3( 7.3, 1.1, hm / ( 2.5 * uW ) ) ) );
+      float puff = 0.55 + 0.9 * smoothstep( 0.2, 0.8, vnoise( vec3( 7.3, 1.1, hm / ( 2.5 * uW ) ) ) );
       float top = smoothstep( 0.0, 1.0, ( 1.0 - t ) * 2.6 - 0.3 + ( n - 0.5 ) * 0.8 );
-      float tauC = chord * ( 0.5 + 0.5 * exp( - t * 3.0 ) ) * ( 0.15 + 1.7 * smoothstep( 0.25, 0.8, n ) ) * puff * top;
+      float tauC = chord * ( 0.5 + 0.5 * exp( - t * 3.0 ) ) * ( 0.35 + 1.2 * smoothstep( 0.25, 0.8, n ) ) * puff * top;
       // Skirt: the dust being lifted, low, wide and dense.
       float us = vX / ( ( 1.0 + 1.1 * sk ) * ( 0.7 + 0.55 * nb ) );
       float tauS = max( 0.0, 1.0 - us * us ) * sk * ( 0.5 + n );
@@ -200,8 +200,9 @@ export const devils = (() => {
         u.uLight.value = world.sunPower * KEY.scale + hemiLight.intensity * 0.5;
         u.uR.value = CURVE_R;
         u.uSway.value = t * 0.3 + k;
-        // As much dust per volume in a wide one, so more along the chord.
-        u.uW.value = d.W; u.uH.value = d.H; u.uTau.value = 0.7 * d.W / 60;
+        // A longer chord through a wide one, but not proportionally more:
+        // linear in width, a wide devil near you stood out like a pillar.
+        u.uW.value = d.W; u.uH.value = d.H; u.uTau.value = 0.44 * Math.sqrt(d.W / 40);
         // The wall turns at the tangential wind; the dust rises at 4 m/s.
         // Both from its birth, so they stay small.
         u.uSpin.value = (f * LIFE * d.w) % 6.2832; u.uRise.value = f * LIFE * 4;
