@@ -1,6 +1,7 @@
 /* The terrain kernel, in Node: what tools/check.mjs used to do, plus a
    fingerprint of every world. The surface is a pure function of
    (world, x, z); these tests hold it to that. */
+import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { CR_ALB, craterCacheReset } from '../src/kernel/craters';
 import { AUX, setTintNormalZ, surfaceTint, terrainHeight } from '../src/kernel/terrain';
@@ -18,22 +19,30 @@ function* spread(n: number) {
   }
 }
 
-// FNV-1a over the bit patterns of every number the kernel hands out.
-function fingerprint(id: keyof typeof TERRAINS) {
+/* What a world hands out at a fixed spread of points, per channel —
+   height, fresh ejecta, the three side channels, the three colours — as
+   a plain sum, a sum with fixed pseudo-random weights (so changes cannot
+   cancel), and the sum of magnitudes (the scale to compare against). */
+const CHANNELS = ['h', 'fresh', 'a0', 'a1', 'a2', 'r', 'g', 'b'] as const;
+type Channel = (typeof CHANNELS)[number];
+type Sums = [sum: number, weighted: number, magnitude: number];
+type Print = Record<Channel, Sums>;
+
+function fingerprint(id: keyof typeof TERRAINS): Print {
   setWorld(id);
-  const f64 = new Float64Array(1), u32 = new Uint32Array(f64.buffer);
-  let h = 0x811c9dc5;
-  const add = (v: number) => { f64[0] = v; for (const w of u32) { h ^= w; h = Math.imul(h, 0x01000193); } };
+  const out = Object.fromEntries(CHANNELS.map((c) => [c, [0, 0, 0]])) as Record<Channel, Sums>;   // filled below
+  let s = 777;
   const tint = [0, 0, 0];
   for (const [x, z, k] of spread(3000)) {
     const y = terrainHeight(x, z);
-    const fresh = CR_ALB, a0 = AUX[0], a1 = AUX[1], a2 = AUX[2];
-    add(y); add(fresh); add(a0); add(a1); add(a2);
+    const fresh = CR_ALB, a0 = AUX[0]!, a1 = AUX[1]!, a2 = AUX[2]!;
     setTintNormalZ(k * 2 - 1);
     surfaceTint(x, z, y, k, fresh, a0, a1, a2, tint);
-    add(tint[0]); add(tint[1]); add(tint[2]);
+    const w = 0.5 + ((s = (Math.imul(s, 1664525) + 1013904223) | 0) >>> 0) / 4294967296;
+    const v = [y, fresh, a0, a1, a2, tint[0]!, tint[1]!, tint[2]!];
+    CHANNELS.forEach((c, i) => { const o = out[c]; o[0] += v[i]!; o[1] += w * v[i]!; o[2] += Math.abs(v[i]!); });
   }
-  return (h >>> 0).toString(16).padStart(8, '0');
+  return out;
 }
 
 describe.each(IDS)('%s', (id) => {
@@ -60,19 +69,40 @@ describe.each(IDS)('%s', (id) => {
   });
 });
 
-/* Every world's surface, frozen. A change to the kernel or to a world's
-   terrain changes its line here: if you meant it, update the snapshot
-   (bunx vitest run -u) and say so in the commit. The first snapshot was
-   checked bit for bit against the old single-file kernel.
-   The numbers are V8's: engines round Math.sin, pow and friends
-   differently in the last bit (under Bun/JavaScriptCore 15 of 21 worlds
-   print other hashes). That never splits the ground, because a page and
-   its workers always run in the same engine — but run this in Node:
-   bun run test, not bun test (Bun's own runner, on JavaScriptCore). */
+/* Every world's surface, frozen, in tests/fingerprints.json. A change to
+   the kernel or to a world's terrain moves its sums: if you meant it,
+   record them again (UPDATE_FINGERPRINTS=1 bun run test) and say so in
+   the commit. They are compared to a part in 10¹⁰ of each channel's
+   magnitude, which still catches a millimetre of height at one point in
+   the three thousand, and is far above the last-bit rounding by which
+   engines differ: V8 versions and CPU architectures (arm64 against x64)
+   compute Math.sin, pow and friends differently in the last bit, which
+   never splits the ground — a page and its workers always run in one
+   engine — but moved bit-exact hashes. Measured: under x64 Node 24, 44
+   of the 504,000 numbers differ, by at most 1.3e-15 relative; under
+   Node 22, 2,288, by at most 5e-13. The first fingerprints were checked
+   bit for bit against the old single-file kernel; these sums were taken
+   from a kernel that still matched those, bit for bit, on arm64 Node 24. */
+const FILE = new URL('./fingerprints.json', import.meta.url);
+const TOL = 1e-10;
+
 test('fingerprints', () => {
-  const out: Record<string, string> = {};
-  for (const id of IDS) out[id] = fingerprint(id);
-  // and again in reverse, so no world leaks state into the next
-  for (const id of [...IDS].reverse()) expect(fingerprint(id)).toBe(out[id]);
-  expect(out).toMatchSnapshot();
+  const got = Object.fromEntries(IDS.map((id) => [id, fingerprint(id)]));
+  // and again in reverse, so no world leaks state into the next: in one
+  // engine that is bit for bit
+  for (const id of [...IDS].reverse()) expect(fingerprint(id)).toEqual(got[id]);
+  if (process.env.UPDATE_FINGERPRINTS) {
+    writeFileSync(FILE, '{\n' + IDS.map((id) => ` "${id}": ${JSON.stringify(got[id])}`).join(',\n') + '\n}\n');
+    return;
+  }
+  const want = JSON.parse(readFileSync(FILE, 'utf8')) as Record<string, Print>;   // written by the line above
+  expect(Object.keys(want).sort()).toEqual([...IDS].sort());
+  const off: string[] = [];
+  for (const id of IDS) {
+    for (const c of CHANNELS) {
+      const [s, w, m] = got[id]![c], [s0, w0] = want[id]![c];
+      if (Math.abs(s - s0) > TOL * m || Math.abs(w - w0) > TOL * m) off.push(`${id}.${c}: ${s0} → ${s}`);
+    }
+  }
+  expect(off).toEqual([]);
 });
