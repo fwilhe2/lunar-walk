@@ -335,8 +335,10 @@ Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's ord
 **As built:** kind 15. Ridge 22 km south, ~6.5 km high at the site's longitude, massifs and saddles along it, base 40 km wide (a 13 km, 20 km-wide ridge would need 50° flanks; heights kept where slopes stay under ~37°). Lag/frost sorting by aspect and noise. Saturn's rings open 12°. Landslides not done. 2.2 µs per query.
 
 ### 13g. Miranda — Verona Rupes
-- [ ] Kernel row (kind 16): R 235.8 km, g 0.079 m/s² (jets, beacon). **Coronae**: concentric bands of parallel ridges and troughs (Inverness's chevron, Arden's racetrack), next to old rolling cratered terrain; **Verona Rupes**, a fault scarp 5–10 km high (Pappalardo et al. 1997) on the skyline.
-- [ ] Sky: **Uranus 22° across**, pale cyan and nearly featureless, rings dark and almost edge-on, at 19 AU (3.7 W/m²). Uranus texture generator (pure). Ariel/Umbriel/Titania/Oberon as moving discs.
+- [x] Kernel row (kind 16): R 235.8 km, g 0.079 m/s² (jets, beacon). **Coronae**: concentric bands of parallel ridges and troughs (Inverness's chevron, Arden's racetrack), next to old rolling cratered terrain; **Verona Rupes**, a fault scarp 5–10 km high (Pappalardo et al. 1997) on the skyline.
+- [x] Sky: **Uranus 22° across**, pale cyan and nearly featureless, rings dark and almost edge-on, at 19 AU (3.7 W/m²). Uranus texture generator (pure). Ariel/Umbriel/Titania/Oberon as moving discs.
+
+**As built:** kind 16. Site on Inverness Corona's outer bands, a 6 km scarp 12 km NE under Uranus (22.8°); jets and beacon. Uranus and four moons; Uranian moon maps added to the small-moon generator. 1.6 µs per query.
 
 ### 13h. Vesta — Rheasilvia and the troughs (if time allows)
 - [ ] Kernel row: R 262.7 km, g 0.25 m/s²; Divalia Fossa troughs 10–20 km wide, km deep; Rheasilvia central mound. Bright basaltic regolith (albedo 0.4) with dark carbonaceous spots.
