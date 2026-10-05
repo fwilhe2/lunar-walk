@@ -65,6 +65,8 @@ export const devils = (() => {
       float c = dot( normalize( vP - cameraPosition ), normalize( uSun ) );
       float hg = 0.64 / pow( 1.36 - 1.2 * c, 1.5 );
       gl_FragColor = vec4( uCol * uLight * ( 0.10 + 0.16 * hg ) * a, a );
+      // Premultiplied, so fog is too: toward fogColor × a, or the fog
+      // colour paints the whole ribbon however thin the dust.
       #include <fog_fragment>
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -102,7 +104,7 @@ export const devils = (() => {
             fogColor: { value: new THREE.Color() }, fogDensity: { value: 0 },
           },
           vertexShader: vs.replace('void main() {', '#include <fog_pars_vertex>\nvoid main() {').replace('gl_Position = projectionMatrix * viewMatrix * vec4( P, 1.0 );', 'vec4 mvPosition = viewMatrix * vec4( P, 1.0 ); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>'),
-          fragmentShader: '#include <fog_pars_fragment>\n' + fs,
+          fragmentShader: '#include <fog_pars_fragment>\n' + fs.replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor,', 'fogColor * gl_FragColor.a,')),
           side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: true,
           blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
         });
