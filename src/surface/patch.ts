@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { skyDome } from '../sky/dome';
 import { glslState } from './glsl';
 import type { HapkeUniforms } from './hapke';
-import { GLSL, LIGHTS_BEGIN, TS } from './shaders';
+import { DV, GLSL, LIGHTS_BEGIN, TS } from './shaders';
 import type { Uniforms } from '../util/three';
 
 /* Patch a MeshStandardMaterial into one of four kinds of surface:
@@ -12,11 +12,12 @@ import type { Uniforms } from '../util/three';
                output as a factor multiplied into the ground (surface/stamps.ts)
      rock    — Hapke, and the terrain shadow seen from above the ground
      object  — anything man-made: its own PBR, plus the terrain shadow
+   All four take the dust devils' shadows (glsl/devil-shadow.glsl).
    `hpk` is a hapkeUniforms() set, for the three regolith kinds.     */
 export type SurfaceKind = 'ground' | 'print' | 'rock' | 'object';
 export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind, hpk?: HapkeUniforms, extra?: Uniforms) {
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, TS);
+    Object.assign(shader.uniforms, TS, DV);
     if (hpk) Object.assign(shader.uniforms, hpk);
     if (extra) Object.assign(shader.uniforms, extra);
     shader.vertexShader = shader.vertexShader
@@ -30,7 +31,7 @@ export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind,
           vWPos = ( modelMatrix * wq ).xyz;
         }`);
     let fs = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + GLSL.TS + (kind === 'ground' ? GLSL.GROUND + skyDome.glsl + GLSL.LAKE : ''));
+      .replace('#include <common>', '#include <common>\n' + GLSL.TS + GLSL.DEVIL_SHAPE + GLSL.DEVIL_SHADOW + (kind === 'ground' ? GLSL.GROUND + skyDome.glsl + GLSL.LAKE : ''));
     // The sea reflects the sky through the dome's own function and
     // uniforms (sky/dome.ts), shared, not copied.
     if (kind === 'ground') Object.assign(shader.uniforms, skyDome.uniforms, LAKE_U);
@@ -44,9 +45,9 @@ export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind,
       fs = fs.replace('#include <map_fragment>', GLSL.GROUND_MAP)
              .replace('#include <normal_fragment_maps>', GLSL.GROUND_NORMAL)
              .replace('#include <tonemapping_fragment>', GLSL.GROUND_SPARKLE);
-      shadow = 'float surfShadow = terrainShadow( vWPos, false ) * microLit;';
+      shadow = 'float surfShadow = terrainShadow( vWPos, false ) * devilShadow( vWPos ) * microLit;';
     } else {
-      shadow = `float surfShadow = terrainShadow( vWPos, ${kind === 'rock' || kind === 'object'} );`;
+      shadow = `float surfShadow = terrainShadow( vWPos, ${kind === 'rock' || kind === 'object'} ) * devilShadow( vWPos );`;
     }
     let lights = LIGHTS_BEGIN;
     if (kind === 'print') {

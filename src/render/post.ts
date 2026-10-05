@@ -5,7 +5,7 @@ import { FullScreenQuad, Pass } from 'three/examples/jsm/postprocessing/Pass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { camera, renderer, scene } from './renderer';
+import { DEPTH_SPLIT, camera, renderer, scene } from './renderer';
 import { EYE_TEX } from '../surface/hapke';
 import { TypedShaderMaterial, type Uniforms } from '../util/three';
 
@@ -64,7 +64,8 @@ const tex = () => new THREE.Uniform<THREE.Texture | null>(null);
    gets the whole buffer — millimetres at a kilometre, a metre at
    the far edge — and near precision is what it always was. The
    ranges overlap by 2% so no seam can open between them; nothing
-   drawn additively lives out there to be counted twice. Frustum
+   drawn additively lives out there to be counted twice, or it splits
+   the overlap itself, as the dust devils do (effects/devils.ts). Frustum
    culling does the sorting, so each chunk is drawn about once.
 
    The sun's shadow maps do not depend on the main camera, so they
@@ -72,7 +73,6 @@ const tex = () => new THREE.Uniform<THREE.Texture | null>(null);
    logarithmic depth buffer, which would need every ShaderMaterial
    patched, would break the prints' polygonOffset, and would cost
    early-z under the ground shader on exactly the GPUs render/quality.ts is for. */
-const DEPTH_SPLIT = 400;
 class SplitRenderPass extends RenderPass {
   render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {
     // RenderPass types its camera as any Camera; this one is given the scene's PerspectiveCamera.
