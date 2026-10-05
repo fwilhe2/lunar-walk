@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rockSystem } from '../props/rocks';
-import { sunFar } from './lights';
+import { sun, sunFar } from './lights';
 import { bloomPass, composer, fxaaPass, gradePass } from './post';
 import { ANISO, renderer, scene, setAniso } from './renderer';
 import { groundMat } from '../surface/ground';
@@ -42,11 +42,11 @@ export const isTier = (s: string | null): s is Tier => TIER_IDS.some((t) => t ==
 
 export const quality = (() => {
   const TIERS = {
-    high:   { name: 'HIGH',   dpr: 2, msaa: 4, fxaa: false, bloom: true,  soft: true,  far: 2048, farEvery: 1,
+    high:   { name: 'HIGH',   dpr: 2, msaa: 4, fxaa: false, bloom: true,  soft: true,  near: 4096, far: 2048, farEvery: 1,
               clip: 1024, gap: 350, cheap: false, aniso: 16, coarse: false, pebbles: 1,    pebbleShadow: true,  shapes: 99, lut: false, fps: 50, minScale: 0.6 },
-    medium: { name: 'MEDIUM', dpr: 1, msaa: 2, fxaa: false, bloom: true,  soft: false, far: 1024, farEvery: 1,
+    medium: { name: 'MEDIUM', dpr: 1, msaa: 2, fxaa: false, bloom: true,  soft: false, near: 2048, far: 1024, farEvery: 1,
               clip: 1024, gap: 350, cheap: false, aniso: 4,  coarse: false, pebbles: 0.7,  pebbleShadow: true,  shapes: 3,  lut: true,  fps: 34, minScale: 0.55 },
-    low:    { name: 'LOW',    dpr: 1, msaa: 0, fxaa: true,  bloom: false, soft: false, far: 1024, farEvery: 2,
+    low:    { name: 'LOW',    dpr: 1, msaa: 0, fxaa: true,  bloom: false, soft: false, near: 2048, far: 1024, farEvery: 2,
               clip: 512,  gap: 700, cheap: true,  aniso: 2,  coarse: true,  pebbles: 0.35, pebbleShadow: false, shapes: 2,  lut: true,  fps: 26, minScale: 0.5 },
   } satisfies Record<Tier, object>;
   const KEY = 'surfacewalk.quality';
@@ -99,11 +99,14 @@ export const quality = (() => {
     }
     fxaaPass.enabled = T.fxaa;
     bloomPass.enabled = T.bloom;
-    // Shadows. The near cascade keeps its 2048² everywhere: it is what
-    // keeps a rock's shadow attached to the rock.
+    // Shadows. The near cascade is at least 2048² everywhere: it is what
+    // keeps a rock's shadow attached to the rock. The ground reads it
+    // with a filter no softer than the sun's penumbra (surface/glsl/
+    // sun-shadow.glsl), so on high it gets 4096², 1.2 cm a texel.
     const type = T.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     const retype = renderer.shadowMap.type !== type;
     renderer.shadowMap.type = type;
+    sizeShadow(sun, Math.min(T.near, renderer.capabilities.maxTextureSize));
     sizeShadow(sunFar, T.far);
     sunFar.shadow.autoUpdate = T.farEvery === 1;
     sunFar.shadow.needsUpdate = true;     // a resized map is empty until drawn

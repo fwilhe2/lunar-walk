@@ -28,12 +28,17 @@ export const sun = new THREE.DirectionalLight(0xfff8f2, 3.4);
    exactly where the rock meets the ground: anything coarser, or any
    depth bias of more than a centimetre or so, lifts the shadow away
    from its caster and the rock reads as floating. So the near
-   cascade is ±24 m at 2.3 cm a texel, with a depth range kept tight
-   enough that its bias works out at about a centimetre, and a second,
-   coarse one carries shadows out to 130 m. The second light only
-   exists to own that shadow map: it has no intensity, and the patched
-   lighting in surface/patch.ts picks between the two maps per fragment. */
+   cascade is ±24 m at 2.3 cm a texel (1.2 on high, render/quality.ts),
+   with a depth range kept tight enough that its bias works out at
+   about a centimetre, and a second, coarse one carries shadows out to
+   130 m. The second light only exists to own that shadow map: it has
+   no intensity, and the patched lighting in surface/patch.ts picks
+   between the two maps per fragment. The ground takes the near map
+   with no bias at all, through its own filter (surface/glsl/
+   sun-shadow.glsl); rocks draw their sunward faces into it. */
 const SHADOW_NEAR = 24, SHADOW_FAR = 130;
+// The near cascade's width and depth range, in metres, for the ground's own filter (glsl/sun-shadow.glsl).
+export const SUN_SHADOW = { span: 2 * SHADOW_NEAR, range: 2 * 70 };
 function shadowRig(light: THREE.DirectionalLight, half: number, dist: number, depth: number, bias: number, nBias: number) {
   light.castShadow = true;
   light.shadow.mapSize.set(2048, 2048);
@@ -44,7 +49,7 @@ function shadowRig(light: THREE.DirectionalLight, half: number, dist: number, de
   light.shadow.normalBias = nBias;
   light.userData.dist = dist;
 }
-shadowRig(sun, SHADOW_NEAR, 90, 70, -0.00008, 0.012);
+shadowRig(sun, SHADOW_NEAR, 90, SUN_SHADOW.range / 2, -0.00008, 0.012);
 export const sunFar = new THREE.DirectionalLight(0xffffff, 0);
 shadowRig(sunFar, SHADOW_FAR, 300, 260, -0.00012, 0.05);
 scene.add(sun, sun.target, sunFar, sunFar.target);

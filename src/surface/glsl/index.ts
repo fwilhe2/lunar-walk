@@ -16,8 +16,9 @@ import lakeSurface from './lake-surface.glsl?raw';
 import printBlend from './print-blend.glsl?raw';
 import devilShape from './devil-shape.glsl?raw';
 import devilShadow from './devil-shadow.glsl?raw';
+import sunShadow from './sun-shadow.glsl?raw';
 
-const fresh = { terrainShadow, hapke, hapkeGroundHead, ground, groundMap, groundNormal, groundSparkle, lake, lakeSurface, printBlend, devilShape, devilShadow };
+const fresh = { terrainShadow, hapke, hapkeGroundHead, ground, groundMap, groundNormal, groundSparkle, lake, lakeSurface, printBlend, devilShape, devilShadow, sunShadow };
 
 // Every reload of this module after the first hands its sources to the
 // objects the first one made, which is what everything else holds.

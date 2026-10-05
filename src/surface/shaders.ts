@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { KEY_XZ } from '../render/lights';
+import { KEY_XZ, SUN_SHADOW } from '../render/lights';
 import { SRC } from './glsl';
 
 // Terrain horizon maps: four nested levels, written by terrain/shadows.ts and read
@@ -122,4 +122,7 @@ export const GLSL = {
       .replace('hapkeR(', 'hapkeRG(').replace(/hpkA/g, 'gpkA').replace(/hpkB/g, 'gpkB');
   },
   get PRINT_BLEND() { return '\n' + SRC.printBlend; },
+  get SUN_SHADOW() {
+    return `\nconst float SUN_SH_RANGE = ${SUN_SHADOW.range.toFixed(1)}, SUN_SH_SPAN = ${SUN_SHADOW.span.toFixed(1)};\n` + SRC.sunShadow;
+  },
 };

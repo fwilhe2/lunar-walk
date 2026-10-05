@@ -11,7 +11,9 @@
   vec2 mcGrad = vec2( 0.0 );
   float mcLit = 1.0;
   float mcFade = ( 1.0 - smoothstep( 14.0, 60.0, rgDist ) ) * rgMicro.x;
-  if ( mcFade > 0.0 ) microCraters( vWPos.xz, normalize( cameraPosition - vWPos ), mcFade, tsSun.x, mcGrad, mcLit );
+  // a pixel's footprint on the ground in metres, along its longer side (chunk UVs are metres / 3)
+  float mcPix = 3.0 * max( length( rgGx ), length( rgGy ) );
+  if ( mcFade > 0.0 ) microCraters( vWPos.xz, normalize( cameraPosition - vWPos ), mcFade, mcPix, tsSun.x, mcGrad, mcLit );
   normal = normalize( tbn * vec3( rgSlope - mcGrad, 1.0 ) );
   // Relief from a map has nothing to hide behind: the far side of a
   // bump stays on screen though real ground would put it behind its
