@@ -4,19 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A first-person planetary surface simulator — Mercury, Venus, Moon, Mars, Phobos, Deimos, Vesta, Ceres, Io, Europa, Ganymede, Callisto, Mimas, Enceladus, Dione, Titan, Iapetus, Miranda, Triton, Pluto, Charon, in order out from the sun — with an **unbounded, streamed surface** and three locomotion modes (EVA / rover / flight). TypeScript on Vite, Three.js r160 from npm, **no network at runtime** — every texture is generated in the browser at load, and terrain chunks are generated forever in Web Workers as the player moves. `README.md` documents the physical modelling decisions (crater morphometry, Hapke photometry, terrain shadows, eye adaptation, curvature, Earth's phase); read it before changing anything that claims to be realistic, since most constants there are deliberate rather than tuned by eye.
+A first-person planetary surface simulator — Mercury, Venus, Moon, Mars, Phobos, Deimos, Vesta, Ceres, Io, Europa, Ganymede, Callisto, Mimas, Enceladus, Dione, Titan, Iapetus, Miranda, Triton, Pluto, Charon, in order out from the sun — with an **unbounded, streamed surface** and three locomotion modes (EVA / rover / flight). TypeScript on Vite, Three.js r160 (pinned package), **no network at runtime** — every texture is generated in the browser at load, and terrain chunks are generated forever in Web Workers as the player moves. `README.md` documents the physical modelling decisions (crater morphometry, Hapke photometry, terrain shadows, eye adaptation, curvature, Earth's phase); read it before changing anything that claims to be realistic, since most constants there are deliberate rather than tuned by eye.
 
 ## Running
 
 ```sh
-npm install
-npm run dev          # Vite dev server, http://localhost:5173
-npm run check        # tsc
-npm test             # Vitest: the terrain kernel (tests/kernel.test.ts)
-npm run perf         # terrainHeight() µs per call against tools/perf-baseline.json
-npm run build        # static site in dist/
-npm start            # build, then Electron (electron/main.cjs serves dist/ over app://)
+bun install
+bun run dev          # Vite dev server, http://localhost:5173
+bun run check        # tsc
+bun run test         # Vitest: the terrain kernel (tests/kernel.test.ts)
+bun run perf         # terrainHeight() µs per call against tools/perf-baseline.json
+bun run build        # static site in dist/
+bun run start        # build, then Electron (electron/main.cjs serves dist/ over app://)
 ```
+
+Bun is the package manager (`bun.lock`; the version is pinned in `package.json`'s `packageManager`) and runs the scripts; the tools themselves — Vite, Vitest, tsc, electron-builder — run on **Node**, because `bun run` honours their `#!/usr/bin/env node` lines. Keep it that way:
+
+- **`bun run test`, never `bun test`.** `bun test` is Bun's own test runner on JavaScriptCore, and JavaScriptCore rounds `Math.sin`, `pow` and friends differently from V8 in the last bit: 15 of the 21 kernel fingerprints fail there although nothing is wrong. Likewise never add `--bun` (`bun --bun run …`), which would run Vite and Vitest themselves on JavaScriptCore.
+- Ad-hoc tools are `bunx vite`, `bunx vitest run -u`, `bunx electron .` — `bunx` also runs a package's binary under Node unless told `--bun`.
+- Add packages with `bun add -d …` (everything is a dev dependency: the app is bundled) and commit `bun.lock`; CI installs with `bun install --frozen-lockfile`.
 
 Verification is the tests, `tsc`, and the probe for anything visual — see *Verifying changes* below. `tools/` is dev tooling; nothing in the app loads it.
 
@@ -24,7 +30,7 @@ Verification is the tests, `tsc`, and the probe for anything visual — see *Ver
 
 Everything is under `src/`, one module per concern, and the import graph has **no cycles** — keep it that way (a module that needs something from a layer above takes a callback or registers a hook instead; see `worldUI` in `app/worlds.ts` and `frameHooks` in `app/hooks.ts`). Layers, bottom up:
 
-- `kernel/` — the terrain kernel: `noise.ts` (`hash2`, `fbm` …, the seed), `world.ts` (the active terrain definition and what is derived from it), `craters.ts`, `curvature.ts`, `terrain.ts` (`terrainHeight`, `surfaceTint`, `useTerrain`, the `AUX` side channels). Pure: no three, no DOM — `tsconfig.kernel.json` checks the kernel and every `terrain.ts` without either, as part of `npm run check`.
+- `kernel/` — the terrain kernel: `noise.ts` (`hash2`, `fbm` …, the seed), `world.ts` (the active terrain definition and what is derived from it), `craters.ts`, `curvature.ts`, `terrain.ts` (`terrainHeight`, `surfaceTint`, `useTerrain`, the `AUX` side channels). Pure: no three, no DOM — `tsconfig.kernel.json` checks the kernel and every `terrain.ts` without either, as part of `bun run check`.
 - `worlds/` — one folder per world: `terrain.ts` (a `TerrainDef`: the row of numbers, the height and colour functions, optional hooks) and `view.ts` (a `WorldView`: light, sky, regolith, streamer levels, companions, walker numbers). `types.ts` documents both. `terrains.ts` is the pure registry (workers import it), `index.ts` the full one: order out from the sun, number-row keys, and the derived fields (`name`, `g`, `gTxt`) — never write those into a row. `common/` holds terrain code two worlds share (the moonlets, Callisto's and Ganymede's knobs).
 - `workers/` — `mesh.worker.ts` (chunk geometry) and `texgen.worker.ts` (pure texture generators, listed in `texgen.jobs.ts`).
 - `render/` — renderer, scene and camera; the sun and its shadow rigs (`lights.ts`); post-processing (`post.ts`), the sea's mirror (`sea.ts`), quality tiers (`quality.ts`).
@@ -171,7 +177,7 @@ Boot builds the opening rings in workers (a few seconds on real hardware); after
 
 **Switching worlds is two-phase.** `applyWorld(id)` (`app/worlds.ts`) first prepares what is costly the first time — the regolith set and the companions' maps — while the loading screen shows and the page stays live, then calls `applyWorldNow(id)`, which does everything at once; it returns a promise, and `goTo()` and the probe's `at()` wait on it. Texture generators that are pure pixel loops (`regolithData`, `jupiterPixels`, `galileanPixels`, `charonPixels`, `plutoPixels`, `neptunePixels`, `uranusPixels`) run in `workers/texgen.worker.ts` via `offThread()` (`util/texgen.ts`, which falls back to the main thread if a worker cannot start): they live in `*.pixels.ts` modules that import nothing but `kernel/noise.ts` and friends, are listed in `workers/texgen.jobs.ts` and, for companions, in `TEXGEN_OFF` (`sky/companions.ts`). The rest still draws on canvases on the main thread, one body per task after the picker's zoom (`companionsAsync()`). A new body's map generator should be written the pure way and registered there, or it freezes the page the first time someone visits.
 
-Profile in Node rather than guessing — `npm run perf` times `terrainHeight()` per world against `tools/perf-baseline.json` (V8, via Vitest); for anything finer, do the same by hand (warm up first: the first few thousand calls run unoptimised and mislead). The baseline was recorded on the Fedora box; timings only compare on one machine.
+Profile in Node rather than guessing — `bun run perf` times `terrainHeight()` per world against `tools/perf-baseline.json` (V8, via Vitest); for anything finer, do the same by hand (warm up first: the first few thousand calls run unoptimised and mislead). The baseline was recorded on the Fedora box; timings only compare on one machine.
 
 ## Three.js r160 specifics
 
@@ -212,11 +218,11 @@ Physics (`stepEVA`) moves a point at the friction- and power-limited pace; every
 ## Verifying changes
 
 ```sh
-npm run check && npm test                                              # types; kernel: NaNs, purity, crater classes, fingerprints
+bun run check && bun run test                                             # types; kernel: NaNs, purity, crater classes, fingerprints
 node tools/probe/run.mjs DRIVER.mjs [OUT_DIR] [960x540] [timeout_s]    # → OUT_DIR/probe.log, OUT_DIR/shots/*.jpg
 ```
 
-- **The kernel fingerprint.** `tests/kernel.test.ts` hashes every world's heights, side channels and colours over a fixed spread of points and compares against a snapshot. A change to a world's ground changes its line: if you meant it, update with `npx vitest run -u` and say so in the commit. The hashes are V8's — engines round `Math.sin`, `pow` and friends differently in the last bit (under Bun/JavaScriptCore most worlds hash differently), which never splits the ground because a page and its workers run in one engine. Run the tests in Node.
+- **The kernel fingerprint.** `tests/kernel.test.ts` hashes every world's heights, side channels and colours over a fixed spread of points and compares against a snapshot. A change to a world's ground changes its line: if you meant it, update with `bunx vitest run -u` and say so in the commit. The hashes are V8's — engines round `Math.sin`, `pow` and friends differently in the last bit (under Bun/JavaScriptCore most worlds hash differently), which never splits the ground because a page and its workers run in one engine. Run them with `bun run test` (Vitest on Node), not `bun test`.
 - **The probe** (`tools/probe/run.mjs`) starts a Vite server of its own, opens the page with `?probe=low` in a headless browser (the installed Chrome by default; `PROBE_BROWSER=firefox`, `PROBE_EXE` for another binary; on a box without a GPU Chrome uses SwiftShader, `PROBE_GL` to choose), waits for the opening world and runs the driver. `?probe` makes `main.ts` load `app/probe.ts`, which puts the modules a driver needs on `window.lw` and a small API on `window.lw.probe`; nothing of it loads otherwise.
 - A driver is a module whose default export is `async function drive(probe)`, running in Node: `probe.at({ world, x, z, h, yaw, pitch, mode, sun })`, `idle()` (loading done, nothing pending, then a few frames for the shadow pass), `frames(n)`, `snap(name)` (saves the frame), `log(msg)`, `eval(fn, …args)` for anything else in the page (`window.lw.player`, `.keys`, `.quality` …), and `page` (puppeteer). See `tools/probe/drivers/worlds.mjs`; `PROBE_WORLDS=io,titan` arrives as `probe.args.worlds`, `PROBE_HASH` opens a shared view, `PROBE_QUALITY` sets the tier.
 - The probe runs on **low** (`quality.set('low', false)`, which does not overwrite the remembered tier) at 960×540. With a GPU (Chrome on the Mac, Metal) a world takes a second or two; under software GL expect a frame a second or so.
@@ -224,7 +230,7 @@ node tools/probe/run.mjs DRIVER.mjs [OUT_DIR] [960x540] [timeout_s]    # → OUT
 
 `snap()` sets `eyePass.uniforms.uReset.value = 1` before each shot: at a slow probe's frame rate adaptation would otherwise never converge. For the same reason judge motion by position deltas, not expected speeds. A debug view is easiest to get by string-replacing a line into the ground shader's `tonemapping_fragment` patch that writes an intermediate (`surfShadow`, `microLit`, a normal) to `gl_FragColor`, with the eye range pinned to `[1, 1]` — or, for geometry, by swapping each chunk's material for a flat `MeshBasicMaterial` per level (`mesh.userData.level`), which shows cracks as sky. On low, Chrome on Metal shows a few green and magenta speckles on bright ground near the lander; the single-file version showed the same.
 
-Electron: `npm run build`, then `LW_SMOKE=20 npx electron .` boots the build hidden for 20 s and exits non-zero on page errors.
+Electron: `bun run build`, then `LW_SMOKE=20 bunx electron .` boots the build hidden for 20 s and exits non-zero on page errors.
 
 Physics is verifiable numerically in the same probe: hold `keys.Space` for a second, release, and measure apex and hang time (currently 0.87 m / 2.05 s lunar at the probe's 50 ms frames, against 0.82 m / 2.02 s from `pushSpeed()`; the suited astronaut cannot leave the ground under `G_EARTH`). Walking settles at `sqrt(Fr·g·L)` from `SUIT`. On-foot physics has no tuning constants beyond `SUIT`, `JET` and each world's `mu`; if a number feels wrong, find which of those is wrong rather than adding a factor. The rover's grip scales with its spring load (`st.load`), which is zero in the air.
 

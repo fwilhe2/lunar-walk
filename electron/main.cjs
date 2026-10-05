@@ -2,7 +2,7 @@ const { app, BrowserWindow, net, protocol } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-// The app is the Vite build in dist/ (npm run build). It is served over
+// The app is the Vite build in dist/ (bun run build). It is served over
 // app:// rather than loaded from file://, so ES modules and module
 // workers behave exactly as they do from a web server.
 const DIST = path.join(__dirname, '..', 'dist');

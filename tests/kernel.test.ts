@@ -62,12 +62,13 @@ describe.each(IDS)('%s', (id) => {
 
 /* Every world's surface, frozen. A change to the kernel or to a world's
    terrain changes its line here: if you meant it, update the snapshot
-   (npx vitest run -u) and say so in the commit. The first snapshot was
+   (bunx vitest run -u) and say so in the commit. The first snapshot was
    checked bit for bit against the old single-file kernel.
    The numbers are V8's: engines round Math.sin, pow and friends
    differently in the last bit (under Bun/JavaScriptCore 15 of 21 worlds
    print other hashes). That never splits the ground, because a page and
-   its workers always run in the same engine — but run this in Node. */
+   its workers always run in the same engine — but run this in Node:
+   bun run test, not bun test (Bun's own runner, on JavaScriptCore). */
 test('fingerprints', () => {
   const out: Record<string, string> = {};
   for (const id of IDS) out[id] = fingerprint(id);

@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "vite",
-      "runtimeExecutable": "npx",
+      "runtimeExecutable": "bunx",
       "runtimeArgs": [
         "vite"
       ],

@@ -2,8 +2,8 @@
    tools/perf-baseline.json — about 67k calls build one near chunk, so a
    cheap-looking addition is stutter on every 256 m boundary crossing.
 
-     npm run perf                 compare against the baseline
-     PERF_SAVE=1 npm run perf     record this machine's timings
+     bun run perf                 compare against the baseline
+     PERF_SAVE=1 bun run perf     record this machine's timings
 
    Timings are only comparable on one machine with nothing else loading
    it. Re-record only after a change you meant to cost something. */

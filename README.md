@@ -4,21 +4,21 @@ A first-person planetary surface simulator with twenty-one bodies in it, from th
 
 ## Run
 
-The app is TypeScript, built and served by [Vite](https://vite.dev). Install Node.js 20.19 or newer (or Bun), then:
+The app is TypeScript, built and served by [Vite](https://vite.dev). Install [Bun](https://bun.sh) and Node.js 20.19 or newer — Bun manages the packages and runs the scripts, Node runs Vite, the tests and the installer builds — then:
 
 ```sh
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
-Then open http://localhost:5173 and click to lock the pointer. `npm run build` writes a static site to `dist/` that any web server can host; nothing is fetched at runtime. The "GENERATING" screen is the opening rings of terrain being built in workers — a few seconds of CPU work, not a download.
+Then open http://localhost:5173 and click to lock the pointer. `bun run build` writes a static site to `dist/` that any web server can host; nothing is fetched at runtime. The "GENERATING" screen is the opening rings of terrain being built in workers — a few seconds of CPU work, not a download.
 
 ## Desktop builds
 
 The desktop app wraps the same build in Electron, so it does not need a network connection or a separate server at runtime:
 
 ```sh
-npm install
+bun install
 make start
 ```
 
@@ -328,7 +328,7 @@ Any key, or a click, hands the controls back.
 - `src/terrain/`, `src/surface/`, `src/sky/`, `src/props/`, `src/effects/`, `src/render/` — the engine: streaming and shadows, ground materials, the sky and its companions, rocks and landers, plumes and dust, post-processing and quality tiers.
 - `src/player/`, `src/vehicles/`, `src/audio/`, `src/ui/`, `src/app/` — walking, the rover, sound, the HUD and picker, and the application around them; `src/main.ts` is the entry point.
 - `src/workers/` — the mesh worker and the texture generator worker.
-- `tests/` — Vitest checks on the terrain kernel (`npm test`, `npm run perf`).
+- `tests/` — Vitest checks on the terrain kernel (`bun run test`, `bun run perf` — not `bun test`, see `CLAUDE.md`).
 - `tools/probe/` — development only: drives the app in a headless browser and takes screenshots. Nothing in the app loads it.
 
-Three.js r160 (MIT) comes from npm.
+Three.js r160 (MIT) is a package, pinned to 0.160.0.
