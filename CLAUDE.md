@@ -145,7 +145,7 @@ Painted relief has no geometry to hide behind, so the ground shader corrects for
 
 ## The chunk streamer (`terrain/streamer.ts`)
 
-Four nested levels of absolutely-aligned chunks (256 m / 1 km / 4 km / 16 km; steps 1–2–4 m, 16 m, 64 m, 256 m), finer LOD near the player, covering ±40 km. Things that are easy to break:
+Four nested levels of absolutely-aligned chunks (256 m / 1 km / 4 km / 16 km; steps 1–2–4 m, 16 m, 64 m, 256 m), finer LOD near the player, covering ±40 km. Which chunks are wanted is `planChunks()` (`terrain/plan.ts`, pure); `tests/plan.test.ts` checks every world's levels on both tiers for holes, whole vertex counts, walls for every cut and the steps `stepAt()` knows. Things that are easy to break:
 
 - **Curvature anchor.** Chunks curve away by d²/2R around the requesting player cell (`ax`, `az`). This is what buries the streamed edge below the horizon and keeps physics (which uses raw heights) aligned with the visible mesh near the player. Don't make the anchor global, and don't remove the drop.
 - **Purge discipline.** Stale chunks are removed only when their level has nothing pending, so motion never opens holes. Remove through `drop()`, which disposes the geometry, keeps the built-cell index and re-cuts the coarse chunks above; the material is shared.
