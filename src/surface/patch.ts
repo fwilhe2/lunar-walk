@@ -3,6 +3,7 @@ import { skyDome } from '../sky/dome';
 import { glslState } from './glsl';
 import type { HapkeUniforms } from './hapke';
 import { DV, GLSL, LIGHTS_BEGIN, TS } from './shaders';
+import { HDR_GLSL, HDR_U } from '../render/hdr';
 import type { Uniforms } from '../util/three';
 
 /* Patch a MeshStandardMaterial into one of four kinds of surface:
@@ -86,6 +87,16 @@ export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind,
              .replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor', 'vec3( 1.0 )'));
     }
     fs = fs.replace('#include <lights_fragment_begin>', shadow + '\n' + lights);
+    // Squeezed for the resolve (render/hdr.ts), last of all. Not prints:
+    // they are a factor on the ground, not a radiance.
+    if (kind !== 'print') {
+      Object.assign(shader.uniforms, HDR_U);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\n' + HDR_GLSL.vertexHead)
+        .replace('#include <project_vertex>', '#include <project_vertex>' + HDR_GLSL.vertex);
+      fs = fs.replace('#include <common>', '#include <common>\n' + HDR_GLSL.fragmentHead)
+             .replace('#include <dithering_fragment>', '#include <dithering_fragment>' + HDR_GLSL.compress);
+    }
     shader.fragmentShader = fs;
   };
   // The version changes when the GLSL files do (dev server only), and

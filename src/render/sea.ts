@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HDR_U } from './hdr';
 import { quality } from './quality';
 import { camera, renderer, scene } from './renderer';
 import { LAKE_U } from '../surface/patch';
@@ -43,11 +44,14 @@ export const seaMirror = (() => {
       LAKE_U.uLakeMat.value.copy(bias).multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
       LAKE_U.uLakeMap.value = blank;
       LAKE_U.uLakeMirror.value = 1;
-      const prev = renderer.getRenderTarget();
+      // The ground reads this as radiance: no squeeze (render/hdr.ts).
+      const prev = renderer.getRenderTarget(), on = HDR_U.uHdrOn.value;
+      HDR_U.uHdrOn.value = 0;
       renderer.setRenderTarget(rt);
       renderer.clear();
       renderer.render(scene, cam);
       renderer.setRenderTarget(prev);
+      HDR_U.uHdrOn.value = on;
       LAKE_U.uLakeMirror.value = 0;
       LAKE_U.uLakeMap.value = rt.texture;
       LAKE_U.uLakeHave.value = 1;

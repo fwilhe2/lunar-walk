@@ -14,6 +14,7 @@ import { keys } from '../player/input';
 import { setMode } from '../player/modes';
 import { mode, player, type Mode } from '../player/player';
 import { setSunElev, sunElev, updateSunDir } from '../render/lights';
+import { hdr } from '../render/hdr';
 import { eyePass } from '../render/post';
 import { isTier, quality } from '../render/quality';
 import { camera, pitchObj, renderer, scene, yawObj } from '../render/renderer';
@@ -65,7 +66,7 @@ const probe = {
 
 // What a driver's page.evaluate() finds on window.lw.
 const lw = {
-  probe, THREE, VIEW, WORLD_IDS, keys, player, camera, scene, yawObj, pitchObj, quality, chunkStreamer, eyePass,
+  probe, THREE, VIEW, WORLD_IDS, keys, player, camera, scene, yawObj, pitchObj, quality, chunkStreamer, eyePass, hdr,
   terrainHeight, applyWorld, setMode, updateSkyColors, devils,
   get world() { return world; }, get worldId() { return worldId; }, get mode() { return mode; }, get sunElev() { return sunElev; },
 };

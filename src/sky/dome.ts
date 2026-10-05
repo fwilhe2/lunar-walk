@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrSqueeze } from '../render/hdr';
 import { scene } from '../render/renderer';
 
 /* ── The Martian sky ────────────────────────────────────────────
@@ -78,7 +79,7 @@ export const skyDome = (() => {
   `;
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(40000, 32, 20),
-    new THREE.ShaderMaterial({
+    hdrSqueeze(new THREE.ShaderMaterial({
       uniforms, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
       vertexShader: `
         varying vec3 vDir;
@@ -93,7 +94,7 @@ export const skyDome = (() => {
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
-    })
+    }))
   );
   mesh.renderOrder = -4;
   mesh.frustumCulled = false;

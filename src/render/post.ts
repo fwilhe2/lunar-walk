@@ -6,6 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { DEPTH_SPLIT, camera, renderer, scene } from './renderer';
+import { HDR_GLSL, HDR_U, hdr } from './hdr';
 import { EYE_TEX } from '../surface/hapke';
 import { TypedShaderMaterial, type Uniforms } from '../util/three';
 
@@ -79,6 +80,11 @@ class SplitRenderPass extends RenderPass {
     const cam = this.camera as THREE.PerspectiveCamera, near = cam.near, far = cam.far;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
+    // K for the surfaces that squeeze and the passes that undo it: the
+    // exposure eyePass wrote last frame, which this frame leaves alone
+    // (render/hdr.ts).
+    HDR_U.tHdrK.value = EYE_TEX.value;
+    HDR_U.uHdrOn.value = hdr.enabled ? 1 : 0;
 
     cam.near = DEPTH_SPLIT * 0.98;
     cam.updateProjectionMatrix();
@@ -116,17 +122,30 @@ export const eyePass = (() => {
   const adapt = [pong(), pong()] as const;
   const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`;
   const meterMat = new TypedShaderMaterial({
-    uniforms: { tSrc: tex(), uClip: { value: 0.3 } },
+    uniforms: { tSrc: tex(), uClip: { value: 0.3 }, ...HDR_U },
     vertexShader: vs,
-    fragmentShader: `
+    fragmentShader: HDR_GLSL.decode + `
       uniform sampler2D tSrc;
       uniform float uClip;
       varying vec2 vUv;
+      // A bilinear tap, but each texel decoded before it is weighted:
+      // averaging the squeezed values would pull bright edges down
+      // and the exposure with them (render/hdr.ts).
+      vec3 tap( vec2 uv, float k ) {
+        vec2 p = uv * vec2( textureSize( tSrc, 0 ) ) - 0.5, f = fract( p );
+        ivec2 i = ivec2( floor( p ) ), hi = textureSize( tSrc, 0 ) - 1;
+        vec3 a = hdrDecode( texelFetch( tSrc, clamp( i, ivec2( 0 ), hi ), 0 ).rgb, k );
+        vec3 b = hdrDecode( texelFetch( tSrc, clamp( i + ivec2( 1, 0 ), ivec2( 0 ), hi ), 0 ).rgb, k );
+        vec3 c = hdrDecode( texelFetch( tSrc, clamp( i + ivec2( 0, 1 ), ivec2( 0 ), hi ), 0 ).rgb, k );
+        vec3 d = hdrDecode( texelFetch( tSrc, clamp( i + ivec2( 1, 1 ), ivec2( 0 ), hi ), 0 ).rgb, k );
+        return mix( mix( a, b, f.x ), mix( c, d, f.x ), f.y );
+      }
       void main() {
         // Four taps per meter texel, offset a quarter-texel each way.
         vec2 o = vec2( 0.25 / 128.0, 0.25 / 64.0 );
-        vec3 c = texture2D( tSrc, vUv + vec2( -o.x, -o.y ) ).rgb + texture2D( tSrc, vUv + vec2( o.x, -o.y ) ).rgb
-               + texture2D( tSrc, vUv + vec2( -o.x, o.y ) ).rgb + texture2D( tSrc, vUv + vec2( o.x, o.y ) ).rgb;
+        float k = hdrK();
+        vec3 c = tap( vUv + vec2( -o.x, -o.y ), k ) + tap( vUv + vec2( o.x, -o.y ), k )
+               + tap( vUv + vec2( -o.x, o.y ), k ) + tap( vUv + vec2( o.x, o.y ), k );
         float L = min( dot( c * 0.25, vec3( 0.2126, 0.7152, 0.0722 ) ), uClip );
         // Centre-weighted: what you are looking at counts for more.
         vec2 d = ( vUv - 0.5 ) * vec2( 1.5, 1.0 );
@@ -159,9 +178,9 @@ export const eyePass = (() => {
   }));
   // Apply it: the frame, scaled by the adapted exposure.
   const exposeMat = new TypedShaderMaterial({
-    uniforms: { tSrc: tex(), tEye: tex() },
+    uniforms: { tSrc: tex(), tEye: tex(), ...HDR_U },
     vertexShader: vs,
-    fragmentShader: `
+    fragmentShader: HDR_GLSL.decode + `
       uniform sampler2D tSrc, tEye;
       varying vec2 vUv;
       void main() {
@@ -170,7 +189,7 @@ export const eyePass = (() => {
         // at every adaptation. The bloom blur is truncated at one sigma
         // and draws its kernel as a box around anything much brighter;
         // the wide, round glare is the sprite in sky/sun.ts.
-        vec3 c = texture2D( tSrc, vUv ).rgb * exp2( texture2D( tEye, vec2( 0.5 ) ).r );
+        vec3 c = hdrDecode( texture2D( tSrc, vUv ).rgb, hdrK() ) * exp2( texture2D( tEye, vec2( 0.5 ) ).r );
         gl_FragColor = vec4( min( c, vec3( 6.0 ) ), 1.0 );
       }`,
     depthTest: false, depthWrite: false,
@@ -222,11 +241,11 @@ composer.addPass(bloomPass);
 
 export const gradePass = new TypedShaderPass(new TypedShaderMaterial({
   uniforms: {
-    tDiffuse: tex(), tEye: tex(), uExpose: { value: 0 },
+    tDiffuse: tex(), tEye: tex(), uExpose: { value: 0 }, ...HDR_U,
     uTime: { value: 0 }, uRes: { value: new THREE.Vector2() },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
-  fragmentShader: `
+  fragmentShader: HDR_GLSL.decode + `
     uniform sampler2D tDiffuse, tEye; uniform float uTime, uExpose; uniform vec2 uRes;
     varying vec2 vUv;
     void main() {
@@ -234,10 +253,10 @@ export const gradePass = new TypedShaderPass(new TypedShaderMaterial({
       float r2 = dot( c, c );
       // Visor curvature: a touch of lateral colour split at the edges.
       float ca = 0.0022 * r2;
-      vec3 col;
-      col.r = texture2D( tDiffuse, vUv + c * ca ).r;
-      col.g = texture2D( tDiffuse, vUv ).g;
-      col.b = texture2D( tDiffuse, vUv - c * ca ).b;
+      vec3 cR = texture2D( tDiffuse, vUv + c * ca ).rgb, cG = texture2D( tDiffuse, vUv ).rgb, cB = texture2D( tDiffuse, vUv - c * ca ).rgb;
+      // Without bloom this reads the resolved scene itself (render/hdr.ts).
+      if ( uExpose > 0.5 ) { float k = hdrK(); cR = hdrDecode( cR, k ); cG = hdrDecode( cG, k ); cB = hdrDecode( cB, k ); }
+      vec3 col = vec3( cR.r, cG.g, cB.b );
       if ( uExpose > 0.5 ) col *= exp2( texture2D( tEye, vec2( 0.5 ) ).r );
       col *= 1.0 - 0.30 * r2 - 0.26 * r2 * r2;
       // Grain, proportional to signal as film grain is, plus a trace

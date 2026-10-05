@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrSqueeze } from '../render/hdr';
 import { SUN_DIR } from '../render/lights';
 import { scene } from '../render/renderer';
 import { charonMaps } from './bodies/charon';
@@ -623,6 +624,7 @@ function makeCompanion(spec: CompanionSpec) {
         }`,
     })
   );
+  hdrSqueeze(globe.material);    // opaque: it hides the stars
   if (spec.oblate) globe.scale.y = spec.oblate;
   // After the stars, in the transparent queue: sky depth (sky/sun.ts) puts it
   // behind them, so it covers them by order. Still opaque in effect.
