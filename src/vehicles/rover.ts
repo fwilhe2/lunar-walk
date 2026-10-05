@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { dust } from '../effects/dust';
 import { terrainHeight } from '../kernel/terrain';
-import { STEP_UP, rockHeight } from '../player/collision';
+import { STEP_UP, rockHeight, type Solid } from '../player/collision';
 import { player } from '../player/player';
 import { rockSystem } from '../props/rocks';
 import { scene } from '../render/renderer';
@@ -25,18 +25,32 @@ import { world } from '../worlds/index';
    seat while you drive. Ackermann-ish steering, wheels that follow
    the terrain, and it parks where you leave it.
    ═════════════════════════════════════════════════════════════ */
+/** What the driver asks of the rover each frame: throttle and steer,
+    −1 to 1 — keys give the ends, a stick anything between. */
+export interface RoverControl { readonly throttle: number; readonly steer: number }
+
+interface Wheel {
+  g: THREE.Group;                  // the upright, on the arm ends
+  steer: THREE.Group; spin: THREE.Group; arms: THREE.Group[];
+  front: 0 | 1; side: number; x: number; z: number;
+  swing: number;                   // wishbone angle, rad
+  s: number; sd: number;           // spring travel from ride height, and its rate
+  contact: boolean; land: number;  // on the ground; how hard it last came down
+  step: number;                    // lattice step of the ground under it
+}
+
 export const rover = (() => {
   const WHEEL_R = 0.41, WHEELBASE = 2.3, TRACK = 1.83;
   const LRV_M = 480, LRV_P = 600;   // kg driven alone; W at the wheels from four 186 W motors
   const CHASSIS_H = 0.46;          // frame height above mean wheel contact
   const WHEEL_CTR = WHEEL_R - 0.035;   // centre height: the tyre sinks a touch into regolith
 
-  const obj = (o) => surfacePatch(new THREE.MeshStandardMaterial(o), 'object');
+  const obj = (o: THREE.MeshStandardMaterialParameters) => surfacePatch(new THREE.MeshStandardMaterial(o), 'object');
   // A see-through weave, drawn once: the pattern goes in alphaMap and
   // alphaTest cuts the holes, so light and shadow both pass through.
-  function weave(w, h, draw) {
+  function weave(w: number, h: number, draw: (x: CanvasRenderingContext2D, w: number, h: number) => void) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const x = c.getContext('2d');
+    const x = c.getContext('2d')!;   // a fresh canvas always has one
     x.fillStyle = '#000'; x.fillRect(0, 0, w, h);
     x.strokeStyle = x.fillStyle = '#fff';
     draw(x, w, h);
@@ -56,7 +70,7 @@ export const rover = (() => {
   const tyreTex = (() => {
     const w = 1024, h = 192;
     const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const x = c.getContext('2d');
+    const x = c.getContext('2d')!;   // a fresh canvas always has one
     x.fillStyle = '#3a3b3d'; x.fillRect(0, 0, w, h);
     x.strokeStyle = '#a9acb0'; x.lineWidth = 1.5;
     for (let i = -h; i < w + h; i += 6) {             // the diamond wire mesh
@@ -122,7 +136,7 @@ export const rover = (() => {
   group.visible = false;
   scene.add(group);
 
-  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, parent: THREE.Object3D = group) => {
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, parent: THREE.Object3D = group) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
     m.castShadow = true;
@@ -132,7 +146,7 @@ export const rover = (() => {
   };
   // A tube between two points.
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
-  const tube = (x0, y0, z0, x1, y1, z1, r, mat = alu, parent: THREE.Object3D = group) => {
+  const tube = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r: number, mat: THREE.Material = alu, parent: THREE.Object3D = group) => {
     _a.set(x0, y0, z0); _b.set(x1, y1, z1);
     const len = _a.distanceTo(_b);
     const m = add(new THREE.CylinderGeometry(r, r, len, 8), mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, parent);
@@ -199,7 +213,7 @@ export const rover = (() => {
   // ── aft pallet: sample bags and the geology tools standing in it
   add(new THREE.BoxGeometry(0.9, 0.3, 0.36), aluDull, 0, 0.19, 1.3);
   add(new THREE.BoxGeometry(0.86, 0.1, 0.32), blanket, 0, 0.39, 1.3);
-  for (const [tx, tz, h] of [[-0.35, 1.2, 0.7], [-0.2, 1.38, 0.85], [0.28, 1.25, 0.6], [0.36, 1.4, 0.75]]) {
+  for (const [tx, tz, h] of [[-0.35, 1.2, 0.7], [-0.2, 1.38, 0.85], [0.28, 1.25, 0.6], [0.36, 1.4, 0.75]] as const) {
     tube(tx, 0.3, tz, tx + 0.02, 0.3 + h, tz + 0.04, 0.011, alu);
   }
   add(new THREE.BoxGeometry(0.14, 0.05, 0.12), dark, -0.2, 1.17, 1.42);          // scoop head
@@ -214,7 +228,7 @@ export const rover = (() => {
   group.add(crew);
   {
     const cx = -0.33;
-    const limb = (x0, y0, z0, x1, y1, z1, r, mat = suit) => {
+    const limb = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r: number, mat: THREE.Material = suit) => {
       _a.set(x0, y0, z0); _b.set(x1, y1, z1);
       const len = _a.distanceTo(_b);
       const m = add(new THREE.CapsuleGeometry(r, len, 4, 10), mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, crew);
@@ -324,31 +338,31 @@ export const rover = (() => {
   // heights like everything physical, and near you the drop is
   // micrometres. So nothing cached here goes stale — until the world
   // changes, and despawn() clears it.
-  const gvtx = (i, j, s) => {
-    const k = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ s) & (GC - 1);
-    if (gcS[k] === s && gcI[k] === i && gcJ[k] === j) return gcY[k];
+  const gvtx = (i: number, j: number, s: number) => {
+    const k = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ s) & (GC - 1);   // a slot: masked into the table
+    if (gcS[k] === s && gcI[k] === i && gcJ[k] === j) return gcY[k]!;
     gcI[k] = i; gcJ[k] = j; gcS[k] = s;
     return (gcY[k] = terrainHeight(i * s, j * s));
   };
   // [along, across, how far that point of the circle sits above its bottom]
-  const FOOT = [[0, 0], [-0.3, 0], [-0.15, 0], [0.15, 0], [0.3, 0], [0, -0.1], [0, 0.1]]
-    .map(([d, l]) => [d, l, WHEEL_R - Math.sqrt(WHEEL_R * WHEEL_R - d * d)]);
+  const FOOT = ([[0, 0], [-0.3, 0], [-0.15, 0], [0.15, 0], [0.3, 0], [0, -0.1], [0, 0.1]] as const)
+    .map(([d, l]): [number, number, number] => [d, l, WHEEL_R - Math.sqrt(WHEEL_R * WHEEL_R - d * d)]);
   // Where the bottom of a tyre heading (fx, fz) comes to rest at (x, z),
   // on ground drawn with lattice step s.
   // Stones from props/rocks.ts are ground to a tyre too: it climbs one where the
   // contact patch meets it, as on the mesh. Their lists are cached on
   // half-metre cells around the wheel, eight cells direct-mapped.
   const rkX = new Int32Array(8).fill(0x7fffffff), rkZ = new Int32Array(8), rkV = new Int32Array(8);
-  const rkL = Array.from({ length: 8 }, () => []);
-  function rocksNear(x, z) {
+  const rkL = Array.from({ length: 8 }, (): Solid[] => []);
+  function rocksNear(x: number, z: number) {
     const ix = Math.floor(x * 2), iz = Math.floor(z * 2), k = (ix * 3 + iz * 5) & 7;
     if (rkX[k] !== ix || rkZ[k] !== iz || rkV[k] !== rockSystem.version) {
       rkX[k] = ix; rkZ[k] = iz; rkV[k] = rockSystem.version;
-      rockSystem.solidsAt((ix + 0.5) / 2, (iz + 0.5) / 2, rkL[k], 1.1);
+      rockSystem.solidsAt((ix + 0.5) / 2, (iz + 0.5) / 2, rkL[k]!, 1.1);   // k is masked to the eight slots
     }
-    return rkL[k];
+    return rkL[k]!;
   }
-  function wheelGround(x, z, fx, fz, s) {
+  function wheelGround(x: number, z: number, fx: number, fz: number, s: number) {
     let h = -Infinity;
     const rocks = rocksNear(x, z);
     for (const [d, l, up] of FOOT) {
@@ -358,14 +372,14 @@ export const rover = (() => {
       // the LRV was specified for 0.3 m — and anything taller it meets
       // as a wall, which is the chassis' business (stepROVER).
       const g0 = g;
-      for (let i = 0; i < rocks.length; i++) { const r = rockHeight(rocks[i], px, pz); if (r > g && r < g0 + STEP_UP) g = r; }
+      for (let i = 0; i < rocks.length; i++) { const r = rockHeight(rocks[i]!, px, pz); if (r > g && r < g0 + STEP_UP) g = r; }
       if (g - up > h) h = g - up;
     }
     return h;
   }
-  const wheels = [];
+  const wheels: Wheel[] = [];
   for (const [wx, wz, front] of [[-TRACK / 2, -WHEELBASE / 2, 1], [TRACK / 2, -WHEELBASE / 2, 1],
-                                 [-TRACK / 2, WHEELBASE / 2, 0], [TRACK / 2, WHEELBASE / 2, 0]]) {
+                                 [-TRACK / 2, WHEELBASE / 2, 0], [TRACK / 2, WHEELBASE / 2, 0]] as const) {
     const side = Math.sign(wx);
     const wg = new THREE.Group();            // the upright: rides the arm ends
     wg.position.set(wx, REST_Y, wz);
@@ -413,27 +427,29 @@ export const rover = (() => {
      into one mesh per material: the chassis, and per wheel the
      spinning part, the steering knuckle, the upright and each of the
      two wishbones; and the dish's ribs. */
-  function mergeInto(parent) {
-    const byMat = new Map();
+  function mergeInto(parent: THREE.Object3D) {
+    const byMat = new Map<THREE.Material | THREE.Material[], THREE.BufferGeometry[]>();
     for (const m of [...parent.children]) {
-      if (!m.isMesh || m === dish) continue;
+      if (!(m instanceof THREE.Mesh) || m === dish) continue;
       m.updateMatrix();
       const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
       g.applyMatrix4(m.matrix);
       if (!byMat.has(m.material)) byMat.set(m.material, []);
-      byMat.get(m.material).push(g);
+      byMat.get(m.material)!.push(g);   // set just above
       parent.remove(m);
       m.geometry.dispose();
     }
+    // Every part is a three primitive, lathe, tube or extrusion: all
+    // have positions and normals.
     for (const [mat, list] of byMat) {
-      const n = list.reduce((a, g) => a + g.attributes.position.count, 0);
+      const n = list.reduce((a, g) => a + g.attributes.position!.count, 0);
       const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
       let o = 0;
       for (const g of list) {
-        pos.set(g.attributes.position.array, o * 3);
-        nrm.set(g.attributes.normal.array, o * 3);
+        pos.set(g.attributes.position!.array, o * 3);
+        nrm.set(g.attributes.normal!.array, o * 3);
         if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
-        o += g.attributes.position.count;
+        o += g.attributes.position!.count;
         g.dispose();
       }
       const geo = new THREE.BufferGeometry();
@@ -479,7 +495,7 @@ export const rover = (() => {
     const c = Math.cos(state.yaw), s = Math.sin(state.yaw);
     // Local +z is aft; local x right. World heading of local -z:
     const step = chunkStreamer.stepAt(state.pos.x, state.pos.z);
-    const hx = (lx, lz) => wheelGround(
+    const hx = (lx: number, lz: number) => wheelGround(
       state.pos.x + lx * c + lz * s,
       state.pos.z - lx * s + lz * c, -s, -c, step
     );
@@ -526,7 +542,7 @@ export const rover = (() => {
   // Released continuously: n grains per wheel this frame, each from its
   // own point along the dist the wheel covered, so the plume is a sheet
   // and not a row of puffs a stride apart.
-  function spray(v, n, dist) {
+  function spray(v: number, n: number, dist: number) {
     const fx = -Math.sin(state.yaw) * Math.sign(v), fz = -Math.cos(state.yaw) * Math.sign(v);
     const sp = Math.abs(v);
     group.updateMatrixWorld();
@@ -549,7 +565,7 @@ export const rover = (() => {
 
   return {
     state, group,
-    spawnAt(x, z, yaw) {
+    spawnAt(x: number, z: number, yaw: number) {
       state.spawned = true;
       state.pos.set(x, 0, z);
       state.yaw = yaw; state.vel = 0; state.steer = 0;
@@ -557,7 +573,7 @@ export const rover = (() => {
       settle();
     },
     // Someone in the seat while you drive; nobody when it is parked.
-    setCrew(on) { crew.visible = on; },
+    setCrew(on: boolean) { crew.visible = on; },
     // Left behind when you change body — it does not follow.
     despawn() {
       state.spawned = false;
@@ -567,7 +583,7 @@ export const rover = (() => {
     /* One frame of driving, or of standing parked (parked: the brake
        is on and nobody is steering, but the chassis still settles,
        and a rover left in the air still comes down). */
-    step(dt, ctl, gravity, parked = false) {
+    step(dt: number, ctl: RoverControl, gravity: number, parked = false) {
       const st = state;
       // Steering: rate-limited toward the held direction. ctl: throttle
       // and steer, −1 to 1 — keys give the ends, a stick anything between.
@@ -610,12 +626,12 @@ export const rover = (() => {
           if (on && !w.contact) w.land = Math.max(w.land, w.sd);
           w.contact = on;
         }
-        for (let k = 0; k < 4; k++) {
-          const w = wheels[k];
+        for (let k = 0; k < 4; k++) {   // the four wheels, all built above
+          const w = wheels[k]!;
           if (!w.contact) continue;
           touching++;
           // Wheels go FL, FR, RL, RR: k ^ 1 is the other end of the axle.
-          const o = wheels[k ^ 1], sw = Math.max(w.s, -TRAVEL) - Math.max(o.s, -TRAVEL);
+          const o = wheels[k ^ 1]!, sw = Math.max(w.s, -TRAVEL) - Math.max(o.s, -TRAVEL);
           let f = g / 4 * PRELOAD + kW * (w.s + TRAVEL) + cW * w.sd + kW * ROLL_BAR * sw;
           if (w.s > TRAVEL) f += STOP_K * (w.s - TRAVEL) + STOP_C * w.sd;
           f = Math.max(0, f);
@@ -629,7 +645,7 @@ export const rover = (() => {
         const v = st.vel;
         let tyre = 0;                            // what the tyres push with, per kg
         if (touching) {
-          const drive = (u) => Math.min(grip, LRV_P / (LRV_M * Math.max(u, 0.5)));
+          const drive = (u: number) => Math.min(grip, LRV_P / (LRV_M * Math.max(u, 0.5)));
           if (parked) tyre = -Math.sign(v) * Math.min(grip, Math.abs(v) / h);   // brake on, nobody aboard
           else if (fwd && v >= -0.05) { if (v < vmax) tyre = drive(v) * thr; }
           else if (rev && v > 0.05) tyre = -grip * thr;            // brakes

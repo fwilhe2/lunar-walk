@@ -18,8 +18,8 @@ export const EFFORT = { rest: 140, step: 75, walk: 0.2, lope: 0.35, eff: 0.25, c
 export const effort = {
   W: EFFORT.rest, Wf: EFFORT.rest, hr: 72, kick: 0, left: EFFORT.reserve, winded: false,
   // Energy spent at once — a push — joins the next second's rate.
-  spend(J) { this.kick += J; },
-  update(dt, P) {
+  spend(J: number) { this.kick += J; },
+  update(dt: number, P: number) {
     const kick = Math.min(this.kick, 1500 * dt);   // a push is paid off over a second or so
     this.kick -= kick;
     // A fit astronaut's aerobic ceiling is about 4 L of O₂ a minute,

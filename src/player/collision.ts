@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import { terrainHeight } from '../kernel/terrain';
 import { rockSystem } from '../props/rocks';
 
@@ -7,13 +8,16 @@ import { rockSystem } from '../props/rocks';
    the contour where it rises past that. On top of a block, its crown
    is ground like any other; walking off one, you step down. */
 export const STEP_UP = 0.3;
-export const _solids = [];
-export function rockHeight(r, x, z) {
+/** A solid rock as props/rocks.ts bins it: a dome of reach R about
+    (x, z), crown `top` and base `g`, raw physics heights. */
+export interface Solid { x: number; z: number; R: number; top: number; g: number }
+export const _solids: Solid[] = [];
+export function rockHeight(r: Solid, x: number, z: number) {
   const q = 1 - ((x - r.x) ** 2 + (z - r.z) ** 2) / (r.R * r.R);
   return q <= 0 ? -1e9 : r.top - (r.top - r.g) * (1 - Math.sqrt(q));
 }
 // The ground a body with its feet at `feet` stands on at (x, z).
-export function standHeight(x, z, feet) {
+export function standHeight(x: number, z: number, feet: number) {
   let h = terrainHeight(x, z);
   for (const r of rockSystem.solidsAt(x, z, _solids)) {
     const rh = rockHeight(r, x, z);
@@ -22,7 +26,7 @@ export function standHeight(x, z, feet) {
   return h;
 }
 // Keep a body of radius rad out of every rock too tall to step onto.
-export function rockPush(pos, feet, rad, n) {
+export function rockPush(pos: THREE.Vector3, feet: number, rad: number, n: THREE.Vector3) {
   let hit = false;
   const H = feet + STEP_UP;
   for (const r of rockSystem.solidsAt(pos.x, pos.z, _solids, rad)) {

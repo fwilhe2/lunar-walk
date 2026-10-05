@@ -4,7 +4,27 @@ import { EYE, JET } from './constants';
 import { VIEW } from '../worlds/index';
 import { yawObj } from '../render/renderer';
 
-export const player = {
+/** A fall in progress (physics.ts's startFall()): seconds since it
+    began, which way (1 forward, −1 back), how long the topple takes,
+    and whether the ground has been hit yet. */
+export interface Fall { t: number; dir: 1 | -1; topple: number; hit: boolean }
+
+export interface Player {
+  pos: THREE.Vector3; vel: THREE.Vector3;
+  onGround: boolean;
+  gravity: number;
+  crouch: number; charge: number;
+  pushing: boolean; pushE: number; pushU: number;
+  leanF: number; leanS: number; pvx: number; pvz: number; bend: number;
+  steadyY: number | null;          // the eye's height last frame; null: nothing to smooth from
+  smoothOff: number; lastYaw: number; turnAcc: number;
+  fall: Fall | null; fallAmt: number; footN: number;
+  lift: number; eyeOff: number;
+  gas: number;
+  subm?: number;                   // how far under a sea, 0–1; set by stepEVA
+}
+
+export const player: Player = {
   pos: new THREE.Vector3(0, 0, 0),
   vel: new THREE.Vector3(),
   onGround: true,

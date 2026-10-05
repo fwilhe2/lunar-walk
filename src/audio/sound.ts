@@ -23,27 +23,50 @@
    browsers require. The headless probe does neither; it renders the
    same graph into an OfflineAudioContext instead (_offline).
    ═════════════════════════════════════════════════════════════ */
+import type { World } from '../worlds/view-types';
+
+declare global {
+  interface Window { webkitAudioContext?: typeof AudioContext }   // Safari before 14.1
+}
+
+/** The rover as the ear hears it: speed, m/s, and throttle, 0–1. */
+export interface RoverSound { v: number; drive: number }
+
+// The continuous voices build() makes, which update() steers.
+interface Voices {
+  breathF: BiquadFilterNode; breathG: GainNode;
+  jetG: GainNode;
+  motor: OscillatorNode; motorG: GainNode;
+  gear: OscillatorNode; gearG: GainNode;
+  windF: BiquadFilterNode; windG: GainNode;
+}
+
 export const sound = (() => {
   const STORE = 'surfacewalk.mute';
   let muted = false;
   try { muted = localStorage.getItem(STORE) === '1'; } catch (e) { /* no storage */ }
-  let ctx = null, out = null, suitIn = null, airIn = null, airLP = null, airGain = null, noise = null;
-  const v: Record<string, any> = {};           // the continuous voices
+  /* The graph is null, and the voices missing, until build(). Every
+     function below that touches them runs only after it: inside it,
+     behind live() or `out`, or from the probe's _offline(). */
+  let ctx: AudioContext | OfflineAudioContext | null = null;
+  let out: GainNode | null = null, suitIn: GainNode | null = null, airIn: GainNode | null = null;
+  let airLP: BiquadFilterNode | null = null, airGain: GainNode | null = null, noise: AudioBuffer | null = null;
+  const v: Partial<Voices> = {};           // the continuous voices
   let exertion = 0.15, nextBreath = 0, gust = 0.5, gustT = 0;
   let medium = { air: 0, lp: 20000, wind: 0, windLP: 400 };
   const LEVEL = 0.9;
 
-  const filt = (type, f, q?) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q ?? 0.707; return b; };
-  const amp = (g) => { const n = ctx.createGain(); n.gain.value = g; return n; };
-  const chain = (...n) => { for (let i = 0; i < n.length - 1; i++) n[i].connect(n[i + 1]); return n[n.length - 1]; };
-  function loopNoise(offset) {
-    const s = ctx.createBufferSource();
+  const filt = (type: BiquadFilterType, f: number, q?: number) => { const b = ctx!.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q ?? 0.707; return b; };
+  const amp = (g: number) => { const n = ctx!.createGain(); n.gain.value = g; return n; };
+  const chain = (...n: AudioNode[]) => { for (let i = 0; i < n.length - 1; i++) n[i]!.connect(n[i + 1]!); return n[n.length - 1]; };   // i, i + 1 < n.length
+  function loopNoise(offset: number) {
+    const s = ctx!.createBufferSource();
     s.buffer = noise; s.loop = true; s.start(0, offset);
     return s;
   }
-  function osc(type, f) { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start(); return o; }
+  function osc(type: OscillatorType, f: number) { const o = ctx!.createOscillator(); o.type = type; o.frequency.value = f; o.start(); return o; }
 
-  function build(c) {
+  function build(c: AudioContext | OfflineAudioContext) {
     ctx = c;
     noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
     const d = noise.getChannelData(0);
@@ -85,17 +108,17 @@ export const sound = (() => {
 
   function applyMedium() {
     if (!ctx) return;
-    airGain.gain.value = medium.air;
-    airLP.frequency.value = medium.lp;
-    v.windF.frequency.value = medium.windLP;
+    airGain!.gain.value = medium.air;
+    airLP!.frequency.value = medium.lp;
+    v.windF!.frequency.value = medium.windLP;
   }
 
   // One breath, in then out; faster and deeper the harder you work.
-  function breathe(t0) {
+  function breathe(t0: number) {
     const rate = 11 + 22 * exertion;                 // breaths a minute
     const T = 60 / rate, tin = T * 0.4, tex = T * 0.5;
     const a = 0.02 + 0.07 * exertion;
-    const g = v.breathG.gain, f = v.breathF.frequency;
+    const g = v.breathG!.gain, f = v.breathF!.frequency;
     f.setValueAtTime(1300, t0);
     g.setTargetAtTime(a, t0, tin * 0.3);
     g.setTargetAtTime(0, t0 + tin * 0.8, tin * 0.15);
@@ -111,34 +134,34 @@ export const sound = (() => {
   // A boot on soil is a dull thud that the regolith soaks up; on rock
   // nothing gives, and it comes through the bones as a sharper knock,
   // higher and shorter, with a click and no grit.
-  function thump(k, t0, hard = false) {
+  function thump(k: number, t0: number, hard = false) {
     k = Math.max(0.02, Math.min(1.5, k));
-    const o = ctx.createOscillator(), g = ctx.createGain();
+    const o = ctx!.createOscillator(), g = ctx!.createGain();
     o.frequency.setValueAtTime(hard ? 150 : 75, t0);
     o.frequency.exponentialRampToValueAtTime(hard ? 70 : 38, t0 + (hard ? 0.07 : 0.14));
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(0.45 * k, t0 + (hard ? 0.002 : 0.006));
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + (hard ? 0.12 : 0.22));
-    chain(o, g, suitIn);
+    chain(o, g, suitIn!);
     o.start(t0); o.stop(t0 + 0.25);
-    const n = ctx.createBufferSource(), gg = ctx.createGain();
+    const n = ctx!.createBufferSource(), gg = ctx!.createGain();
     n.buffer = noise;
     gg.gain.setValueAtTime(0.0001, t0);
     gg.gain.exponentialRampToValueAtTime((hard ? 0.1 : 0.16) * k, t0 + 0.004);
     gg.gain.exponentialRampToValueAtTime(0.0001, t0 + (hard ? 0.035 : 0.1));
     chain(n, filt('bandpass', hard ? 3800 + Math.random() * 1200 : 1800 + Math.random() * 900, hard ? 2 : 0.9), gg);
-    gg.connect(suitIn); gg.connect(airIn);
+    gg.connect(suitIn!); gg.connect(airIn!);
     n.start(t0, Math.random() * 1.5); n.stop(t0 + 0.12);
   }
 
-  function beep(f, t0, d) {
-    const o = ctx.createOscillator(), g = ctx.createGain();
+  function beep(f: number, t0: number, d: number) {
+    const o = ctx!.createOscillator(), g = ctx!.createGain();
     o.frequency.value = f;
     g.gain.setValueAtTime(0, t0);
     g.gain.linearRampToValueAtTime(0.035, t0 + 0.005);
     g.gain.setValueAtTime(0.035, t0 + d - 0.005);
     g.gain.linearRampToValueAtTime(0, t0 + d);
-    chain(o, g, out);                          // the headset: straight in
+    chain(o, g, out!);                         // the headset: straight in
     o.start(t0); o.stop(t0 + d + 0.01);
   }
 
@@ -148,19 +171,19 @@ export const sound = (() => {
     // On a click or key press: the first builds the graph.
     unlock() {
       if (!ctx) {
-        const AC = window.AudioContext || (window as any).webkitAudioContext;
+        const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
         try { build(new AC()); } catch (e) { return; }
       }
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx!.state === 'suspended') ctx!.resume();   // built above, or it returned
     },
     toggleMute() {
       muted = !muted;
       try { localStorage.setItem(STORE, muted ? '1' : '0'); } catch (e) { /* no storage */ }
-      if (out) out.gain.setTargetAtTime(muted ? 0 : LEVEL, ctx.currentTime, 0.05);
+      if (out) out.gain.setTargetAtTime(muted ? 0 : LEVEL, ctx!.currentTime, 0.05);
       return muted;
     },
-    setWorld(w) {
+    setWorld(w: World) {
       // Wind noise goes with dynamic pressure, ½ρv²: a 1 m/s breeze on
       // Venus is 32 Pa, a 10 m/s wind on Mars 1 Pa — thirty decibels
       // apart, with Mars's just audible over the backpack.
@@ -170,34 +193,34 @@ export const sound = (() => {
         : { air: 0, lp: 20000, wind: 0, windLP: 400 };                         // vacuum
       applyMedium();
     },
-    step(k, hard?) { if (live()) thump(k, ctx.currentTime, hard); },
-    quindar() { if (live()) { beep(2525, ctx.currentTime, 0.25); beep(2475, ctx.currentTime + 1.1, 0.25); } },
+    step(k: number, hard?: boolean) { if (live()) thump(k, ctx!.currentTime, hard); },
+    quindar() { if (live()) { beep(2525, ctx!.currentTime, 0.25); beep(2475, ctx!.currentTime + 1.1, 0.25); } },
     /* Once a frame. work: 0–1, how hard you are going; jets: axes
        firing; rover: null, or { v, drive }. */
-    update(dt, work, jets, rover) {
+    update(dt: number, work: number, jets: number, rover: RoverSound | null) {
       if (!live()) return;
-      const t = ctx.currentTime;
+      const t = ctx!.currentTime;
       // Breathing follows effort, and recovers from it slowly.
       const target = 0.12 + 0.88 * work;
       exertion += (target - exertion) * Math.min(1, dt / (target > exertion ? 6 : 25));
       if (t >= nextBreath - 0.05) breathe(Math.max(t, nextBreath));
-      v.jetG.gain.setTargetAtTime(0.06 * jets, t, 0.03);
+      v.jetG!.gain.setTargetAtTime(0.06 * jets, t, 0.03);
       const sp = rover ? Math.min(Math.abs(rover.v) / 3.6, 1.4) : 0;
-      v.motor.frequency.setTargetAtTime(55 + 240 * sp, t, 0.08);
-      v.gear.frequency.setTargetAtTime(170 + 740 * sp, t, 0.08);
-      v.motorG.gain.setTargetAtTime(rover ? 0.012 + 0.05 * rover.drive + 0.02 * Math.min(sp, 1) : 0, t, 0.1);
-      v.gearG.gain.setTargetAtTime(rover ? 0.006 * Math.min(sp, 1) : 0, t, 0.1);
+      v.motor!.frequency.setTargetAtTime(55 + 240 * sp, t, 0.08);
+      v.gear!.frequency.setTargetAtTime(170 + 740 * sp, t, 0.08);
+      v.motorG!.gain.setTargetAtTime(rover ? 0.012 + 0.05 * rover.drive + 0.02 * Math.min(sp, 1) : 0, t, 0.1);
+      v.gearG!.gain.setTargetAtTime(rover ? 0.006 * Math.min(sp, 1) : 0, t, 0.1);
       gustT -= dt;
       if (gustT <= 0) { gust = Math.random(); gustT = 2 + Math.random() * 6; }
-      v.windG.gain.setTargetAtTime(medium.wind * (0.35 + 0.65 * gust), t, 1.5);
+      v.windG!.gain.setTargetAtTime(medium.wind * (0.35 + 0.65 * gust), t, 1.5);
     },
     get muted() { return muted; },
     // For the probe: the same graph on an OfflineAudioContext, and the
     // pieces to drive it with, scheduled at explicit times.
-    _offline(c, w) {
+    _offline(c: OfflineAudioContext, w: World) {
       build(c);
       this.setWorld(w);
-      return { v, thump, breathe, beep, suitIn, airIn, setExertion: (e) => { exertion = e; } };
+      return { v, thump, breathe, beep, suitIn, airIn, setExertion: (e: number) => { exertion = e; } };
     },
   };
 })();

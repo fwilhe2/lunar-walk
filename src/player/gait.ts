@@ -6,6 +6,7 @@ import { EYE, SUIT } from './constants';
 import { rockSystem } from '../props/rocks';
 import { yawObj } from '../render/renderer';
 import { prints } from '../surface/stamps';
+import type { Player } from './player';
 
 /* ── Gait ───────────────────────────────────────────────────────
    Physics moves you at the pace your legs and the grip allow; the
@@ -42,15 +43,16 @@ const GAIT = {
   lope: 0.6, walk: 0.45,   // Froude numbers to change gait at, up and down
 };
 // Steady (default) or full head motion on foot; see stepEVA.
-export let viewMotion = 'steady';
+export type ViewMotion = 'steady' | 'full';
+export let viewMotion: ViewMotion = 'steady';
 try { if (localStorage.getItem('viewMotion') === 'full') viewMotion = 'full'; } catch (err) { /* no storage */ }
 
 export const gait = (() => {
-  let mode = 'walk', ph = 0, side = 1, n = 0;   // phase 0–1 within the step (walk) or cycle (lope)
+  let mode: 'walk' | 'lope' = 'walk', ph = 0, side = 1, n = 0;   // phase 0–1 within the step (walk) or cycle (lope)
   let T = 1, s = 0.5, td = 0, vy = 0, second = false, env = 0;
   let oy = 0, ox = 0;
   const foot = { x: 0, z: 0, n: 0 };   // the last foot down, and a count of them
-  const strike = (p, k, ahead, hs) => {
+  const strike = (p: Player, k: number, ahead: number, hs: number) => {
     const ax = hs > 0.01 ? p.vel.x / hs : 0, az = hs > 0.01 ? p.vel.z / hs : 0;
     foot.x = p.pos.x + ax * ahead; foot.z = p.pos.z + az * ahead; foot.n++;
     prints.place(foot.x, foot.z, yawObj.rotation.y);
@@ -73,7 +75,7 @@ export const gait = (() => {
   // On a grade steps shorten — uphill to keep the knee within what it
   // can push through, downhill to brake — and quicken to hold the pace
   // (step length falls with the grade either way: Kawamura et al. 1991).
-  const plan = (hs, gl, L, grade = 0) => {
+  const plan = (hs: number, gl: number, L: number, grade = 0) => {
     const fr = hs * hs / (gl * L);
     if (mode === 'walk' && fr > GAIT.lope) mode = 'lope';
     else if (mode === 'lope' && fr < GAIT.walk) mode = 'walk';
@@ -91,7 +93,7 @@ export const gait = (() => {
     // Footfalls a second while moving, for the metabolic cost.
     get rate() { return env > 0 ? (mode === 'walk' ? 1 : 2) / T : 0; },
     reset() { ph = 0; env = 0; oy = 0; ox = 0; n = 0; },
-    step(p, hs, gl, dt, running) {
+    step(p: Player, hs: number, gl: number, dt: number, running: boolean) {
       const L = SUIT.L;
       const vRun = Math.sqrt(SUIT.frRun * gl * L);
       const moving = p.onGround && !p.pushing && !p.fall && p.charge === 0 && hs > 0.08 && hs < 1.6 * vRun;
@@ -141,4 +143,4 @@ export const gait = (() => {
   };
 })();
 
-export function setViewMotion(v) { return (viewMotion = v); }
+export function setViewMotion(v: ViewMotion) { return (viewMotion = v); }

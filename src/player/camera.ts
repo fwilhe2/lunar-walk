@@ -23,7 +23,7 @@ export let zoomHeld = false, zoomT = 0, photoPending = false;
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2) zoomHeld = true; });
 addEventListener('mouseup', (e) => { if (e.button === 2) zoomHeld = false; });
-export function stepZoom(dt) {
+export function stepZoom(dt: number) {
   const target = zoomHeld || keys.KeyZ || input.zoom ? 1 : 0;
   if (zoomT === target) return;
   zoomT += (target - zoomT) * Math.min(1, dt * 8);
@@ -32,7 +32,7 @@ export function stepZoom(dt) {
   camera.updateProjectionMatrix();
 }
 export function takePhoto() {
-  const f = (x) => Math.round(x);
+  const f = (x: number) => Math.round(x);
   const name = 'surface-walk_' + worldId + '_' + f(player.pos.x) + 'E_' + f(-player.pos.z) + 'N_sun' +
     (sunElev * 180 / Math.PI).toFixed(0) + '.png';
   renderer.domElement.toBlob((b) => {
@@ -46,4 +46,4 @@ export function takePhoto() {
   note('PHOTO ' + name);
 }
 
-export function setPhotoPending(v) { return (photoPending = v); }
+export function setPhotoPending(v: boolean) { return (photoPending = v); }

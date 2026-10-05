@@ -54,7 +54,7 @@ export function setMode(next: Mode) {
   updateKeysHelp();
 }
 
-export function setGravity(g) {
+export function setGravity(g: number) {
   player.gravity = g;
   const own = g === world.g;
   el.g.textContent = own ? world.gTxt : '9.81 m/s²';

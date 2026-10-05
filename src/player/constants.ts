@@ -48,14 +48,14 @@ export const SUIT = {
   frWalk: 0.36, frRun: 1.35,
   pWalk: 200, pRun: 400,   // W, propulsive power held for minutes
   lean: 0.47,        // tan 25°: how far a push can be tilted off vertical
-};
+} as const;
 // The Manned Maneuvering Unit, flown from the shuttle in 1984: 0.3 ft/s²
 // in any axis, and 110–130 ft/s of nitrogen on a full ground charge.
-export const JET = { a: 0.091, dv: 36 };
+export const JET = { a: 0.091, dv: 36 } as const;
 
 // Takeoff speed of a push at effort e from crouch depth d, under g —
 // the same integration the live push uses, for the readout.
-export function pushSpeed(e, d, g) {
+export function pushSpeed(e: number, d: number, g: number) {
   let u = 0, x = 0;
   const h = 0.0005;
   for (let i = 0; i < 4000 && x < d; i++) {
@@ -67,4 +67,4 @@ export function pushSpeed(e, d, g) {
   return u;
 }
 
-export function setFlyCeiling(v) { return (FLY_CEILING = v); }
+export function setFlyCeiling(v: number) { return (FLY_CEILING = v); }

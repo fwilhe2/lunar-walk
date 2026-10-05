@@ -9,7 +9,7 @@ import { EYE, FLY_CEILING, JET, SUIT, pushSpeed } from './constants';
 import { EFFORT, effort } from './effort';
 import { gait, viewMotion } from './gait';
 import { input } from './input';
-import { player } from './player';
+import { player, type Player } from './player';
 import { lander } from '../props/lander';
 import { rockSystem } from '../props/rocks';
 import { camera, pitchObj, yawObj } from '../render/renderer';
@@ -32,7 +32,7 @@ export const _camWorld = new THREE.Vector3(), _off = new THREE.Vector3(), _e = n
    up, which is hard work in a stiff suit. None of it on the moonlets,
    where you are hardly standing to begin with. */
 const FALL = { hold: 1.2, up: 2.6, getUp: 1800 };   // s down, s getting up, J it costs
-function startFall(p, dir, gl) {
+function startFall(p: Player, dir: 1 | -1, gl: number) {
   if (p.fall || world.jets) return;
   p.fall = { t: 0, dir, topple: 1.5 * Math.sqrt(SUIT.L / gl), hit: false };
 }
@@ -40,8 +40,8 @@ function startFall(p, dir, gl) {
 export const _demoAhead = new THREE.Vector3(), _demoN = new THREE.Vector3(), _rvEnd = new THREE.Vector3();
 const LIQ = { lift: 480 * 0.25 / 171, drag: 0.5 * 480 * 1.0 * 0.6 / 171 };
 const _hitN = new THREE.Vector3();
-export function stepEVA(dt) {
-  const p: typeof player & { subm?: number } = player, v = p.vel;
+export function stepEVA(dt: number) {
+  const p = player, v = p.vel;
   // Weight, less what dense air holds up (Venus carries 7% of you),
   // and falling off with height as it really does — which matters
   // only on the moonlets, a few per cent at the top of a long drift.
@@ -369,7 +369,7 @@ export function stepEVA(dt) {
   return gh;
 }
 
-export function stepFLY(dt) {
+export function stepFLY(dt: number) {
   body.hide();
   // Full-3D thrust along the view axis; SPACE and C give pure lift.
   fwd.set(0, 0, -1).applyQuaternion(pitchObj.getWorldQuaternion(new THREE.Quaternion()));
@@ -404,7 +404,7 @@ export function stepFLY(dt) {
   return gh;
 }
 
-export function stepROVER(dt) {
+export function stepROVER(dt: number) {
   body.hide();
   rover.step(dt, { throttle: input.fwd, steer: input.side }, player.gravity);
   const s = rover.state;

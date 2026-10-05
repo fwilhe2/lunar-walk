@@ -18,7 +18,7 @@ export const body = (() => {
   const up = new THREE.Group();
   up.position.y = HIP;
   g.add(up);
-  const part = (geo, x, y, z, parent = g) => {
+  const part = (geo: THREE.BufferGeometry, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     m.castShadow = true;
@@ -31,15 +31,15 @@ export const body = (() => {
   part(new THREE.BoxGeometry(0.48, 0.68, 0.24), 0, 1.24 - HIP, 0.27, up);     // PLSS
   part(new THREE.BoxGeometry(0.34, 0.26, 0.2), 0, 1.66 - HIP, 0.3, up);       // OPS on top of it
   part(new THREE.BoxGeometry(0.3, 0.12, 0.14), 0, 1.02 - HIP, -0.2, up);      // chest controls
-  const limb = (x, y, r, len, parent) => {
+  const limb = (x: number, y: number, r: number, len: number, parent: THREE.Object3D) => {
     const pivot = new THREE.Group();
     pivot.position.set(x, y, 0);
     part(new THREE.CapsuleGeometry(r, len, 4, 8), 0, -len / 2 - r * 0.6, 0, pivot);
     parent.add(pivot);
     return pivot;
   };
-  const legs = [limb(-0.13, 0.86, 0.1, 0.62, g), limb(0.13, 0.86, 0.1, 0.62, g)];
-  const arms = [limb(-0.34, 1.42 - HIP, 0.075, 0.5, up), limb(0.34, 1.42 - HIP, 0.075, 0.5, up)];
+  const legs = [limb(-0.13, 0.86, 0.1, 0.62, g), limb(0.13, 0.86, 0.1, 0.62, g)] as const;
+  const arms = [limb(-0.34, 1.42 - HIP, 0.075, 0.5, up), limb(0.34, 1.42 - HIP, 0.075, 0.5, up)] as const;
   arms[0].rotation.z = -0.12; arms[1].rotation.z = 0.12;
 
   /* What you see of yourself. Look down and there is a body under you:
@@ -52,7 +52,7 @@ export const body = (() => {
   const suit = surfacePatch(new THREE.MeshStandardMaterial({ color: 0xe6e3dc, roughness: 0.92 }), 'object');
   const grey = surfacePatch(new THREE.MeshStandardMaterial({ color: 0x9a9ca0, roughness: 0.6, metalness: 0.2 }), 'object');
   const sole = surfacePatch(new THREE.MeshStandardMaterial({ color: 0x4f6487, roughness: 0.8 }), 'object');
-  const seen = (geo, m, x, y, z, parent = g) => {
+  const seen = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
     const o = new THREE.Mesh(geo, m);
     o.position.set(x, y, z);
     o.receiveShadow = true;
@@ -80,7 +80,7 @@ export const body = (() => {
     // Placed by the eye: (x, y, z) is where the camera is.
     // leanF tilts the whole body about the feet; bend, the upper body
     // about the hips.
-    update(x, y, z, yaw, phase, amt, leanF = 0, leanS = 0, bend = 0) {
+    update(x: number, y: number, z: number, yaw: number, phase: number, amt: number, leanF = 0, leanS = 0, bend = 0) {
       g.visible = true;
       up.rotation.x = -bend;
       // Pitched forward about the feet: the backpack pulls the body's
