@@ -11,8 +11,8 @@ A first-person planetary surface simulator — Mercury, Venus, Moon, Mars, Phobo
 ```sh
 bun install
 bun run dev          # Vite dev server, http://localhost:5173
-bun run check        # tsc
-bun run test         # Vitest: the terrain kernel (tests/kernel.test.ts)
+bun run check        # tsc: the app, the kernel's purity, the tests
+bun run test         # Vitest: tests/*.test.ts
 bun run perf         # terrainHeight() µs per call against tools/perf-baseline.json
 bun run build        # static site in dist/
 bun run start        # build, then Electron (electron/main.cjs serves dist/ over app://)
@@ -231,10 +231,11 @@ Physics (`stepEVA`) moves a point at the friction- and power-limited pace; every
 ## Verifying changes
 
 ```sh
-bun run check && bun run test                                             # types; kernel: NaNs, purity, crater classes, fingerprints
+bun run check && bun run test                                             # types; the tests below
 node tools/probe/run.mjs DRIVER.mjs [OUT_DIR] [960x540] [timeout_s]    # → OUT_DIR/probe.log, OUT_DIR/shots/*.jpg
 ```
 
+- **The tests** (`tests/`, Vitest in Node, type-checked by `bun run check` through `tests/tsconfig.json`) cover what is pure: the kernel and its fingerprints (`kernel`), crater cells and the slot hash (`craters`), noise (`noise`), the curvature drop and spawn fade (`curvature`), the triangulation `meshHeight()` must match and the hole walls (`lattice`), the streamer's chunk plan (`plan`), landing sites, landers and skylines (`sites`), where primaries hang (`frames`), Hapke and its table (`hapke`), the texture generators' seed (`texgen`), shared-view links (`view`), the jump and the effort model (`player`, `effort`). Logic that needs testing is moved into a module that imports neither the renderer nor the DOM (as `terrain/lattice.ts`, `terrain/plan.ts`, `app/view-parse.ts` were), not mocked. Many tests hold a number a comment quotes; if you change the number on purpose, change the comment and the test together.
 - **The kernel fingerprint.** `tests/kernel.test.ts` sums every world's heights, side channels and colours over a fixed spread of points — per channel a plain sum, a sum with fixed pseudo-random weights and the sum of magnitudes — and compares against `tests/fingerprints.json` to a part in 10¹⁰ of the magnitude: a millimetre of height at one of the three thousand points (0.05–0.6 mm, by world) fails it. A change to a world's ground moves its sums: if you meant it, record them again with `UPDATE_FINGERPRINTS=1 bun run test` and say so in the commit. It is a tolerance, not a bit-exact hash, because engines round `Math.sin`, `pow` and friends differently in the last bit — V8 versions (Node 22 against 24) and CPU architectures (arm64 against x64) alike; measured, at most 5e-13 relative, which never splits the ground (a page and its workers run in one engine) but made bit-exact hashes fail in CI on every platform but the one they were recorded on. For a change meant to leave the kernel bit for bit, compare the built bundle (see *Types*). CI runs the Node major in `.node-version`.
 - **The probe** (`tools/probe/run.mjs`) starts a Vite server of its own, opens the page with `?probe=low` in a headless browser (the installed Chrome by default; `PROBE_BROWSER=firefox`, `PROBE_EXE` for another binary; on a box without a GPU Chrome uses SwiftShader, `PROBE_GL` to choose), waits for the opening world and runs the driver. `?probe` makes `main.ts` load `app/probe.ts`, which puts the modules a driver needs on `window.lw` and a small API on `window.lw.probe`; nothing of it loads otherwise.
 - A driver is a module whose default export is `async function drive(probe)`, running in Node: `probe.at({ world, x, z, h, yaw, pitch, mode, sun })`, `idle()` (loading done, nothing pending, then a few frames for the shadow pass), `frames(n)`, `snap(name)` (saves the frame), `log(msg)`, `eval(fn, …args)` for anything else in the page (`window.lw.player`, `.keys`, `.quality` …), and `page` (puppeteer). See `tools/probe/drivers/worlds.mjs`; `PROBE_WORLDS=io,titan` arrives as `probe.args.worlds`, `PROBE_HASH` opens a shared view, `PROBE_QUALITY` sets the tier.
