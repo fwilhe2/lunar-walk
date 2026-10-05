@@ -1,0 +1,185 @@
+/* One look for all the chrome: text on dark plates rather than on
+   the picture, small letter-spaced sans for labels, tabular mono for
+   numbers, amber only for state. System faces: nothing is fetched. */
+:root {
+  color-scheme: dark; --ease: cubic-bezier(.65, 0, .25, 1);
+  --fg: #eef0f2; --fg2: #c3c8cf; --muted: #8f98a2; --dim: #5d6570;
+  --accent: #e8b04b; --accent2: #f0c79a; --blue: #7fb6ea;
+  --plate: rgba(8, 10, 14, .62); --plate-line: rgba(255, 255, 255, .09);
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: #000; }
+canvas { display: block; touch-action: none; }
+/* The view always covers the window, whatever its drawing buffer is
+   at that moment: when the window changes size (a browser banner
+   coming or going), it stretches for a frame instead of leaving a
+   strip uncovered. The buffer follows before the next frame. */
+#view { position: fixed; inset: 0; width: 100%; height: 100%; }
+/* Touch: a stick where the left thumb lands, buttons under the right. */
+#touch { position: fixed; inset: 0; pointer-events: none; font: 600 10.5px var(--sans); letter-spacing: .14em; }
+#touch[hidden] { display: none; }
+#touch button { position: absolute; pointer-events: auto; touch-action: none; background: var(--plate);
+                border: 1px solid rgba(255,255,255,.16); color: var(--fg2); border-radius: 50%; width: 64px; height: 64px;
+                font: inherit; text-transform: uppercase; user-select: none; -webkit-user-select: none; }
+#touch button.on { background: rgba(232,176,75,.3); border-color: var(--accent); color: #fff; }
+#t-jump { right: 24px; bottom: 96px; width: 84px !important; height: 84px !important; }
+#t-down { right: 120px; bottom: 36px; }
+#t-zoom { right: 24px; bottom: 196px; }
+#t-rover { right: 120px; bottom: 124px; }
+#t-fly { right: 196px; bottom: 36px; }
+#t-menu { left: 16px; top: 16px; width: 44px !important; height: 44px !important; font-size: 16px !important; }
+#t-stick { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%;
+           border: 1px solid rgba(255,255,255,.18); background: rgba(8,10,14,.3); }
+#t-stick[hidden] { display: none; }
+#t-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+          background: rgba(238,240,242,.35); border: 1px solid rgba(255,255,255,.4); }
+
+#hud, #overlay, #boot {
+  position: fixed; inset: 0;
+  font: 13px/1.5 var(--sans);
+  color: var(--fg2); pointer-events: none; user-select: none;
+}
+.plate { background: var(--plate); border: 1px solid var(--plate-line); border-radius: 4px; }
+
+#crosshair {
+  position: absolute; left: 50%; top: 50%;
+  width: 4px; height: 4px; margin: -2px 0 0 -2px;
+  background: rgba(255,255,255,.75); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+}
+
+/* The readout: the body and what you are doing on it, then numbers. */
+#readout { position: absolute; left: 18px; bottom: 18px; width: 268px; padding: 12px 14px 10px; }
+#readout .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+                 padding-bottom: 9px; margin-bottom: 8px; border-bottom: 1px solid var(--plate-line); }
+#r-world { display: block; font: 600 15px/1.1 var(--sans); letter-spacing: .16em; color: var(--fg); }
+#r-site { display: block; font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+#readout .chips { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.chip { font: 600 9.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; padding: 3px 6px 2px;
+        border: 1px solid currentColor; border-radius: 2px; white-space: nowrap; }
+#r-mode { color: var(--accent); }
+#r-body { color: var(--accent); }
+#readout dl { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 2px; align-items: baseline; }
+#readout .row { display: contents; }
+#readout .row[hidden] { display: none; }
+#readout dt { font: 600 9.5px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+#readout dd { font: 12.5px var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); white-space: nowrap; }
+#readout dd .k { color: var(--muted); }
+#readout dd .warn { color: var(--accent); }
+#r-fps { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--plate-line);
+         font: 10.5px var(--mono); color: var(--dim); }
+
+/* Messages: one line under the compass, gone after a few seconds. */
+#r-note { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); max-width: calc(100% - 32px);
+          padding: 7px 14px 6px; font: 600 11.5px var(--sans); letter-spacing: .14em; color: var(--accent2);
+          text-align: center; border-color: rgba(232,176,75,.35); }
+#r-note:empty { display: none; }
+
+#compass { position: absolute; left: 50%; top: 10px; width: 420px; height: 46px; margin-left: -210px; }
+
+/* Keys: a plate of keycaps, aligned in two pairs of columns. */
+#keys { position: absolute; right: 18px; bottom: 18px; padding: 11px 16px 12px; display: grid;
+        grid-template-columns: auto auto auto auto; column-gap: 9px; row-gap: 5px; align-items: center;
+        color: var(--fg2); font-size: 12px; line-height: 1.3; }
+#keys h5 { grid-column: 1 / -1; font: 600 9.5px var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+           margin-bottom: 1px; }
+#keys h5 ~ h5 { margin-top: 8px; padding-top: 9px; border-top: 1px solid var(--plate-line); }
+#keys p { grid-column: 1 / -1; max-width: 46ch; font-size: 11.5px; color: var(--muted); margin: 2px 0 0; }
+#keys .kk { justify-self: end; white-space: nowrap; }
+#keys .kl { white-space: nowrap; }
+#keys .kl.gap { padding-right: 22px; }
+#keys i { font-style: normal; color: var(--muted); margin: 0 2px; }
+#keys b, #panel .fine b { display: inline-block; min-width: 1.9em; padding: 0 5px; margin: 0 1px; text-align: center;
+         font: 600 10.5px/1.55 var(--sans); letter-spacing: .06em; color: var(--fg);
+         border: 1px solid rgba(255,255,255,.22); border-bottom-width: 2px; border-radius: 3px; background: rgba(255,255,255,.06); }
+@media (max-width: 860px) { #keys { display: none; } }
+
+#overlay {
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 50% 45%, rgba(18,18,24,.7), rgba(0,0,0,.93));
+  pointer-events: auto; cursor: pointer; transition: opacity .5s ease;
+}
+#overlay.hidden { opacity: 0; pointer-events: none; }
+#overlay.paused { background: none; }
+#overlay.paused #panel { display: none; }
+/* In the picker's top row, left of its scale. */
+#resume { display: none; position: absolute; right: 150px; text-align: right; font: 600 10.5px var(--sans); letter-spacing: .16em;
+          text-transform: uppercase; color: var(--muted); pointer-events: none; }
+#overlay.paused #resume { display: block; }
+#hud.lift #readout, #hud.lift #keys { bottom: calc(14px + var(--pick-h, 0px)); }
+#readout, #keys { transition: bottom .5s ease; }
+#panel { text-align: center; max-width: 660px; padding: 0 24px; }
+#panel h1 { font: 300 clamp(30px, 5vw, 52px)/1.05 var(--sans); letter-spacing: .24em; margin-right: -.24em;
+            text-transform: uppercase; color: var(--fg); }
+#panel .sub { margin-top: 12px; font: 12.5px var(--mono); color: var(--muted); letter-spacing: .04em; }
+#panel .go { margin-top: 30px; display: inline-block; border: 1px solid rgba(238,240,242,.45); border-radius: 2px;
+             padding: 11px 28px 10px; font: 600 12px var(--sans); letter-spacing: .26em; text-transform: uppercase; color: var(--fg);
+             background: rgba(8,10,14,.35); }
+#panel .go:hover { background: var(--fg); color: #0b0e12; }
+#panel .fine { margin-top: 26px; font-size: 13px; color: var(--fg2); line-height: 1.75; }
+/* World picker: a strip along the bottom of the opening screen, the
+   sun cropped at its left. Choosing a system zooms into it. */
+#picker { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; cursor: default;
+          background: linear-gradient(to top, rgba(7,9,12,.94), rgba(7,9,12,.7)); border-top: 1px solid #262c35; }
+#picker .ecl { position: absolute; left: 0; right: 0; height: 1px;
+               background: linear-gradient(90deg, rgba(255,214,160,.55), rgba(255,255,255,.1) 35%, rgba(255,255,255,.05)); }
+#picker .disc { position: absolute; border-radius: 50%; pointer-events: none; background: var(--c);
+                transition: left .95s var(--ease), top .95s var(--ease), width .95s var(--ease), height .95s var(--ease),
+                            font-size .95s var(--ease), opacity .55s ease, box-shadow .3s; }
+#picker .lumpy { border-radius: 47% 53% 44% 56% / 58% 46% 54% 42%; }
+#picker .ring { position: absolute; left: 50%; top: 50%; border-radius: 50%; border-style: solid; border-color: var(--c);
+                transition: opacity .6s ease; }
+#picker .ring.sat { width: 227%; height: 58%; border-width: .22em .95em; opacity: .8; transform: translate(-50%, -50%) rotate(-12deg); }
+#picker .ring.ura { width: 46%; height: 205%; border-width: .05em; opacity: .55; transform: translate(-50%, -50%) rotate(-8deg); }
+/* Zoomed in, the primary's rings would lie across its own moons. */
+#picker .disc.primary .ring { opacity: 0; }
+#picker .sun { background: radial-gradient(circle, #fffaf0 0, #ffeec8 92%, #ffd690 100%);
+               box-shadow: 0 0 40px 14px rgba(255,196,120,.45), 0 0 120px 40px rgba(255,170,90,.18); }
+#picker .disc.on { box-shadow: 0 0 0 2px #0b0e12, 0 0 0 3.5px #e8b04b; }
+#picker .disc.hov { filter: brightness(1.3); }
+#picker .lbl { position: absolute; white-space: nowrap; pointer-events: none; transform: translateX(-50%); text-align: center;
+               line-height: 1.15; text-shadow: 0 1px 3px #000;
+               transition: left .95s var(--ease), top .95s var(--ease), opacity .55s ease; }
+#picker .lbl b { display: block; font: 600 12px system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .14em;
+                 text-transform: uppercase; color: #c3c8cf; }
+#picker .lbl small { display: block; font: 10.5px ui-monospace, Menlo, monospace; color: #858d97; margin-top: 3px; }
+#picker .lbl.on b { color: #e8b04b; }
+#picker .lbl.on small { color: #f0c79a; }
+#picker .lbl.off b { color: #555c66; }
+#picker .lbl.off small { color: #434951; }
+#picker .lbl.hov b { color: #fff; }
+#picker .lbl.on.hov b { color: #f8cd78; }
+#picker .lbl.left { transform: none; text-align: left; }
+#picker .lbl.right { transform: translateX(-100%); text-align: right; }
+#picker .lbl.note small { color: #555c66; margin: 0; }
+#picker .crumb { font: 600 11px system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: #858d97; }
+#picker .hit { position: absolute; background: transparent; border: 0; padding: 0; cursor: pointer; }
+#picker .hit.off { cursor: default; }
+#picker .hit:focus-visible { outline: 1px solid #e8b04b; outline-offset: -3px; }
+#picker .back { position: absolute; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: #c3c8cf;
+                font: 600 11px system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .16em; text-transform: uppercase;
+                padding: 3px 10px 3px 8px; cursor: pointer; border-radius: 2px; }
+#picker .back:hover, #picker .back:focus-visible { color: #fff; border-color: #e8b04b; outline: none; }
+#picker .back b { color: #e6e8eb; }
+#picker.still .disc, #picker.still .lbl, #picker.still .ring { transition: none; }
+@media (prefers-reduced-motion: reduce) { #picker .disc, #picker .lbl { transition: opacity .2s; } }
+/* Loading: the world's name and a bar of the sectors built so far. */
+#boot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 1; }
+#boot .t { font: 300 20px var(--sans); letter-spacing: .3em; margin-right: -.3em; text-transform: uppercase; color: var(--fg);
+           text-shadow: 0 1px 6px #000; }
+#boot .bar { width: 220px; height: 2px; background: rgba(255,255,255,.14); overflow: hidden; }
+#boot .bar i { display: block; height: 100%; background: var(--accent); transition: width .2s linear; }
+#boot .n { font: 10.5px var(--mono); color: var(--muted); letter-spacing: .06em; text-shadow: 0 1px 4px #000; }
+#boot[hidden] { display: none; }
+/* While a world builds, its name and bar stand where the title does. */
+#boot:not([hidden]) ~ #overlay #panel { visibility: hidden; }
+
+/* Demo: no crosshair, no key list, no readout, no tag — a
+   screensaver has nothing to read, only to look past. */
+#hud.demo #crosshair, #hud.demo #keys, #hud.demo #readout, #hud.demo #compass { display: none; }
+/* H: the same clean frame, by hand, for photographs. */
+#hud.clean #crosshair, #hud.clean #keys, #hud.clean #readout, #hud.clean #compass { display: none; }
+#panel .alt { margin-top: 14px; font: 600 10.5px var(--sans); letter-spacing: .18em;
+              text-transform: uppercase; color: var(--muted); cursor: pointer; }
+#panel .alt:hover { color: var(--fg); }
