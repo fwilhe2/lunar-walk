@@ -32,19 +32,22 @@ import type { LanderKind } from '../worlds/view-types';
 /** A lander kind: pad count, pad circle and pad radius, the body to collide with, and its builder. */
 interface LanderSpec {
   n: number; footR: number; bodyR: number; top: number; padR: number;
-  build: (pads: number[][]) => THREE.Group;
+  build: (pads: readonly number[]) => THREE.Group;   // pads[k]: pad k's height above the stage's plane
 }
 
 export const lander = (() => {
   const group = new THREE.Group();
   scene.add(group);
-  let site = null, baseH = 0, yaw = 0, K = null;
+  // K is the placed kind: set by place() before anything reads it (push()
+  // returns early until a site is set).
+  let site: [number, number] | null = null, baseH = 0, yaw = 0, K!: LanderSpec;
 
   // Gold foil is never flat: a normal map of creases, generated.
   const crinkle = (() => {
     const S = 256, hgt = new Float32Array(S * S);
     let sd = 1969;
     const rnd = () => (sd = (sd * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    // Every index below is wrapped into [0, S) per axis, so in range.
     for (let k = 0; k < 900; k++) {
       // A crease: a short ridge or trough, at any angle.
       const cx = rnd() * S, cy = rnd() * S, a = rnd() * Math.PI, len = 6 + rnd() * 26, w = 1 + rnd() * 3, amp = (rnd() - 0.5) * 2;
@@ -52,14 +55,14 @@ export const lander = (() => {
       for (let y = -len; y <= len; y++) for (let x = -w * 2; x <= w * 2; x++) {
         const px = Math.round(cx + ca * y - sa * x), py = Math.round(cy + sa * y + ca * x);
         const i = ((py % S + S) % S) * S + ((px % S + S) % S);
-        hgt[i] += amp * Math.max(0, 1 - Math.abs(x) / (w * 2)) * (1 - Math.abs(y) / len);
+        hgt[i]! += amp * Math.max(0, 1 - Math.abs(x) / (w * 2)) * (1 - Math.abs(y) / len);
       }
     }
     const data = new Uint8Array(S * S * 4);
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       const i = y * S + x;
-      const dx = hgt[y * S + ((x + 1) % S)] - hgt[y * S + ((x + S - 1) % S)];
-      const dy = hgt[((y + 1) % S) * S + x] - hgt[((y + S - 1) % S) * S + x];
+      const dx = hgt[y * S + ((x + 1) % S)]! - hgt[y * S + ((x + S - 1) % S)]!;
+      const dy = hgt[((y + 1) % S) * S + x]! - hgt[((y + S - 1) % S) * S + x]!;
       const nx = -dx * 0.9, ny = -dy * 0.9, l = 1 / Math.hypot(nx, ny, 1);
       data[i * 4] = (nx * l * 0.5 + 0.5) * 255; data[i * 4 + 1] = (ny * l * 0.5 + 0.5) * 255;
       data[i * 4 + 2] = (l * 0.5 + 0.5) * 255; data[i * 4 + 3] = 255;
@@ -70,7 +73,7 @@ export const lander = (() => {
     return t;
   })();
 
-  const obj = (o) => surfacePatch(new THREE.MeshStandardMaterial(o), 'object');
+  const obj = (o: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial => surfacePatch(new THREE.MeshStandardMaterial(o), 'object');
   const M = {
     gold: obj({ color: 0xc79a3c, metalness: 0.9, roughness: 0.32, normalMap: crinkle, normalScale: new THREE.Vector2(0.6, 0.6) }),
     black: obj({ color: 0x1c1d20, metalness: 0.1, roughness: 0.7 }),
@@ -85,7 +88,7 @@ export const lander = (() => {
 
   // Cylinder from a to b (local coordinates), radius r.
   const _up = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
-  function rod(parent, mat, a, b, r, seg = 8) {
+  function rod(parent: THREE.Group, mat: THREE.MeshStandardMaterial, a: THREE.Vector3, b: THREE.Vector3, r: number, seg = 8) {
     _d.subVectors(b, a);
     const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, _d.length(), seg), mat);
     m.position.addVectors(a, b).multiplyScalar(0.5);
@@ -93,17 +96,17 @@ export const lander = (() => {
     parent.add(m);
     return m;
   }
-  function box(parent, mat, w, h, d, x, y, z, ry = 0) {
+  function box(parent: THREE.Group, mat: THREE.MeshStandardMaterial, w: number, h: number, d: number, x: number, y: number, z: number, ry = 0) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z); m.rotation.y = ry;
     parent.add(m);
     return m;
   }
-  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
   // pads[k]: how far pad k sits above the stage's plane (the struts
   // absorb it). Local frame: +x forward, the ladder leg.
-  function buildLM(pads) {
+  function buildLM(pads: readonly number[]) {
     const FOOT_R = 4.72;
     const g = new THREE.Group();
     const Y0 = 1.42, Y1 = 3.07;                      // descent stage, bottom and top
@@ -124,9 +127,9 @@ export const lander = (() => {
     // Legs.
     for (let k = 0; k < 4; k++) {
       const a = k * Math.PI / 2, ca = Math.cos(a), sa = -Math.sin(a);
-      const L = (r, y) => V(ca * r, y, sa * r);
-      const Lt = (r, y, t) => V(ca * r - sa * t, y, sa * r + ca * t);   // t: across the leg
-      const py = pads[k];
+      const L = (r: number, y: number) => V(ca * r, y, sa * r);
+      const Lt = (r: number, y: number, t: number) => V(ca * r - sa * t, y, sa * r + ca * t);   // t: across the leg
+      const py = pads[k]!;   // one pad height per leg (KINDS: n)
       const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.38, 0.16, 18), M.silver);
       pad.position.copy(L(FOOT_R, py + 0.05)); g.add(pad);
       // The primary strut, gold-wrapped, and its two secondaries.
@@ -143,7 +146,7 @@ export const lander = (() => {
     box(g, M.silver, 0.9, 0.05, 1.05, 2.55, Y1 - 0.1, 0);
     for (const t of [-0.48, 0.48]) rod(g, M.silver, V(2.2, Y1 + 0.85, t), V(2.95, Y1 + 0.85, t), 0.015, 5);
     for (const t of [-0.48, 0.48]) rod(g, M.silver, V(2.95, Y1 - 0.1, t), V(2.95, Y1 + 0.85, t), 0.015, 5);
-    const top = V(2.95, Y1 - 0.12, 0), bot = V(3.95, 1.0 + pads[0] * 0.8, 0);
+    const top = V(2.95, Y1 - 0.12, 0), bot = V(3.95, 1.0 + pads[0]! * 0.8, 0);
     for (const t of [-0.24, 0.24]) rod(g, M.silver, V(top.x, top.y, t), V(bot.x, bot.y, t), 0.02, 6);
     for (let i = 1; i < 9; i++) {
       const f = i / 9;
@@ -169,15 +172,15 @@ export const lander = (() => {
     box(g, M.gold, 0.9, 0.5, 1.7, -1.5, A0 + 1.85, 0);
     const tun = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.55, 16), M.silver);
     tun.position.set(0, A0 + 2.4, 0); g.add(tun);                                 // docking tunnel
-    for (const [x, z] of [[0.95, 1.25], [0.95, -1.25], [-1.05, 1.25], [-1.05, -1.25]]) {
+    for (const [x, z] of [[0.95, 1.25], [0.95, -1.25], [-1.05, 1.25], [-1.05, -1.25]] as const) {
       // RCS quads: a housing and four small nozzles each.
       box(g, M.grey, 0.32, 0.32, 0.32, x, A0 + 1.95, z);
-      for (const [nx, ny] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]) {
+      for (const [nx, ny] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]] as const) {
         rod(g, M.black, V(x + nx * 0.14, A0 + 1.95 + ny * 0.14, z), V(x + nx * 0.34, A0 + 1.95 + ny * 0.34, z), 0.04, 6);
       }
     }
     // The rendezvous radar dish up front, the S-band dish on its mast.
-    const dish = (x, y, z, r, tx, ty) => {
+    const dish = (x: number, y: number, z: number, r: number, tx: number, ty: number) => {
       const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 6, 0, Math.PI * 2, 0, 0.9), M.silver);
       m.position.set(x, y, z); m.rotation.set(tx, 0, ty); g.add(m);
     };
@@ -194,7 +197,7 @@ export const lander = (() => {
      in their wind covers on its flanks, the camera turrets up front,
      the high-gain dish on its mast, the weather boom, and the sampler
      arm reaching out to the trench it dug. About two metres high. */
-  function buildViking(pads) {
+  function buildViking(pads: readonly number[]) {
     const g = new THREE.Group();
     const R = 1.15;
     const bus = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.46, 6), M.white);
@@ -203,7 +206,7 @@ export const lander = (() => {
     lid.position.y = 0.94; lid.rotation.y = Math.PI / 6; g.add(lid);
     for (let k = 0; k < 3; k++) {
       const a = k * 2 * Math.PI / 3 + Math.PI / 3, ca = Math.cos(a), sa = -Math.sin(a);
-      const L = (r, y) => V(ca * r, y, sa * r), py = pads[k];
+      const L = (r: number, y: number) => V(ca * r, y, sa * r), py = pads[k]!;   // one per leg
       const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.06, 14), M.silver);
       pad.position.copy(L(R, py + 0.03)); g.add(pad);
       rod(g, M.silver, L(0.7, 0.62), L(R, py + 0.08), 0.04);
@@ -230,8 +233,8 @@ export const lander = (() => {
     // UHF antenna, and the sampler arm out to its trench.
     rod(g, M.silver, V(-0.2, 0.95, 0.4), V(-0.2, 1.5, 0.4), 0.012, 5);
     box(g, M.grey, 0.3, 0.16, 0.2, 0.62, 0.84, 0.15);
-    rod(g, M.silver, V(0.75, 0.84, 0.15), V(2.2, 0.12 + pads[0] * 0.3, 0.6), 0.025, 6);
-    box(g, M.grey, 0.12, 0.08, 0.1, 2.25, 0.1 + pads[0] * 0.3, 0.62);
+    rod(g, M.silver, V(0.75, 0.84, 0.15), V(2.2, 0.12 + pads[0]! * 0.3, 0.6), 0.025, 6);
+    box(g, M.grey, 0.12, 0.08, 0.1, 2.25, 0.1 + pads[0]! * 0.3, 0.62);
     for (const m of g.children) m.castShadow = m.receiveShadow = true;
     return g;
   }
@@ -282,7 +285,7 @@ export const lander = (() => {
      cabin on a descent stage, four legs spread 7.8 m, a ladder, the
      engine bell, radiators and a dish — in white paint and silver foil
      rather than the LM's gold. About six and a half metres high. */
-  function buildGeneric(pads) {
+  function buildGeneric(pads: readonly number[]) {
     const g = new THREE.Group();
     const FR = 3.9, Y0 = 1.35, Y1 = 2.55;
     const stage = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, Y1 - Y0, 8), M.foil);
@@ -299,9 +302,9 @@ export const lander = (() => {
     }
     for (let k = 0; k < 4; k++) {
       const a = k * Math.PI / 2, ca = Math.cos(a), sa = -Math.sin(a);
-      const L = (r, y) => V(ca * r, y, sa * r);
-      const Lt = (r, y, t) => V(ca * r - sa * t, y, sa * r + ca * t);
-      const py = pads[k];
+      const L = (r: number, y: number) => V(ca * r, y, sa * r);
+      const Lt = (r: number, y: number, t: number) => V(ca * r - sa * t, y, sa * r + ca * t);
+      const py = pads[k]!;   // one per leg
       const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.36, 0.14, 18), M.silver);
       pad.position.copy(L(FR, py + 0.05)); g.add(pad);
       rod(g, M.white, L(1.95, 2.3), L(FR, py + 0.18), 0.09);
@@ -324,7 +327,7 @@ export const lander = (() => {
     dish.position.set(-1.25, Y1 + 3.5, 0.6); dish.rotation.set(0.4, 0, 0.7); g.add(dish);
     // Porch and ladder down the forward leg.
     box(g, M.silver, 0.8, 0.05, 1.0, 2.35, Y1 - 0.05, 0);
-    const top = V(2.7, Y1 - 0.08, 0), bot = V(3.45, 0.95 + pads[0] * 0.8, 0);
+    const top = V(2.7, Y1 - 0.08, 0), bot = V(3.45, 0.95 + pads[0]! * 0.8, 0);
     for (const t of [-0.24, 0.24]) rod(g, M.silver, V(top.x, top.y, t), V(bot.x, bot.y, t), 0.02, 6);
     for (let i = 1; i < 8; i++) {
       const f = i / 8;
@@ -343,37 +346,40 @@ export const lander = (() => {
     venera: { n: 6, footR: 1.0, bodyR: 1.15, top: 2.4, padR: 0, build: buildVenera },
     generic: { n: 4, footR: 3.9, bodyR: 2.1, top: 6.3, padR: 0.45, build: buildGeneric },
   } satisfies Record<LanderKind, LanderSpec>;
-  const padAngle = (k) => (K.n === 3 ? k * 2 * Math.PI / 3 + Math.PI / 3 : k * 2 * Math.PI / K.n);
+  const padAngle = (k: number) => (K.n === 3 ? k * 2 * Math.PI / 3 + Math.PI / 3 : k * 2 * Math.PI / K.n);
 
-  function mergeByMaterial(g) {
-    const byMat = new Map();
+  function mergeByMaterial(g: THREE.Group) {
+    const byMat = new Map<THREE.MeshStandardMaterial, THREE.BufferGeometry[]>();
     g.updateMatrixWorld(true);
     for (const m of [...g.children]) {
-      const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone());
+      if (!(m instanceof THREE.Mesh)) continue;   // the builders add only meshes
+      const geo: THREE.BufferGeometry = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone());
       geo.applyMatrix4(m.matrix);
-      if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+      if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position!.count * 2), 2));
       if (!byMat.has(m.material)) byMat.set(m.material, []);
-      byMat.get(m.material).push(geo);
+      byMat.get(m.material)!.push(geo);   // set just above
       m.geometry.dispose();
     }
     const out = new THREE.Group();
     for (const [mat, list] of byMat) {
-      const n = list.reduce((a, q) => a + q.attributes.position.count, 0);
+      const n = list.reduce((a, q) => a + q.attributes.position!.count, 0);
       const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
       let o = 0;
       for (const q of list) {
-        pos.set(q.attributes.position.array, o * 3);
-        nrm.set(q.attributes.normal.array, o * 3);
-        uv.set(q.attributes.uv.array, o * 2);
-        o += q.attributes.position.count;
+        // Every primitive has positions and normals; uvs were added above.
+        pos.set(q.attributes.position!.array, o * 3);
+        nrm.set(q.attributes.normal!.array, o * 3);
+        uv.set(q.attributes.uv!.array, o * 2);
+        o += q.attributes.position!.count;
         q.dispose();
       }
       // Foil is crinkled at its own scale, not stretched over whatever
       // primitive it wraps: map it in metres, across each face.
       if (mat.normalMap) {
+        // i < n vertices, three or two floats each: in range.
         for (let i = 0; i < n; i++) {
-          const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
-          const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+          const nx = nrm[i * 3]!, ny = nrm[i * 3 + 1]!, nz = nrm[i * 3 + 2]!;
+          const x = pos[i * 3]!, y = pos[i * 3 + 1]!, z = pos[i * 3 + 2]!;
           if (Math.abs(ny) > 0.7) { uv[i * 2] = x * 0.9; uv[i * 2 + 1] = z * 0.9; }
           else { const l = Math.hypot(nx, nz) || 1; uv[i * 2] = (x * -nz + z * nx) / l * 0.9; uv[i * 2 + 1] = y * 0.9; }
         }
@@ -392,7 +398,7 @@ export const lander = (() => {
 
   return {
     place() {
-      for (const m of group.children) m.traverse((o) => (o as THREE.Mesh).geometry && (o as THREE.Mesh).geometry.dispose());
+      for (const m of group.children) m.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
       group.clear();
       site = WORLD.lander || null;
       K = KINDS[world.lander || 'lm'];
@@ -402,7 +408,7 @@ export const lander = (() => {
       // landing site, three-quarters on; the others turn the same way
       // toward wherever the site is from them.
       yaw = WORLD.id === 'moon' ? -2.443 : Math.atan2(z, -x) + 0.5;
-      const lp = [], h = [];
+      const lp: [number, number][] = [], h: number[] = [];
       for (let k = 0; k < K.n; k++) {
         const a = padAngle(k), lx = Math.cos(a) * K.footR, lz = -Math.sin(a) * K.footR;
         const wa = yaw + a;
@@ -411,14 +417,15 @@ export const lander = (() => {
       }
       // The plane through the pads, by least squares: its centre and its
       // tilt fore-aft and across; what is left over the struts take up.
+      // lp and h hold K.n entries each, pushed above.
       let hc = 0, sx = 0, sz = 0, sxx = 0, szz = 0;
-      for (let k = 0; k < K.n; k++) hc += h[k] / K.n;
+      for (let k = 0; k < K.n; k++) hc += h[k]! / K.n;
       for (let k = 0; k < K.n; k++) {
-        sx += lp[k][0] * (h[k] - hc); sz += lp[k][1] * (h[k] - hc);
-        sxx += lp[k][0] * lp[k][0]; szz += lp[k][1] * lp[k][1];
+        sx += lp[k]![0] * (h[k]! - hc); sz += lp[k]![1] * (h[k]! - hc);
+        sxx += lp[k]![0] * lp[k]![0]; szz += lp[k]![1] * lp[k]![1];
       }
       const bx = sx / sxx, bz = sz / szz;
-      const res = h.map((hk, k) => hk - (hc + bx * lp[k][0] + bz * lp[k][1]));
+      const res = h.map((hk, k) => hk - (hc + bx * lp[k]![0] + bz * lp[k]![1]));
       const lm = mergeByMaterial(K.build(res));
       lm.rotation.set(-Math.atan(bz), 0, Math.atan(bx), 'YXZ');
       const holder = new THREE.Group();
@@ -434,12 +441,12 @@ export const lander = (() => {
     update() { if (site) group.position.y = baseH - dropAt(site[0], site[1]); },
     // Keep a body of radius r at p (feet at feetY) out of the stage and
     // off the pads; true on contact, with the outward normal in n.
-    push(p, r, feetY, n) {
+    push(p: THREE.Vector3, r: number, feetY: number, n?: THREE.Vector3) {
       if (!site) return false;
       const dx = p.x - site[0], dz = p.z - site[1], d = Math.hypot(dx, dz);
       if (d > K.footR + 1.5) return false;
       let hit = false;
-      const out = (cx, cz, R) => {
+      const out = (cx: number, cz: number, R: number) => {
         const ex = p.x - cx, ez = p.z - cz, e = Math.hypot(ex, ez);
         if (e < R + r && e > 1e-6) {
           const k = (R + r) / e; p.x = cx + ex * k; p.z = cz + ez * k; hit = true;

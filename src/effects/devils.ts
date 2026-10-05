@@ -6,6 +6,7 @@ import { KEY, SUN_DIR, hemiLight } from '../render/lights';
 import { scene } from '../render/renderer';
 import { world } from '../worlds/index';
 import { WIND_A } from '../worlds/mars/terrain';
+import { TypedShaderMaterial } from '../util/three';
 
 /* ── Dust devils ────────────────────────────────────────────────
    Martian afternoons raise convective whirlwinds that pick up the
@@ -18,6 +19,19 @@ import { WIND_A } from '../worlds/mars/terrain';
    the top, drawn like the geysers as a ribbon turned to face you. Each
    lives ten minutes, fading in and out, and the next rises somewhere
    else round wherever you then are. */
+type DevilUniforms = {
+  uSun: THREE.IUniform<THREE.Vector3>; uLight: THREE.IUniform<number>; uCol: THREE.IUniform<THREE.Color>;
+  uFade: THREE.IUniform<number>; uR: THREE.IUniform<number>; uSway: THREE.IUniform<number>;
+  uW: THREE.IUniform<number>; uH: THREE.IUniform<number>;
+  fogColor: THREE.IUniform<THREE.Color>; fogDensity: THREE.IUniform<number>;
+};
+/* A devil's slot: its column, the epoch it was last respawned in, where
+   it rose, its height, width and walking speed. */
+interface Devil {
+  mesh: THREE.Mesh<THREE.BufferGeometry, TypedShaderMaterial<DevilUniforms>>;
+  epoch: number; bx: number; bz: number; H: number; W: number; v: number;
+}
+
 export const devils = (() => {
   const N = 24, LIFE = 600;
   const group = new THREE.Group();
@@ -67,7 +81,7 @@ export const devils = (() => {
         w[o] = 0.5 + t * 0.8; w[o + 1] = k ? 1 : -1; w[o + 2] = 0.22 * Math.exp(-t * 3.2) * Math.min(1, t * 12 + 0.3) * (1 - smoothT(Math.max(0, (t - 0.6) / 0.4)));
       }
     }
-    const idx = [];
+    const idx: number[] = [];
     for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -75,13 +89,13 @@ export const devils = (() => {
     g.setIndex(idx);
     return g;
   })();
-  let live = [];
+  let live: Devil[] = [];
   return {
-    set(n) {
+    set(n: number | undefined) {
       for (const d of live) { group.remove(d.mesh); d.mesh.material.dispose(); }
       live = [];
       for (let k = 0; k < (n || 0); k++) {
-        const mat = new THREE.ShaderMaterial({
+        const mat = new TypedShaderMaterial<DevilUniforms>({
           uniforms: {
             uSun: { value: new THREE.Vector3() }, uLight: { value: 1 }, uCol: { value: new THREE.Color(0.80, 0.60, 0.44) },
             uFade: { value: 0 }, uR: { value: 1e6 }, uSway: { value: 0 }, uW: { value: 60 }, uH: { value: 600 },
@@ -98,13 +112,13 @@ export const devils = (() => {
         live.push({ mesh, epoch: -1, bx: 0, bz: 0, H: 600, W: 60, v: 4 });
       }
     },
-    update(t, cam) {
+    update(t: number, cam: THREE.Vector3) {
       for (let k = 0; k < live.length; k++) {
-        const d = live[k], T = t + k * LIFE / live.length, ep = Math.floor(T / LIFE), f = T / LIFE - ep;
+        const d = live[k]!, T = t + k * LIFE / live.length, ep = Math.floor(T / LIFE), f = T / LIFE - ep;
         if (ep !== d.epoch) {
           // A new one, somewhere round you, seeded by its slot and epoch.
           d.epoch = ep;
-          const h = (n) => hash2(ep * 7 + k, n * 131 + 17);
+          const h = (n: number) => hash2(ep * 7 + k, n * 131 + 17);
           const a = h(1) * 6.2832, r = 3000 + h(2) * 5000;
           d.bx = cam.x + Math.cos(a) * r; d.bz = cam.z + Math.sin(a) * r;
           d.H = 350 + h(3) * 900; d.W = 25 + h(4) * 80; d.v = 2 + h(5) * 4;
@@ -120,7 +134,7 @@ export const devils = (() => {
         u.uR.value = CURVE_R;
         u.uSway.value = t * 0.3 + k;
         u.uW.value = d.W; u.uH.value = d.H;
-        if (scene.fog) { u.fogColor.value.copy(scene.fog.color); u.fogDensity.value = (scene.fog as THREE.FogExp2).density; }
+        if (scene.fog instanceof THREE.FogExp2) { u.fogColor.value.copy(scene.fog.color); u.fogDensity.value = scene.fog.density; }
       }
     },
   };

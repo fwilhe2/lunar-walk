@@ -4,6 +4,8 @@ import { SUN_DIR } from '../render/lights';
 import { scene } from '../render/renderer';
 import { DEG } from '../surface/hapke';
 import { world } from '../worlds/index';
+import { TypedShaderMaterial } from '../util/three';
+import type { GeyserSpec } from '../worlds/view-types';
 
 /* ── Geysers ────────────────────────────────────────────────────
    Triton's: Voyager 2 caught four erupting on the polar cap, each a
@@ -21,11 +23,15 @@ import { world } from '../worlds/index';
    pulled in along the line of sight to 80 km so it stays inside the
    far plane. The dust is dark and small: it absorbs what is behind it
    (stars, haze, Neptune) and scatters a little sunlight, forward. */
+type GeyserUniforms = {
+  uSun: THREE.IUniform<THREE.Vector3>; uSunCol: THREE.IUniform<THREE.Vector3>; uR: THREE.IUniform<number>;
+};
+
 export const geysers = (() => {
   const PROXY = 80000, N = 72;
   const group = new THREE.Group();
   scene.add(group);
-  let live = [];
+  let live: THREE.Mesh<THREE.BufferGeometry, TypedShaderMaterial<GeyserUniforms>>[] = [];
   const vs = `
     attribute vec3 aTan; attribute vec3 aW;   // aW: half-width, side, optical depth
     uniform float uR;
@@ -61,12 +67,12 @@ export const geysers = (() => {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  function build(sp) {
+  function build(sp: GeyserSpec) {
     const pos = new Float32Array((N + 1) * 2 * 3), tan = new Float32Array((N + 1) * 2 * 3), w = new Float32Array((N + 1) * 2 * 3);
     const b = sp.brg * DEG, tb = sp.tail.brg * DEG;
     const vx = Math.sin(b) * sp.dist, vz = -Math.cos(b) * sp.dist;
     const wx = Math.sin(tb), wz = -Math.cos(tb);
-    const pts = [];
+    const pts: [number, number, number, number, number][] = [];   // x, y, z, t, q
     for (let i = 0; i <= N; i++) {
       const t = i / N;
       // The first fifth climbs the column, then a bend of a few
@@ -76,11 +82,12 @@ export const geysers = (() => {
       const y = sp.H * (1 - Math.pow(1 - up, 2.2) * 1) * (1 - 0.15 * q);
       pts.push([vx + wx * along * sp.tail.len, y, vz + wz * along * sp.tail.len, t, q]);
     }
+    // pts has N + 1 points and every index is clamped to them.
     for (let i = 0; i <= N; i++) {
-      const a = pts[Math.max(0, i - 1)], c = pts[Math.min(N, i + 1)];
+      const a = pts[Math.max(0, i - 1)]!, c = pts[Math.min(N, i + 1)]!;
       let tx = c[0] - a[0], ty = c[1] - a[1], tz = c[2] - a[2];
       const l = Math.hypot(tx, ty, tz) || 1; tx /= l; ty /= l; tz /= l;
-      const [x, y, z, t, q] = pts[i];
+      const [x, y, z, t, q] = pts[i]!;
       const hw = t < 0.2 ? sp.w * (0.6 + 0.4 * t / 0.2) : sp.w * (1 + q * 4);
       // The column is dense; the trail thins as it spreads.
       const tau = (t < 0.2 ? sp.tau : sp.tau * 0.6 / (1 + q * 4)) * (1 - Math.pow(q, 3));
@@ -91,7 +98,7 @@ export const geysers = (() => {
         w[o] = hw; w[o + 1] = k ? 1 : -1; w[o + 2] = tau;
       }
     }
-    const idx = [];
+    const idx: number[] = [];
     for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -102,10 +109,10 @@ export const geysers = (() => {
   }
   return {
     // specs: [{ brg (°), dist (m), H (m), w (column half-width, m), tau, tail: { brg (°), len (m) } }]
-    set(specs) {
+    set(specs: GeyserSpec[] | undefined) {
       for (const g of live) { group.remove(g); g.geometry.dispose(); g.material.dispose(); }
       live = (specs || []).map((sp) => {
-        const m = new THREE.Mesh(build(sp), new THREE.ShaderMaterial({
+        const m = new THREE.Mesh(build(sp), new TypedShaderMaterial<GeyserUniforms>({
           uniforms: { uSun: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Vector3() }, uR: { value: 1e6 } },
           vertexShader: vs, fragmentShader: fs, side: THREE.DoubleSide,
           transparent: true, depthWrite: false, fog: false,
@@ -118,7 +125,7 @@ export const geysers = (() => {
       });
     },
     // groundY: the site's ground, where the vents are taken to stand.
-    update(groundY, lit, units) {
+    update(groundY: number, lit: number, units: number) {
       group.position.y = groundY;
       for (const m of live) {
         const u = m.material.uniforms;

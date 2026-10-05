@@ -3,6 +3,7 @@ import { terrainHeight } from '../kernel/terrain';
 import { scene } from '../render/renderer';
 import { surfacePatch } from '../surface/patch';
 import { dropAt } from '../terrain/anchor';
+import type { LandmarkKind } from '../worlds/view-types';
 
 /* A landmark at the landing site, so you can find your way back.
 
@@ -26,13 +27,14 @@ export const landmark = (() => {
 
   function clear() {
     for (const m of group.children) {
-      (m as THREE.Mesh).geometry.dispose();
-      ((m as THREE.Mesh).material as THREE.Material).dispose();
+      if (!(m instanceof THREE.Mesh)) continue;   // landmark() adds only meshes
+      m.geometry.dispose();
+      m.material.dispose();
     }
     group.clear();
   }
 
-  return (kind, color) => {
+  return (kind: LandmarkKind, color: THREE.ColorRepresentation) => {
     clear();
     const fx = 8, fz = -11, base = terrainHeight(fx, fz) - dropAt(fx, fz);
 
@@ -49,7 +51,7 @@ export const landmark = (() => {
         new THREE.PlaneGeometry(0.95, 0.6, 14, 8),
         surfacePatch(new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide }), 'object')
       );
-      const cp = cloth.geometry.attributes.position;
+      const cp = cloth.geometry.attributes.position!;   // a plane always has one
       for (let i = 0; i < cp.count; i++) cp.setZ(i, Math.sin(cp.getX(i) * 5.5) * 0.045);
       cloth.geometry.computeVertexNormals();
       // Hung to catch the sun rather than face away from it, and offset

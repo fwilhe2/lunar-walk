@@ -4,6 +4,7 @@ import { camera, renderer, scene } from '../render/renderer';
 import { uSunView } from '../surface/ground';
 import { GLSL, TS } from '../surface/shaders';
 import { world } from '../worlds/index';
+import { TypedShaderMaterial } from '../util/three';
 
 /* ═════════════════════════════════════════════════════════════
    DUST — in vacuum it flies in clean parabolas and never
@@ -53,7 +54,7 @@ export const dust = (() => {
   // Lit like everything else on the ground: sunlight where the terrain
   // lets it through, the bounce fill where it does not. A grain in a
   // crater's shadow is as dark as the floor it came off.
-  const dustMat = new THREE.ShaderMaterial({
+  const dustMat = new TypedShaderMaterial({
     uniforms: Object.assign({
       color: { value: new THREE.Color(0xada79f) },
       uSun: { value: new THREE.Color() }, uFill: { value: new THREE.Color() },
@@ -62,8 +63,8 @@ export const dust = (() => {
       // The sun's two shadow cascades (render/lights.ts), sampled by hand: rover,
       // rocks and walker shade the dust that flies through their shadow.
       uShOn: { value: 0 },
-      uShNear: { value: null }, uShNearM: { value: sun.shadow.matrix },
-      uShFar: { value: null }, uShFarM: { value: sunFar.shadow.matrix },
+      uShNear: new THREE.Uniform<THREE.Texture | null>(null), uShNearM: { value: sun.shadow.matrix },
+      uShFar: new THREE.Uniform<THREE.Texture | null>(null), uShFarM: { value: sunFar.shadow.matrix },
     }, TS),
     vertexShader: `
       attribute float aSize, aTone;
@@ -160,7 +161,7 @@ export const dust = (() => {
   scene.add(pts);
   let cursor = 0, fresh = false;
 
-  function emit(x, y, z, vx, vy, vz, t, ground) {
+  function emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, t: number, ground: number) {
     const k = cursor = (cursor + 1) % N;
     pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
     vel[k * 3] = vx; vel[k * 3 + 1] = vy; vel[k * 3 + 2] = vz;
@@ -187,17 +188,17 @@ export const dust = (() => {
       u.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
       const on = sun.castShadow && sun.shadow.map && sunFar.shadow.map;
       u.uShOn.value = on ? 1 : 0;
-      if (on) { u.uShNear.value = sun.shadow.map.texture; u.uShFar.value = sunFar.shadow.map.texture; }
+      if (on) { u.uShNear.value = sun.shadow.map!.texture; u.uShFar.value = sunFar.shadow.map!.texture; }   // on: both maps exist
     },
     clear() {
       life.fill(0);
       for (let k = 0; k < N; k++) pos[k * 3 + 1] = -9999;
-      g.attributes.position.needsUpdate = true;
+      g.attributes.position!.needsUpdate = true;   // set above, as are aSize and aTone
     },
     // One grain, launched exactly: for sprays whose shape is worked
     // out by the caller (the rover's wheels). ground is the surface it
     // left from.
-    grain(x, y, z, vx, vy, vz, ground) {
+    grain(x: number, y: number, z: number, vx: number, vy: number, vz: number, ground: number) {
       if (world.sea !== undefined && y < world.sea) return;
       emit(x, y, z, vx, vy, vz, 2.5 + Math.random() * 1.5, ground);
     },
@@ -205,7 +206,7 @@ export const dust = (() => {
     // at about twice your speed and throws a narrow fan of it ahead,
     // which in vacuum flies in clean arcs a metre or so long — the
     // spray in front of every Apollo crewman's boots.
-    kick(x, y, z, dirX, dirZ, speed) {
+    kick(x: number, y: number, z: number, dirX: number, dirZ: number, speed: number) {
       if (world.sea !== undefined && y < world.sea) return;   // under a sea nothing flies
       const n = Math.min(90, Math.floor(18 + speed * 40));
       for (let i = 0; i < n; i++) {
@@ -216,7 +217,7 @@ export const dust = (() => {
              1.5 + Math.random() * 1.4, y);
       }
     },
-    burst(x, y, z, power, dirX = 0, dirZ = 0) {
+    burst(x: number, y: number, z: number, power: number, dirX = 0, dirZ = 0) {
       if (world.sea !== undefined && y < world.sea) return;
       const n = Math.min(420, Math.floor(60 + power * 165));
       for (let i = 0; i < n; i++) {
@@ -228,7 +229,7 @@ export const dust = (() => {
              1.5 + Math.random() * 1.4, y);
       }
     },
-    update(dt, gravity, drag) {
+    update(dt: number, gravity: number, drag: number) {
       let dirty = fresh;
       // Stokes drag, linear in velocity, integrated in closed form
       // rather than stepped: on Mars the two agree to four decimals,
@@ -238,30 +239,32 @@ export const dust = (() => {
       //
       // vT is where that balance lands — the terminal velocity, which
       // in vacuum is infinite and here is a crawl.
+      //
+      // k < N, and every array holds N grains (one or three floats each).
       for (let k = 0; k < N; k++) {
-        if (life[k] <= 0) continue;
-        life[k] -= dt;
+        if (life[k]! <= 0) continue;
+        life[k]! -= dt;
         if (drag > 0) {
-          const kd = drag * dragK[k], k1 = Math.exp(-kd * dt), vT = gravity / kd;
-          vel[k * 3] *= k1;
-          vel[k * 3 + 1] = (vel[k * 3 + 1] + vT) * k1 - vT;
-          vel[k * 3 + 2] *= k1;
+          const kd = drag * dragK[k]!, k1 = Math.exp(-kd * dt), vT = gravity / kd;
+          vel[k * 3]! *= k1;
+          vel[k * 3 + 1] = (vel[k * 3 + 1]! + vT) * k1 - vT;
+          vel[k * 3 + 2]! *= k1;
         } else {
-          vel[k * 3 + 1] -= gravity * dt;
+          vel[k * 3 + 1]! -= gravity * dt;
         }
-        pos[k * 3] += vel[k * 3] * dt;
-        pos[k * 3 + 1] += vel[k * 3 + 1] * dt;
-        pos[k * 3 + 2] += vel[k * 3 + 2] * dt;
+        pos[k * 3]! += vel[k * 3]! * dt;
+        pos[k * 3 + 1]! += vel[k * 3 + 1]! * dt;
+        pos[k * 3 + 2]! += vel[k * 3 + 2]! * dt;
         // Landed grains sink out of sight behind the ground's depth;
         // well below where they started, stop computing them.
-        if (pos[k * 3 + 1] < floor[k]) life[k] = 0;
-        if (life[k] <= 0) pos[k * 3 + 1] = -9999;
+        if (pos[k * 3 + 1]! < floor[k]!) life[k] = 0;
+        if (life[k]! <= 0) pos[k * 3 + 1] = -9999;
         dirty = true;
       }
-      if (dirty) g.attributes.position.needsUpdate = true;
+      if (dirty) g.attributes.position!.needsUpdate = true;
       if (fresh) {
-        g.attributes.aSize.needsUpdate = true;
-        g.attributes.aTone.needsUpdate = true;
+        g.attributes.aSize!.needsUpdate = true;
+        g.attributes.aTone!.needsUpdate = true;
         fresh = false;
       }
     },

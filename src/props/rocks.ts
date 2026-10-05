@@ -30,26 +30,44 @@ import { tiGravel } from '../worlds/titan/terrain';
    no edge of it ever floats — which is also what keeps its shadow
    joined to it.
    ═════════════════════════════════════════════════════════════ */
+/** A solid rock as physics sees it (rockSystem.solidsAt()): a dome of
+    reach R about (x, z), crown at top and base at g — raw heights, in
+    physics' frame, no curvature drop. */
+export interface Solid { x: number; z: number; R: number; top: number; g: number }
+
+/* A stone small enough to press into the soil: instance i of mesh, its
+   posed points, where it lies, and whether a print has pressed it. */
+interface SmallStone {
+  mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  i: number; pts: Float32Array; x: number; z: number; pressed: boolean;
+}
+/* A print or track: centre, heading (cos, sin), half extents, the
+   radius that bounds it, and the drawn ground under it. */
+interface Mark {
+  x: number; z: number; c: number; s: number; hw: number; hh: number; r: number;
+  ground: (x: number, z: number) => number;
+}
+
 export const rockSystem = (() => {
   // Lattice-hashed 3D value noise, for shaping.
-  const n3 = (x, y, z) => {
+  const n3 = (x: number, y: number, z: number) => {
     const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
     const u = smoothT(x - xi), v = smoothT(y - yi), w = smoothT(z - zi);
-    const h = (i, j, k) => hash2(Math.imul(i, 73) + Math.imul(k, 1931), Math.imul(j, 151) - Math.imul(k, 571));
-    const l = (j, k) => h(xi, yi + j, zi + k) * (1 - u) + h(xi + 1, yi + j, zi + k) * u;
+    const h = (i: number, j: number, k: number) => hash2(Math.imul(i, 73) + Math.imul(k, 1931), Math.imul(j, 151) - Math.imul(k, 571));
+    const l = (j: number, k: number) => h(xi, yi + j, zi + k) * (1 - u) + h(xi + 1, yi + j, zi + k) * u;
     return (l(0, 0) * (1 - v) + l(1, 0) * v) * (1 - w) + (l(0, 1) * (1 - v) + l(1, 1) * v) * w;
   };
 
   // round: a cobble, not a block — worn smooth by rolling along a
   // stream bed, the way Titan's water-ice gravel is (worlds/titan/terrain.ts, tiGravel).
-  function makeRock(seed, detail, fresh, cuts = 0, round = false) {
+  function makeRock(seed: number, detail: number, fresh: boolean, cuts = 0, round = false) {
     let s = seed; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
     for (let i = 0; i < 5; i++) rnd();
     const src = new THREE.IcosahedronGeometry(1, detail);
-    const sp = src.attributes.position;
+    const sp = src.attributes.position!;   // a polyhedron always has positions
     // Weld the polyhedron's duplicated corners, so the displaced
     // surface stays closed and shades smoothly across faces.
-    const ids = new Map(), verts = [], index = [];
+    const ids = new Map<string, number>(), verts: number[] = [], index: number[] = [];
     for (let i = 0; i < sp.count; i++) {
       const key = Math.round(sp.getX(i) * 1e4) + ',' + Math.round(sp.getY(i) * 1e4) + ',' + Math.round(sp.getZ(i) * 1e4);
       let id = ids.get(key);
@@ -60,7 +78,7 @@ export const rockSystem = (() => {
 
     const ax = 0.85 + rnd() * 0.4, ay = (round ? 0.62 : 0.7) + rnd() * 0.35, az = 0.85 + rnd() * 0.4;
     const off = rnd() * 100;
-    const planes = [];
+    const planes: [number, number, number, number][] = [];   // unit normal, distance
     const nCut = round ? 0 : 5 + cuts + Math.floor(rnd() * 6);
     for (let k = 0; k < nCut; k++) {
       const zc = rnd() * 2 - 1, th = rnd() * 6.2832, r = Math.sqrt(1 - zc * zc);
@@ -70,8 +88,11 @@ export const rockSystem = (() => {
     // Fresh fractures stay flat and sharp; weathered ones are
     // sandblasted back toward the lump they were cut from.
     const keep = round ? 0.4 : fresh ? 1 : 0.72;
+    // verts holds whole triples, and index only ids of pushed corners;
+    // fn, pos and nrm are sized by the face count: every index below
+    // is in range.
     for (let i = 0; i < verts.length; i += 3) {
-      let x = verts[i] * ax, y = verts[i + 1] * ay, z = verts[i + 2] * az;
+      let x = verts[i]! * ax, y = verts[i + 1]! * ay, z = verts[i + 2]! * az;
       const n = n3(x * 2.1 + off, y * 2.1, z * 2.1) * 0.55 + n3(x * 5.3, y * 5.3 + off, z * 5.3) * 0.3
               + n3(x * 13, y * 13, z * 13 + off) * 0.15;
       const f = 1 + (n - 0.5) * (round ? 0.14 : 0.42);
@@ -85,37 +106,37 @@ export const rockSystem = (() => {
     // Normalise: unit horizontal radius, bottom at y = 0 before burial.
     let r2 = 0, minY = 1e9;
     for (let i = 0; i < verts.length; i += 3) {
-      r2 = Math.max(r2, verts[i] * verts[i] + verts[i + 2] * verts[i + 2]);
-      minY = Math.min(minY, verts[i + 1]);
+      r2 = Math.max(r2, verts[i]! * verts[i]! + verts[i + 2]! * verts[i + 2]!);
+      minY = Math.min(minY, verts[i + 1]!);
     }
     const k = 1 / Math.sqrt(r2);
     for (let i = 0; i < verts.length; i += 3) {
-      verts[i] *= k; verts[i + 1] = (verts[i + 1] - minY) * k; verts[i + 2] *= k;
+      verts[i]! *= k; verts[i + 1] = (verts[i + 1]! - minY) * k; verts[i + 2]! *= k;
     }
     // Creased normals: each corner averages only the neighbouring
     // faces within ~32° of its own, so fracture faces meet at a real
     // edge while the gentle curvature between them stays smooth.
     const nF = index.length / 3, fn = new Float32Array(nF * 3);
-    const around = Array.from({ length: verts.length / 3 }, () => []);
+    const around = Array.from({ length: verts.length / 3 }, (): number[] => []);
     for (let f = 0; f < nF; f++) {
-      const a = index[f * 3] * 3, b = index[f * 3 + 1] * 3, c = index[f * 3 + 2] * 3;
-      const ux = verts[b] - verts[a], uy = verts[b + 1] - verts[a + 1], uz = verts[b + 2] - verts[a + 2];
-      const vx = verts[c] - verts[a], vy = verts[c + 1] - verts[a + 1], vz = verts[c + 2] - verts[a + 2];
+      const a = index[f * 3]! * 3, b = index[f * 3 + 1]! * 3, c = index[f * 3 + 2]! * 3;
+      const ux = verts[b]! - verts[a]!, uy = verts[b + 1]! - verts[a + 1]!, uz = verts[b + 2]! - verts[a + 2]!;
+      const vx = verts[c]! - verts[a]!, vy = verts[c + 1]! - verts[a + 1]!, vz = verts[c + 2]! - verts[a + 2]!;
       // Unnormalised: the length is twice the area, which weights the sum.
       fn[f * 3] = uy * vz - uz * vy; fn[f * 3 + 1] = uz * vx - ux * vz; fn[f * 3 + 2] = ux * vy - uy * vx;
-      for (let k = 0; k < 3; k++) around[index[f * 3 + k]].push(f);
+      for (let k = 0; k < 3; k++) around[index[f * 3 + k]!]!.push(f);
     }
     const pos = new Float32Array(nF * 9), nrm = new Float32Array(nF * 9);
     const COS = Math.cos((round ? 80 : 32) * DEG);
     for (let f = 0; f < nF; f++) {
-      const fx = fn[f * 3], fy = fn[f * 3 + 1], fz = fn[f * 3 + 2];
+      const fx = fn[f * 3]!, fy = fn[f * 3 + 1]!, fz = fn[f * 3 + 2]!;
       const fl = Math.hypot(fx, fy, fz) || 1;
       for (let k = 0; k < 3; k++) {
-        const vi = index[f * 3 + k], o = (f * 3 + k) * 3;
-        pos[o] = verts[vi * 3]; pos[o + 1] = verts[vi * 3 + 1]; pos[o + 2] = verts[vi * 3 + 2];
+        const vi = index[f * 3 + k]!, o = (f * 3 + k) * 3;
+        pos[o] = verts[vi * 3]!; pos[o + 1] = verts[vi * 3 + 1]!; pos[o + 2] = verts[vi * 3 + 2]!;
         let sx = 0, sy = 0, sz = 0;
-        for (const g of around[vi]) {
-          const gx = fn[g * 3], gy = fn[g * 3 + 1], gz = fn[g * 3 + 2];
+        for (const g of around[vi]!) {
+          const gx = fn[g * 3]!, gy = fn[g * 3 + 1]!, gz = fn[g * 3 + 2]!;
           if ((gx * fx + gy * fy + gz * fz) / ((Math.hypot(gx, gy, gz) || 1) * fl) < COS) continue;
           sx += gx; sy += gy; sz += gz;
         }
@@ -138,12 +159,13 @@ export const rockSystem = (() => {
   ];
   // Cobbles, for a world with world.rockRound, made the first time one
   // is needed. Same classes, same draw structure, smooth shapes.
-  let ROUND = null;
+  let ROUND: typeof CLASSES | null = null;
   const classesFor = () => {
     if (!world.rockRound) return CLASSES;
     if (!ROUND) ROUND = CLASSES.map((C, ci) => ({ ...C,
-      protos: [7, 19, 29, 43].map((sd) => makeRock(sd + ci * 100, [2, 3, 5][ci], false, 0, true)) }));
-    for (let ci = 0; ci < 3; ci++) ROUND[ci].shadow = CLASSES[ci].shadow;
+      protos: [7, 19, 29, 43].map((sd) => makeRock(sd + ci * 100, [2, 3, 5][ci]!, false, 0, true)) }));
+    // Three classes in each.
+    for (let ci = 0; ci < 3; ci++) ROUND[ci]!.shadow = CLASSES[ci]!.shadow;
     return ROUND;
   };
 
@@ -154,8 +176,8 @@ export const rockSystem = (() => {
   const ROCK_U = { rkSoil: { value: new THREE.Vector4(0.1, 0.1, 0.1, 0.5) } };
   const rockMat = surfacePatch(new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 }), 'rock', rockHapke, ROCK_U);
   const prevCompile = rockMat.onBeforeCompile;
-  rockMat.onBeforeCompile = (shader) => {
-    prevCompile(shader);
+  rockMat.onBeforeCompile = (shader, renderer) => {
+    prevCompile(shader, renderer);
     shader.vertexShader = shader.vertexShader
       .replace('varying vec3 vWPos;', 'varying vec3 vWPos;\nvarying vec3 vRk;')
       .replace('vWPos = ( modelMatrix * wq ).xyz;', `vWPos = ( modelMatrix * wq ).xyz;
@@ -203,13 +225,13 @@ export const rockSystem = (() => {
   // smaller ones are pressed into the soil or rolled over unnoticed.
   const SOLID_MIN = 0.15, SG = 16, SGC = SIZE / SG;
   // A chunk's solid rocks, binned on a 16 m grid by their reach.
-  function solidGrid(list, x0, z0) {
-    const cells = Array.from({ length: SG * SG }, () => []);
+  function solidGrid(list: Solid[], x0: number, z0: number) {
+    const cells = Array.from({ length: SG * SG }, (): Solid[] => []);
     for (const r of list) {
       const R = r.R + 0.5;   // room for the body around the point asked
       const i0 = Math.max(0, Math.floor((r.x - R - x0) / SGC)), i1 = Math.min(SG - 1, Math.floor((r.x + R - x0) / SGC));
       const j0 = Math.max(0, Math.floor((r.z - R - z0) / SGC)), j1 = Math.min(SG - 1, Math.floor((r.z + R - z0) / SGC));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cells[j * SG + i].push(r);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cells[j * SG + i]!.push(r);   // i, j clamped to the grid
     }
     return cells;
   }
@@ -220,24 +242,24 @@ export const rockSystem = (() => {
   // oriented rectangle (centre, heading, half extents). Kept here so a
   // chunk rebuilt after you walked away and came back presses its
   // stones under the prints still lying on it.
-  const marks = new Map();
+  const marks = new Map<string, Mark>();
   let pebbles = 1;            // carpet density, lowered on weak GPUs
   let shapes = 99;            // prototypes per class: each is a draw call per chunk
-  const live = new Map();   // "cx:cz" → Group of InstancedMeshes
-  let lastCell = null;
+  const live = new Map<string, THREE.Group>();   // "cx:cz" → Group of InstancedMeshes
+  let lastCell: string | null = null;
   let version = 0;          // bumped whenever the set of live chunks changes
 
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
   const scl = new THREE.Vector3(), p = new THREE.Vector3(), zero = new THREE.Vector3();
 
-  function buildChunk(cx, cz) {
+  function buildChunk(cx: number, cz: number) {
     const x0 = cx * SIZE, z0 = cz * SIZE;
     let s = (Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663) ^ 0x2545f49) & 0x7fffffff;
     const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
-    const slots = [];   // { x, z, size }
+    const slots: { x: number; z: number; size: number }[] = [];
     const LS = WORLD.lander;
-    const consider = (x, z, size) => {
+    const consider = (x: number, z: number, size: number) => {
       if (x < x0 || x >= x0 + SIZE || z < z0 || z >= z0 + SIZE) return;
       // Nothing under the lander: it came down on a clear patch, and its
       // engine swept the pebbles out from under it.
@@ -253,7 +275,7 @@ export const rockSystem = (() => {
     // many and large around a fresh crater, few around an old one.
     const nMul = world.rockN;
     for (let li = 0; li < CRATER_LAYERS.length; li++) {
-      const L = CRATER_LAYERS[li];
+      const L = CRATER_LAYERS[li]!;   // li < length
       if (!L.rocks) continue;
       const c0x = Math.floor((x0 - 64) / L.cell), c1x = Math.floor((x0 + SIZE + 64) / L.cell);
       const c0z = Math.floor((z0 - 64) / L.cell), c1z = Math.floor((z0 + SIZE + 64) / L.cell);
@@ -324,12 +346,14 @@ export const rockSystem = (() => {
     // panorama. rockFlat squashes them, and their bedding with them.
     const flat = world.rockFlat || 1;
     const CLS = classesFor();
-    const buckets = CLS.map((C) => C.protos.map(() => []));
-    const solids = [];
+    // Per class and prototype, each rock's matrix, albedo and slot.
+    const buckets = CLS.map((C) => C.protos.map((): [THREE.Matrix4, number, typeof slots[number]][] => []));
+    const solids: Solid[] = [];
+    // ci is one of the three classes and pi below its prototype count.
     for (const r of slots) {
-      const ci = r.size < CLS[0].max ? 0 : r.size < CLS[1].max ? 1 : 2;
-      const pi = Math.floor(rnd() * Math.min(CLS[ci].protos.length, shapes));
-      const proto = CLS[ci].protos[pi];
+      const ci = r.size < CLS[0]!.max ? 0 : r.size < CLS[1]!.max ? 1 : 2;
+      const pi = Math.floor(rnd() * Math.min(CLS[ci]!.protos.length, shapes));
+      const proto = CLS[ci]!.protos[pi]!;
       // Resting pose: any heading, a modest tilt — more for the big
       // ejecta blocks, which land where they land.
       const tilt = (ci === 2 ? 0.35 : 0.22) * flat;
@@ -338,10 +362,11 @@ export const rockSystem = (() => {
       scl.set(r.size, r.size * (0.6 + rnd() * 0.5) * flat, r.size);
       m.compose(zero, q, scl);
       // Lowest point of this rock, as posed.
+      // pts holds whole triples; el is a 4×4 matrix.
       const pts = proto.pts, el = m.elements;
       let low = 1e9;
       for (let i = 0; i < pts.length; i += 3) {
-        const y = el[1] * pts[i] + el[5] * pts[i + 1] + el[9] * pts[i + 2];
+        const y = el[1]! * pts[i]! + el[5]! * pts[i + 1]! + el[9]! * pts[i + 2]!;
         if (y < low) low = y;
       }
       // Lowest ground under its footprint.
@@ -355,17 +380,17 @@ export const rockSystem = (() => {
       m.setPosition(p);
       // Rock albedo, as a fraction: rockAlb is [base, spread].
       const a = world.rockAlb[0] + Math.pow(rnd(), 1.6) * world.rockAlb[1];
-      buckets[ci][pi].push(m.clone(), a, r);
+      buckets[ci]![pi]!.push([m.clone(), a, r]);
       // Anything you would notice underfoot is solid: its crown, in
       // physics' frame (raw heights, no curvature drop), and how far
       // it reaches out at the ground.
       if (r.size >= SOLID_MIN) {
         let high = -1e9, reach = 0;
         for (let i = 0; i < pts.length; i += 3) {
-          const x = pts[i], y = pts[i + 1], z = pts[i + 2];
-          const py = el[1] * x + el[5] * y + el[9] * z;
+          const x = pts[i]!, y = pts[i + 1]!, z = pts[i + 2]!;
+          const py = el[1]! * x + el[5]! * y + el[9]! * z;
           if (py > high) high = py;
-          const px = el[0] * x + el[4] * y + el[8] * z, pz = el[2] * x + el[6] * y + el[10] * z;
+          const px = el[0]! * x + el[4]! * y + el[8]! * z, pz = el[2]! * x + el[6]! * y + el[10]! * z;
           reach = Math.max(reach, px * px + pz * pz);
         }
         solids.push({ x: r.x, z: r.z, R: Math.sqrt(reach), top: g - low - bury + high, g });
@@ -376,18 +401,18 @@ export const rockSystem = (() => {
     const tint = world.rockTint;
     // Stones small enough for a boot or a wheel to press into the
     // soil, so a print laid over them can push them down (press()).
-    const small = group.userData.small = [];
+    const small: SmallStone[] = group.userData.small = [];
     group.userData.solids = solidGrid(solids, x0, z0);
     CLS.forEach((C, ci) => {
       C.protos.forEach((proto, pi) => {
-        const list = buckets[ci][pi];
-        const n = list.length / 3;
+        const list = buckets[ci]![pi]!;   // the same CLS, class by class and proto by proto
+        const n = list.length;
         if (!n) return;
         const mesh = new THREE.InstancedMesh(proto.geo, rockMat, n);
         mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
         for (let i = 0; i < n; i++) {
-          mesh.setMatrixAt(i, list[i * 3]);
-          const a = list[i * 3 + 1], r = list[i * 3 + 2];
+          const [mi, a, r] = list[i]!;   // i < n
+          mesh.setMatrixAt(i, mi);
           mesh.instanceColor.setXYZ(i, a * tint[0], a * tint[1], a * tint[2]);
           if (r.size < PRESS_MAX) small.push({ mesh, i, pts: proto.pts, x: r.x, z: r.z, pressed: false });
         }
@@ -411,18 +436,20 @@ export const rockSystem = (() => {
      pebbles show in the floor of every Apollo boot print, pressed in
      rather than pushed aside. */
   const pm = new THREE.Matrix4(), squash = new THREE.Matrix4().makeScale(1, 0.35, 1);
-  function pressGroup(group, mk, x0, z0) {
+  function pressGroup(group: THREE.Group, mk: Mark, x0: number, z0: number) {
     if (mk.x + mk.r < x0 || mk.x - mk.r > x0 + SIZE || mk.z + mk.r < z0 || mk.z - mk.r > z0 + SIZE) return;
-    for (const st of group.userData.small) {
+    const small: SmallStone[] = group.userData.small;   // set by buildChunk()
+    for (const st of small) {
       if (st.pressed) continue;
       const dx = st.x - mk.x, dz = st.z - mk.z;
       if (Math.abs(dx * mk.c - dz * mk.s) > mk.hw || Math.abs(dx * mk.s + dz * mk.c) > mk.hh) continue;
       st.mesh.getMatrixAt(st.i, pm);
       pm.multiply(squash);
+      // pts holds whole triples; el is a 4×4 matrix.
       const el = pm.elements, pts = st.pts;
       let top = -1e9;
       for (let i = 0; i < pts.length; i += 3) {
-        const y = el[1] * pts[i] + el[5] * pts[i + 1] + el[9] * pts[i + 2];
+        const y = el[1]! * pts[i]! + el[5]! * pts[i + 1]! + el[9]! * pts[i + 2]!;
         if (y > top) top = y;
       }
       el[13] = mk.ground(st.x, st.z) + 0.003 - top;
@@ -432,10 +459,10 @@ export const rockSystem = (() => {
     }
   }
 
-  function drop(group) {
+  function drop(group: THREE.Group) {
     version++;
     scene.remove(group);
-    for (const mesh of group.children) mesh.dispose();
+    for (const mesh of group.children) if (mesh instanceof THREE.InstancedMesh) mesh.dispose();   // all of them are
   }
 
   return {
@@ -445,11 +472,11 @@ export const rockSystem = (() => {
     material: rockMat,
     // Pebble density, and whether pebbles cast shadows: thousands of
     // tiny casters in two shadow maps are a real cost on an iGPU.
-    setDetail(density, pebbleShadows, protoLimit) {
-      if (density === pebbles && CLASSES[0].shadow === pebbleShadows && protoLimit === shapes) return;
+    setDetail(density: number, pebbleShadows: boolean, protoLimit: number) {
+      if (density === pebbles && CLASSES[0]!.shadow === pebbleShadows && protoLimit === shapes) return;
       pebbles = density;
       shapes = protoLimit;
-      CLASSES[0].shadow = pebbleShadows;
+      CLASSES[0]!.shadow = pebbleShadows;
       this.reset();
     },
     reset() {
@@ -460,12 +487,12 @@ export const rockSystem = (() => {
     // Lay a print or track over the ground: presses the stones under
     // it now, and in any chunk built later. `key` is its ring slot, so
     // a print that is overwritten stops pressing chunks built after.
-    press(key, x, z, yaw, hw, hh, ground) {
-      const mk = { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hh, r: Math.hypot(hw, hh), ground };
+    press(key: string, x: number, z: number, yaw: number, hw: number, hh: number, ground: Mark['ground']) {
+      const mk: Mark = { x, z, c: Math.cos(yaw), s: Math.sin(yaw), hw, hh, r: Math.hypot(hw, hh), ground };
       marks.set(key, mk);
       for (const [cell, g] of live) {
         const [cx, cz] = cell.split(':').map(Number);
-        pressGroup(g, mk, cx * SIZE, cz * SIZE);
+        pressGroup(g, mk, cx! * SIZE, cz! * SIZE);   // keys are "cx:cz"
       }
     },
     clearMarks() { marks.clear(); },
@@ -474,7 +501,7 @@ export const rockSystem = (() => {
     // top − (top − g)·(1 − √(1 − d²/R²)), which is all a boot or a
     // tyre needs. Rocks overhanging a chunk edge are binned in the
     // chunk they were placed in, so the neighbours are asked too.
-    solidsAt(x, z, out, pad = 0) {
+    solidsAt(x: number, z: number, out: Solid[], pad = 0) {
       out.length = 0;
       const cx = Math.floor(x / SIZE), cz = Math.floor(z / SIZE);
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
@@ -483,7 +510,7 @@ export const rockSystem = (() => {
         // Off this chunk's edge, its edge cells still hold what overhangs.
         const i = Math.floor((x - (cx + dx) * SIZE) / SGC), j = Math.floor((z - (cz + dz) * SIZE) / SGC);
         if (i < -1 || j < -1 || i > SG || j > SG) continue;
-        const cell = g.userData.solids[Math.min(SG - 1, Math.max(0, j)) * SG + Math.min(SG - 1, Math.max(0, i))];
+        const cell: Solid[] = g.userData.solids[Math.min(SG - 1, Math.max(0, j)) * SG + Math.min(SG - 1, Math.max(0, i))];
         for (const r of cell) {
           const ex = x - r.x, ez = z - r.z, R = r.R + pad;
           if (ex * ex + ez * ez < R * R) out.push(r);
@@ -491,7 +518,7 @@ export const rockSystem = (() => {
       }
       return out;
     },
-    update(px, pz) {
+    update(px: number, pz: number) {
       const ccx = Math.floor(px / SIZE), ccz = Math.floor(pz / SIZE);
       const cell = ccx + ':' + ccz;
       if (cell === lastCell) return;
@@ -513,7 +540,7 @@ export const rockSystem = (() => {
       for (const key of want) {
         if (live.has(key)) continue;
         const [cx, cz] = key.split(':').map(Number);
-        const g = buildChunk(cx, cz);
+        const g = buildChunk(cx!, cz!);   // keys are "cx:cz"
         version++;
         live.set(key, g);
         scene.add(g);

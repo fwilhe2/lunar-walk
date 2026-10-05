@@ -6,6 +6,7 @@ import { scene } from '../render/renderer';
 import { curveAX, curveAZ, dropAt } from '../terrain/anchor';
 import { EN_OX, EN_OZ, EN_TC, EN_TS, enStripe } from '../worlds/enceladus/terrain';
 import { world } from '../worlds/index';
+import { TypedShaderMaterial } from '../util/three';
 
 /* ── Jet curtains ───────────────────────────────────────────────
    Enceladus's jets are not a plume on the horizon but a wall standing
@@ -22,9 +23,9 @@ import { world } from '../worlds/index';
    across the ribbon widening with height, and the sheet brightens as
    you look along it, where the line of sight runs through more of it. */
 export const curtains = (() => {
-  let mesh = null, ax = NaN, az = NaN;
+  let mesh: THREE.Mesh<THREE.BufferGeometry, typeof mat> | null = null, ax = NaN, az = NaN;
   const H = 90000, LEN = 50000, STEP = 1250;
-  const mat = new THREE.ShaderMaterial({
+  const mat = new TypedShaderMaterial({
     uniforms: { uSun: { value: new THREE.Vector3() }, uGain: { value: 1 }, uShadowZ: { value: -1 } },
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide,
     vertexShader: `
@@ -76,11 +77,12 @@ export const curtains = (() => {
   });
   // The ribbon's foot and top along the stripe; y is refreshed when the
   // curvature anchor moves.
-  let foot = [];
+  let foot: [number, number, number][] = [];   // x, z, height
+  // Called only with a mesh up, whose geometry set() built.
   function place() {
-    const pos = mesh.geometry.attributes.position;
+    const pos = mesh!.geometry.attributes.position!;
     for (let i = 0; i < foot.length; i++) {
-      const [x, z, h] = foot[i], y = h - dropAt(x, z);
+      const [x, z, h] = foot[i]!, y = h - dropAt(x, z);
       pos.setXYZ(i * 2, x, y, z);
       pos.setXYZ(i * 2 + 1, x, y + H, z);
     }
@@ -89,7 +91,7 @@ export const curtains = (() => {
   }
   return {
     // Along the stripe nearest the site, from the kernel.
-    set(on) {
+    set(on: boolean) {
       if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh = null; }
       if (!on) return;
       const tS = (0 + EN_OZ) * EN_TC - (0 + EN_OX) * EN_TS;
@@ -106,9 +108,9 @@ export const curtains = (() => {
         const x = px - EN_OX, z = pz - EN_OZ;
         foot.push([x, z, terrainHeight(x, z) - 60]);
       }
-      const N = foot.length, pos = new Float32Array(N * 6), uv = new Float32Array(N * 4), nrm = new Float32Array(N * 6), idx = [];
+      const N = foot.length, pos = new Float32Array(N * 6), uv = new Float32Array(N * 4), nrm = new Float32Array(N * 6), idx: number[] = [];
       for (let i = 0; i < N; i++) {
-        const a = foot[Math.max(0, i - 1)], b = foot[Math.min(N - 1, i + 1)];
+        const a = foot[Math.max(0, i - 1)]!, b = foot[Math.min(N - 1, i + 1)]!;   // clamped to [0, N)
         const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
         for (const k of [0, 1]) {
           uv[(i * 2 + k) * 2] = i * STEP; uv[(i * 2 + k) * 2 + 1] = k * H;
@@ -129,7 +131,7 @@ export const curtains = (() => {
     },
     // units: the key's. Below the horizon the sun still reaches the
     // curtain above the height where the moon's shadow ends.
-    update(units) {
+    update(units: number) {
       if (!mesh) return;
       if (curveAX !== ax || curveAZ !== az) place();
       mat.uniforms.uSun.value.copy(SUN_DIR);

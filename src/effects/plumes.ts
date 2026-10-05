@@ -3,6 +3,8 @@ import { WORLD } from '../kernel/world';
 import { SUN_DIR } from '../render/lights';
 import { scene } from '../render/renderer';
 import { DEG } from '../surface/hapke';
+import { TypedShaderMaterial } from '../util/three';
+import type { PlumeSpec } from '../worlds/view-types';
 
 /* ── Plumes ─────────────────────────────────────────────────────
    Io's volcanoes throw sulphur and SO₂ straight up out of an airless
@@ -23,11 +25,22 @@ import { DEG } from '../surface/hapke';
    Io's horizon swallows the foot of a plume 200 km off and the lower
    hundred kilometres of one 700 km off. The ground, drawn in front,
    hides whatever the curve does not. */
+type PlumeUniforms = {
+  uSun: THREE.IUniform<THREE.Vector3>; uCol: THREE.IUniform<THREE.Vector3>;
+  uGain: THREE.IUniform<number>; uShell: THREE.IUniform<number>; uColumn: THREE.IUniform<number>; uSeed: THREE.IUniform<number>;
+};
+/* A plume as drawn: its sheet, where it stands (x, z), its true height
+   and canopy radius, and its gain before light and units. */
+interface LivePlume {
+  mesh: THREE.Mesh<THREE.PlaneGeometry, TypedShaderMaterial<PlumeUniforms>>;
+  x: number; z: number; H: number; W: number; gain: number;
+}
+
 export const plumes = (() => {
   const PROXY = 80000;
   const group = new THREE.Group();
   scene.add(group);
-  let live = [];
+  let live: LivePlume[] = [];
   const geo = new THREE.PlaneGeometry(2, 1).translate(0, 0.5, 0);
   const vs = `
     varying vec2 vUv; varying vec3 vW;
@@ -79,11 +92,11 @@ export const plumes = (() => {
     }`;
   return {
     // specs: [{ brg (°), dist (m), H (m), W (canopy radius, m), shell, column, col, gain }]
-    set(specs) {
+    set(specs: PlumeSpec[] | undefined) {
       for (const p of live) { group.remove(p.mesh); p.mesh.material.dispose(); }
       live = (specs || []).map((sp, i) => {
         const b = sp.brg * DEG;
-        const mat = new THREE.ShaderMaterial({
+        const mat = new TypedShaderMaterial<PlumeUniforms>({
           uniforms: {
             uSun: { value: new THREE.Vector3() }, uCol: { value: new THREE.Vector3(...sp.col) },
             uGain: { value: sp.gain }, uShell: { value: sp.shell }, uColumn: { value: sp.column },
@@ -102,7 +115,7 @@ export const plumes = (() => {
     // Once a frame, from the camera. `lit` is how much of the plume the
     // sun still reaches, and `units` the key's (a plume is sunlit even
     // when you stand in the night).
-    update(cam, groundY, lit, units) {
+    update(cam: THREE.Vector3, groundY: number, lit: number, units: number) {
       for (const p of live) {
         const dx = p.x - cam.x, dz = p.z - cam.z, D = Math.hypot(dx, dz), k = PROXY / D;
         // The plume's foot, sunk by the curve of the planet between.
