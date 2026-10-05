@@ -6,6 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { DEPTH_SPLIT, camera, renderer, scene } from './renderer';
+import { AA_U } from './aa';
 import { HDR_GLSL, HDR_U, hdr } from './hdr';
 import { EYE_TEX } from '../surface/hapke';
 import { TypedShaderMaterial, type Uniforms } from '../util/three';
@@ -85,6 +86,9 @@ class SplitRenderPass extends RenderPass {
     // (render/hdr.ts).
     HDR_U.tHdrK.value = EYE_TEX.value;
     HDR_U.uHdrOn.value = hdr.enabled ? 1 : 0;
+    // What wires and cut-outs need to know of the target (render/aa.ts).
+    AA_U.uAaH.value = readBuffer.height;
+    AA_U.uAaMsaa.value = readBuffer.samples > 0 ? 1 : 0;
 
     cam.near = DEPTH_SPLIT * 0.98;
     cam.updateProjectionMatrix();
