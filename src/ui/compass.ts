@@ -5,6 +5,7 @@ import { liveCompanions } from '../sky/companions';
 import { el } from './hud';
 import { rover } from '../vehicles/rover';
 import { world } from '../worlds/index';
+import { byId } from '../util/dom';
 
 /* ── Compass ────────────────────────────────────────────────────
    A heading tape along the top: 120° of it, north at −z as the
@@ -17,7 +18,7 @@ import { world } from '../worlds/index';
    and everything on it looks the same distance away. */
 const HOME_X = 8, HOME_Z = -11;           // where landmark() stands the flag or beacon
 const compass = (() => {
-  const cv = document.getElementById('compass') as HTMLCanvasElement, g = cv.getContext('2d');
+  const cv = byId('compass', HTMLCanvasElement), g = cv.getContext('2d');
   const W = 420, H = 46, SPAN = 120, TAPE = 30;
   const NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';

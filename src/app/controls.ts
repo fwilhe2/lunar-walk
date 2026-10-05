@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { session } from './boot';
 import { demo } from './demo';
 import { updateSkyColors } from './lighting';
-import { lastHash, setLastHash, viewHash } from './view-hash';
+import { pinView } from './view-hash';
 import { applyWorld } from './worlds';
 import { sound } from '../audio/sound';
 import { setPhotoPending } from '../player/camera';
@@ -17,6 +17,7 @@ import { FOV0, camera, pitchObj, renderer, yawObj } from '../render/renderer';
 import { el, hud, hudState, note, overlay, showOverlay } from '../ui/hud';
 import { picker } from '../ui/picker';
 import { WORLD_IDS, WORLD_KEYS, world, worldId } from '../worlds/index';
+import { byId } from '../util/dom';
 
 addEventListener('keydown', (e) => {
   if (e.code === 'Space' || e.code === 'Backspace') e.preventDefault();
@@ -48,9 +49,7 @@ function press(code) {
     note(viewMotion === 'full' ? 'VIEW: FULL HEAD MOTION' : 'VIEW: STEADY');
   }
   if (code === 'KeyL') {
-    setLastHash(viewHash());
-    try { history.replaceState(null, '', '#' + lastHash); } catch (err) { /* no address bar */ }
-    const url = location.href.split('#')[0] + '#' + lastHash;
+    const url = location.href.split('#')[0] + '#' + pinView();
     if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => note('LINK COPIED'), () => note(url));
     else note(url);
   }
@@ -90,7 +89,7 @@ renderer.domElement.addEventListener('click', () => {
   demo.stop();
   renderer.domElement.requestPointerLock();
 });
-document.getElementById('demoStart').addEventListener('click', (e) => {
+byId('demoStart').addEventListener('click', (e) => {
   e.stopPropagation();
   sound.unlock();
   demo.start();
@@ -174,22 +173,22 @@ export function readInput(dt) {
    and buttons down the right do what SPACE, C, R, F and Z do. The
    menu button brings the opening screen back. */
 const touchUI = (() => {
-  const root = document.getElementById('touch');
-  const stick = document.getElementById('t-stick'), knob = document.getElementById('t-knob');
+  const root = byId('touch');
+  const stick = byId('t-stick'), knob = byId('t-knob');
   const R = 55;
   // Capture throws for a pointer the browser no longer counts as down.
   const capture = (t, e) => { try { t.setPointerCapture(e.pointerId); } catch (err) { /* already up */ } };
   let stickId = null, sx = 0, sy = 0, lookId = null, lx = 0, ly = 0;
   const hold = (id, key) => {
-    const b = document.getElementById(id);
+    const b = byId(id);
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); capture(b, e); touch[key] = true; b.classList.add('on'); });
     const up = () => { touch[key] = false; b.classList.remove('on'); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
   };
   hold('t-jump', 'jump'); hold('t-down', 'down'); hold('t-zoom', 'zoom');
-  const tap = (id, code) => document.getElementById(id).addEventListener('pointerdown', (e) => { e.preventDefault(); press(code); });
+  const tap = (id, code) => byId(id).addEventListener('pointerdown', (e) => { e.preventDefault(); press(code); });
   tap('t-rover', 'KeyR'); tap('t-fly', 'KeyF');
-  document.getElementById('t-menu').addEventListener('pointerdown', (e) => {
+  byId('t-menu').addEventListener('pointerdown', (e) => {
     e.preventDefault();
     touch.on = false; root.hidden = true;
     showOverlay(true);

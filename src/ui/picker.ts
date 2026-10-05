@@ -3,6 +3,7 @@ import { renderer } from '../render/renderer';
 import { overlay } from './hud';
 import { WORLD_IDS } from '../worlds/index';
 import { VIEW } from '../worlds/index';
+import { byId } from '../util/dom';
 
 /* ── Boot: stream the opening rings, then hand over. ─────────── */
 /* ── World picker ─────────────────────────────────────────────
@@ -53,7 +54,7 @@ export const picker = (() => {
   const first = (s) => members(s).find(walk);
   const SYSM = Object.fromEntries(SYS.map((s) => [s.id, s]));
 
-  const root = document.getElementById('picker');
+  const root = byId('picker');
   const els = new Map();
   // cur: the keyboard's cursor, drawn like a hover.
   const st = { level: 1, view: 'earth', body: 'moon', cur: 'earth' };
@@ -173,7 +174,7 @@ export const picker = (() => {
     // readout stands above it.
     overlay.style.paddingBottom = hb + 'px';
     document.documentElement.style.setProperty('--pick-h', hb + 'px');
-    document.getElementById('resume').style.bottom = (hb - 23) + 'px';
+    byId('resume').style.bottom = (hb - 23) + 'px';
     paint(it);
   }
 

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { scene } from '../render/renderer';
 import { groundMat } from '../surface/ground';
 import { setCurveAnchor } from './anchor';
+import type { ChunkReply, ChunkRequest } from '../workers/mesh.protocol';
+import type { WorldId } from '../worlds/terrains';
 import { VIEW } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
@@ -43,14 +45,14 @@ export const chunkStreamer = (() => {
   let jobSeq = 0;
   let desired = new Map();
   let lastCell = null;
-  let activeWorld = 'moon';
+  let activeWorld: WorldId = 'moon';
   let version = 0;                   // bumped whenever the set of meshes changes
 
   const workers = [];
   function spawnWorkers() {
     for (let i = 0; i < Math.min(4, navigator.hardwareConcurrency || 2); i++) {
       const w = new Worker(new URL('../workers/mesh.worker.ts', import.meta.url), { type: 'module' }) as Worker & { _idle?: boolean };
-      w.onmessage = (e) => onChunkBuilt(e.data, w);
+      w.onmessage = (e: MessageEvent<ChunkReply>) => onChunkBuilt(e.data, w);
       w._idle = true;
       workers.push(w);
     }
@@ -249,11 +251,11 @@ export const chunkStreamer = (() => {
       inFlight.set(job.id, job);
       const s = job.spec;
       w.postMessage({ id: job.id, world: activeWorld, x0: s.x0, z0: s.z0,
-                      n: s.n, step: s.step, ax: s.ax, az: s.az, m: s.m });
+                      n: s.n, step: s.step, ax: s.ax, az: s.az, m: s.m } satisfies ChunkRequest);
     }
   }
 
-  function onChunkBuilt(d, w) {
+  function onChunkBuilt(d: ChunkReply, w: Worker & { _idle?: boolean }) {
     w._idle = true;
     const job = inFlight.get(d.id);
     inFlight.delete(d.id);

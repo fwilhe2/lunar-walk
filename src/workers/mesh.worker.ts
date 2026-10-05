@@ -14,10 +14,11 @@ import { CR_ALB } from '../kernel/craters';
 import { curveDrop } from '../kernel/curvature';
 import { AUX, setTintNormalZ, surfaceTint, terrainHeight } from '../kernel/terrain';
 import { setWorld } from '../worlds/terrains';
+import type { ChunkReply, ChunkRequest } from './mesh.protocol';
 
-var _tint = [0, 0, 0];
+var _tint: [number, number, number] = [0, 0, 0];
 
-onmessage = function (e) {
+onmessage = function (e: MessageEvent<ChunkRequest>) {
   var d = e.data;
   setWorld(d.world);
   var n = d.n, step = d.step, x0 = d.x0, z0 = d.z0, ax = d.ax, az = d.az;
@@ -32,7 +33,7 @@ onmessage = function (e) {
     for (var i = 0; i < W; i++) {
       hg[j * W + i] = terrainHeight(x0 + (i - 1) * step, pz);
       fg[j * W + i] = CR_ALB;
-      a0[j * W + i] = AUX[0]; a1[j * W + i] = AUX[1]; a2[j * W + i] = AUX[2];
+      a0[j * W + i] = AUX[0]!; a1[j * W + i] = AUX[1]!; a2[j * W + i] = AUX[2]!;
     }
   }
 
@@ -67,10 +68,12 @@ onmessage = function (e) {
 
       // Normals come from the clamped (edge) sample so skirt walls
       // shade like the surface they hang from.
+      // Indices into the (n+3)² grid are in range by construction,
+      // here and below (hence the !s).
       var kc = (cj + 1) * W + (ci + 1);
-      var hC = hg[kc];
-      var hL = hg[kc - 1], hR = hg[kc + 1];
-      var hD = hg[kc - W], hU = hg[kc + W];
+      var hC = hg[kc]!;
+      var hL = hg[kc - 1]!, hR = hg[kc + 1]!;
+      var hD = hg[kc - W]!, hU = hg[kc + W]!;
       var nx = (hL - hR) * inv2s, nz2 = (hD - hU) * inv2s;
       var nl = 1 / Math.sqrt(nx * nx + 1 + nz2 * nz2);
 
@@ -89,7 +92,7 @@ onmessage = function (e) {
       var slope = Math.hypot(hR - hL, hU - hD) * inv2s * 0.7;
       if (slope > 1) slope = 1;
       setTintNormalZ(-nz2 * nl);
-      surfaceTint(px, pz, hC, slope, fg[kc], a0[kc], a1[kc], a2[kc], _tint);
+      surfaceTint(px, pz, hC, slope, fg[kc]!, a0[kc]!, a1[kc]!, a2[kc]!, _tint);
       col[k * 3] = _tint[0]; col[k * 3 + 1] = _tint[1]; col[k * 3 + 2] = _tint[2];
     }
   }
@@ -103,18 +106,20 @@ onmessage = function (e) {
         for (var t = 0; t <= n; t++) {
           var ci2 = ax2 === 0 ? L * per : t, cj2 = ax2 === 0 ? t : L * per;
           var src = (cj2 + 1) * W + (ci2 + 1);
-          pos[xk * 3] = pos[src * 3];
-          pos[xk * 3 + 1] = pos[src * 3 + 1] - skirt;
-          pos[xk * 3 + 2] = pos[src * 3 + 2];
-          for (var q = 0; q < 3; q++) { nrm[xk * 3 + q] = nrm[src * 3 + q]; col[xk * 3 + q] = col[src * 3 + q]; }
-          uv[xk * 2] = uv[src * 2]; uv[xk * 2 + 1] = uv[src * 2 + 1];
+          pos[xk * 3] = pos[src * 3]!;
+          pos[xk * 3 + 1] = pos[src * 3 + 1]! - skirt;
+          pos[xk * 3 + 2] = pos[src * 3 + 2]!;
+          for (var q = 0; q < 3; q++) { nrm[xk * 3 + q] = nrm[src * 3 + q]!; col[xk * 3 + q] = col[src * 3 + q]!; }
+          uv[xk * 2] = uv[src * 2]!; uv[xk * 2 + 1] = uv[src * 2 + 1]!;
           xk++;
         }
       }
     }
   }
 
-  (postMessage as Worker['postMessage'])(
+  // The DOM lib types the global postMessage as a window's; in a
+  // worker it is the worker scope's, which takes a transfer list.
+  (postMessage as (msg: ChunkReply, transfer: Transferable[]) => void)(
     { id: d.id, W: W, m: m, pos: pos, nrm: nrm, col: col, uv: uv },
     [pos.buffer, nrm.buffer, col.buffer, uv.buffer]
   );

@@ -1,6 +1,7 @@
 import { sound } from '../audio/sound';
 import { mode } from '../player/player';
 import { world } from '../worlds/index';
+import { byId } from '../util/dom';
 
 /* The readout's own state, advanced by the loop (app/loop.ts), the
    physics and the pointer-lock handler. */
@@ -12,19 +13,19 @@ export const hudState = {
   doseSv: 0,             // what you have soaked up since arriving, where that is worth showing
 };
 export const el = {
-  mode: document.getElementById('r-mode'),
-  g: document.getElementById('r-g'), body: document.getElementById('r-body'),
-  met: document.getElementById('r-met'),
-  v: document.getElementById('r-v'), a: document.getElementById('r-a'),
-  p: document.getElementById('r-p'), s: document.getElementById('r-s'),
-  world: document.getElementById('r-world'), site: document.getElementById('r-site'),
-  note: document.getElementById('r-note'),
-  fps: document.getElementById('r-fps'),
-  hdg: document.getElementById('r-hdg'), home: document.getElementById('r-home'),
-  doseLine: document.getElementById('r-doseline'),
-  pushLine: document.getElementById('r-pushline'), push: document.getElementById('r-push'),
-  gasLine: document.getElementById('r-gasline'), gas: document.getElementById('r-gas'),
-  dose: document.getElementById('r-dose'), rate: document.getElementById('r-rate'),
+  mode: byId('r-mode'),
+  g: byId('r-g'), body: byId('r-body'),
+  met: byId('r-met'),
+  v: byId('r-v'), a: byId('r-a'),
+  p: byId('r-p'), s: byId('r-s'),
+  world: byId('r-world'), site: byId('r-site'),
+  note: byId('r-note'),
+  fps: byId('r-fps'),
+  hdg: byId('r-hdg'), home: byId('r-home'),
+  doseLine: byId('r-doseline'),
+  pushLine: byId('r-pushline'), push: byId('r-push'),
+  gasLine: byId('r-gasline'), gas: byId('r-gas'),
+  dose: byId('r-dose'), rate: byId('r-rate'),
 };
 
 // radio: it came over the loop, so it gets the Quindar tones.
@@ -64,12 +65,12 @@ export function updateKeysHelp() {
   // set per section: after every left-hand label.
   const rows = (list) => list.map(([k, what], i) => '<span class="kk">' + k.split(' ').map(cap).join('') +
     '</span><span class="kl' + (i % 2 ? '' : ' gap') + '">' + what + '</span>').join('');
-  document.getElementById('keys').innerHTML =
+  byId('keys').innerHTML =
     '<h5>' + head + '</h5>' + rows(own) + (aside ? '<p>' + aside + '</p>' : '') + '<h5>General</h5>' + rows(all);
 }
 
-export const overlay = document.getElementById('overlay');
-export const hud = document.getElementById('hud');
+export const overlay = byId('overlay');
+export const hud = byId('hud');
 // The opening screen dims the world behind its title. Once you have
 // been down there, Esc only brings up the world picker and leaves the
 // view alone — you can still look at it, and photograph it (P). The

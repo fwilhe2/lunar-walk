@@ -34,6 +34,12 @@ import { LOD_COARSE, chunkStreamer, setLodCoarse } from '../terrain/streamer';
    rasterisers start on low — remembered once chosen, and cycled
    with Q.
    ═════════════════════════════════════════════════════════════ */
+/** The tiers, best first; Q cycles through them in this order. */
+const TIER_IDS = ['high', 'medium', 'low'] as const;
+export type Tier = (typeof TIER_IDS)[number];
+/** For a tier named from outside: localStorage, ?probe=. */
+export const isTier = (s: string | null): s is Tier => TIER_IDS.some((t) => t === s);
+
 export const quality = (() => {
   const TIERS = {
     high:   { name: 'HIGH',   dpr: 2, msaa: 4, fxaa: false, bloom: true,  soft: true,  far: 2048, farEvery: 1,
@@ -42,15 +48,14 @@ export const quality = (() => {
               clip: 1024, gap: 350, cheap: false, aniso: 4,  coarse: false, pebbles: 0.7,  pebbleShadow: true,  shapes: 3,  lut: true,  fps: 34, minScale: 0.55 },
     low:    { name: 'LOW',    dpr: 1, msaa: 0, fxaa: true,  bloom: false, soft: false, far: 1024, farEvery: 2,
               clip: 512,  gap: 700, cheap: true,  aniso: 2,  coarse: true,  pebbles: 0.35, pebbleShadow: false, shapes: 2,  lut: true,  fps: 26, minScale: 0.5 },
-  };
-  const ORDER = ['high', 'medium', 'low'];
+  } satisfies Record<Tier, object>;
   const KEY = 'surfacewalk.quality';
-  let id = 'high', T = TIERS.high, scale = 1;
+  let id: Tier = 'high', T: (typeof TIERS)[Tier] = TIERS.high, scale = 1;
   let frames = 0, t0 = performance.now(), fps = 0, lastChange = 0, farTick = 0, tPrev = 0;
-  const gaps = [];     // frame intervals in the current second
+  const gaps: number[] = [];     // frame intervals in the current second
 
-  function detect() {
-    try { const saved = localStorage.getItem(KEY); if (TIERS[saved]) return saved; } catch (e) { /* no storage */ }
+  function detect(): Tier {
+    try { const saved = localStorage.getItem(KEY); if (isTier(saved)) return saved; } catch (e) { /* no storage */ }
     let name = '';
     try {
       const gl = renderer.getContext();
@@ -73,19 +78,19 @@ export const quality = (() => {
     fxaaPass.uniforms.uInv.value.set(1 / w, 1 / h);
   }
 
-  const setDefine = (m, key, on) => {
+  const setDefine = (m: THREE.Material, key: string, on: boolean) => {
     m.defines = m.defines || {};
     if (!!on === (key in m.defines)) return;
     if (on) m.defines[key] = ''; else delete m.defines[key];
     m.needsUpdate = true;
   };
-  const sizeShadow = (light, n) => {
+  const sizeShadow = (light: THREE.DirectionalLight, n: number) => {
     if (light.shadow.mapSize.x === n) return;
     light.shadow.mapSize.set(n, n);
     if (light.shadow.map) { light.shadow.map.dispose(); light.shadow.map = null; }
   };
 
-  function set(next, remember = true) {
+  function set(next: Tier, remember = true) {
     id = next; T = TIERS[id];
     try { if (remember) localStorage.setItem(KEY, id); } catch (e) { /* no storage */ }
     // Anti-aliasing: MSAA on the scene target, or FXAA at the end.
@@ -114,7 +119,7 @@ export const quality = (() => {
     // Geometry.
     if (LOD_COARSE !== T.coarse) { setLodCoarse(T.coarse); chunkStreamer.refresh(); }
     rockSystem.setDetail(T.pebbles, T.pebbleShadow, T.shapes);
-    if (retype) scene.traverse((o) => { if ((o as any).material) (o as any).material.needsUpdate = true; });
+    if (retype) scene.traverse((o) => { if ('material' in o && o.material instanceof THREE.Material) o.material.needsUpdate = true; });
     scale = 1;
     resolution();
     restart();
@@ -133,7 +138,7 @@ export const quality = (() => {
     auto: true,               // the resolution governor; off only for measuring
     init() { set(detect()); },
     set,                      // set(id, false) does not overwrite the remembered tier
-    cycle() { set(ORDER[(ORDER.indexOf(id) + 1) % ORDER.length]); return T.name; },
+    cycle() { set(TIER_IDS[(TIER_IDS.indexOf(id) + 1) % TIER_IDS.length]!); return T.name; },
     resize() { resolution(); },
     fullScale() { if (scale !== 1) { scale = 1; resolution(); restart(); } },
     // Once per frame, before anything is drawn: it may resize the canvas.
@@ -147,7 +152,7 @@ export const quality = (() => {
       if (now - t0 < 1000) return;
       fps = frames * 1000 / (now - t0);
       gaps.sort((a, b) => a - b);
-      const typical = gaps.length ? 1000 / gaps[gaps.length >> 1] : fps;
+      const typical = gaps.length ? 1000 / gaps[gaps.length >> 1]! : fps;
       frames = 0; t0 = now; gaps.length = 0;
       if (!this.auto || now - lastChange < 2000 || document.hidden) return;
       // Pixel cost goes as scale², so the square root of the shortfall

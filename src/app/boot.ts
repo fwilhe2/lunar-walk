@@ -1,3 +1,5 @@
+import { byId } from '../util/dom';
+
 /* ═════════════════════════════════════════════════════════════
    CHANGING WORLD
    Everything that is not the renderer itself gets rebuilt: the
@@ -7,7 +9,7 @@
    world, so the first visit to each pays for its own generation
    and every visit after it is immediate.
    ═════════════════════════════════════════════════════════════ */
-export const boot = document.getElementById('boot');
+export const boot = byId('boot');
 /* Where the session stands, written from several modules (worlds.ts,
    view-hash.ts, controls.ts, main.ts), hence one object rather than
    module bindings, which only their own module may assign. */

@@ -14,7 +14,7 @@ import { setMode } from '../player/modes';
 import { mode, player, type Mode } from '../player/player';
 import { setSunElev, sunElev, updateSunDir } from '../render/lights';
 import { eyePass } from '../render/post';
-import { quality } from '../render/quality';
+import { isTier, quality } from '../render/quality';
 import { camera, pitchObj, renderer, scene, yawObj } from '../render/renderer';
 import { chunkStreamer } from '../terrain/streamer';
 import { VIEW, WORLD_IDS, world, worldId, type WorldId } from '../worlds/index';
@@ -62,12 +62,19 @@ const probe = {
   },
 };
 
+// What a driver's page.evaluate() finds on window.lw.
+const lw = {
+  probe, THREE, VIEW, WORLD_IDS, keys, player, camera, scene, yawObj, pitchObj, quality, chunkStreamer, eyePass,
+  terrainHeight, applyWorld, setMode, updateSkyColors,
+  get world() { return world; }, get worldId() { return worldId; }, get mode() { return mode; }, get sunElev() { return sunElev; },
+};
+declare global {
+  interface Window { lw?: typeof lw }
+}
+
+// tier comes from ?probe=; anything but a tier's name is low.
 export function install(tier: string) {
   quality.auto = false;
-  quality.set(tier, false);
-  (window as any).lw = {
-    probe, THREE, VIEW, WORLD_IDS, keys, player, camera, scene, yawObj, pitchObj, quality, chunkStreamer, eyePass,
-    terrainHeight, applyWorld, setMode, updateSkyColors,
-    get world() { return world; }, get worldId() { return worldId; }, get mode() { return mode; }, get sunElev() { return sunElev; },
-  };
+  quality.set(isTier(tier) ? tier : 'low', false);
+  window.lw = lw;
 }

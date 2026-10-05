@@ -35,6 +35,7 @@ import { el, hudState, updateKeysHelp } from '../ui/hud';
 import { rover } from '../vehicles/rover';
 import { VIEW, activateWorld, world, worldId } from '../worlds/index';
 import { setWorld } from '../worlds/terrains';
+import { byId } from '../util/dom';
 
 /* Whatever shows which world is current registers here (the picker,
    src/ui/picker.ts), so switching worlds never has to know about it. */
@@ -199,9 +200,9 @@ function applyWorldNow(id) {
   hudState.doseSv = 0;
   el.doseLine.hidden = !world.dose;
   if (world.dose) el.rate.textContent = world.dose + ' Sv/day';
-  document.getElementById('p-title').textContent = world.title;
-  document.getElementById('p-sub').textContent = world.sub;
-  document.getElementById('p-fine').innerHTML = world.fine;
+  byId('p-title').textContent = world.title;
+  byId('p-sub').textContent = world.sub;
+  byId('p-fine').innerHTML = world.fine;
   worldUI.select(id);
   updateKeysHelp();
 
