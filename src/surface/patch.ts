@@ -87,6 +87,20 @@ export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind,
              .replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor', 'vec3( 1.0 )'));
     }
     fs = fs.replace('#include <lights_fragment_begin>', shadow + '\n' + lights);
+    if (kind === 'object') {
+      // Specular antialiasing (Kaplanyan & Hoffman; Filament's form): where
+      // the normal turns within a pixel — thin tubes, rounded edges — the
+      // highlight is widened by that spread rather than left to land on
+      // one pixel in one frame and the next in the next. three's own,
+      // cruder term (geometryRoughness) is replaced, not added to.
+      const at = 'material.roughness += geometryRoughness;';
+      if (!THREE.ShaderChunk.lights_physical_fragment.includes(at)) throw new Error('lights_physical_fragment: roughness changed');
+      fs = fs.replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace(at, `{
+        vec3 du = dFdx( nonPerturbedNormal ), dv = dFdy( nonPerturbedNormal );
+        float kernel = min( 0.3 * ( dot( du, du ) + dot( dv, dv ) ), 0.2 );
+        material.roughness = sqrt( sqrt( saturate( pow2( pow2( material.roughness ) ) + kernel ) ) );
+      }`));
+    }
     // Squeezed for the resolve (render/hdr.ts), last of all. Not prints:
     // they are a factor on the ground, not a radiance.
     if (kind !== 'print') {
