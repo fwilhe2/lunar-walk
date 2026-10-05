@@ -1,5 +1,4 @@
-/* Chunk geometry, built off the main thread (§2 in the old single
-   file). Each worker imports the same kernel and the same terrain
+/* Chunk geometry, built off the main thread. Each worker imports the same kernel and the same terrain
    definitions as the main thread, so its heights match the physics
    exactly. A request names a world, a chunk origin, vertex count and
    step; the reply is transferable typed arrays.
@@ -39,7 +38,7 @@ onmessage = function (e) {
 
   // Walls for holes. Where a finer level stands over part of this
   // chunk, the main thread leaves the covered quads out of the index
-  // (§5), and the cut edge needs a skirt as the outer edge has. A cut
+  // (terrain/streamer.ts), and the cut edge needs a skirt as the outer edge has. A cut
   // can only fall on the finer level's chunk lines, m − 1 of them each
   // way, so each gets a row of dropped vertices after the grid, unused
   // until a hole needs them.

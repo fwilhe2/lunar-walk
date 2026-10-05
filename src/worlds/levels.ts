@@ -1,10 +1,8 @@
 /* ═════════════════════════════════════════════════════════════
-   1b. WORLDS, AS SEEN
-   The kernel's WORLDS table says what the ground *is*. This one
-   says what it looks like from inside a helmet: the light, the
-   sky, how far the streamer has to reach, and what hangs
-   overhead. Everything here needs THREE, so it cannot live in
-   the worker-shared string.
+   STREAMING LEVELS — how far, and how finely, each world's ground
+   is streamed (view.levels; terrain/streamer.ts builds them).
+
+   And a note for every view.ts, kept here since it is shared:
 
    Sunlight: 1361 W/m² at the Moon, 586 W/m² at Mars — 43% — and
    the same 43% at both moons, which orbit it. On Mars a further

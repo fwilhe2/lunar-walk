@@ -48,7 +48,6 @@ function hIapetus(x, z) {
 }
 
 function tintIapetus(x, z, h, slope, fresh, dark, yel, hol, out) {
-  var v;
   // Iapetus sorted into two materials with almost nothing between: a
   // reddish-brown lag at 0.03–0.05 and water frost at 0.5–0.6. Frost
   // where it is cold — slopes that face the pole, here north, and

@@ -12,7 +12,7 @@ export var CRATER_LAYERS = [];
 // Which classes carry what, by flag rather than by place in the table,
 // so adding a class never quietly moves them: ray systems (rays), wind
 // streaks (streak), Mercury's hollows (hol), Callisto's knobs (knob);
-// §6 reads rocks itself.
+// props/rocks.ts reads rocks itself.
 function flagged(key) {
   var out = [];
   for (var i = 0; i < CRATER_LAYERS.length; i++) if (CRATER_LAYERS[i][key]) out.push(i);

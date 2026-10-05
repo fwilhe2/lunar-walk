@@ -9,7 +9,7 @@ import { camera, renderer, scene } from './renderer';
 import { EYE_TEX } from '../surface/hapke';
 
 /* ═════════════════════════════════════════════════════════════
-   10. POST — eye adaptation, HDR bloom, then a mild visor grade.
+   POST — eye adaptation, HDR bloom, then a mild visor grade.
 
    Regolith under a low sun spans a range no fixed exposure holds:
    Hapke puts the down-sun ground five times brighter than the same
@@ -42,7 +42,7 @@ export const composer = new EffectComposer(renderer, rt);
    off, and one 24-bit depth buffer cannot hold that: precision
    falls with the square of distance, to ~20 m at 4 km and ~120 m at
    10 km. That is coarser than the few metres that separated the
-   terrain levels where they used to overlap (§5), and than the relief
+   terrain levels where they used to overlap (terrain/streamer.ts), and than the relief
    of a distant slope, so which surface won was decided by rounding,
    and changed with every step you took — ridges shimmered as you moved.
 
@@ -60,7 +60,7 @@ export const composer = new EffectComposer(renderer, rt);
    are rendered for the first range only. This is used instead of a
    logarithmic depth buffer, which would need every ShaderMaterial
    patched, would break the prints' polygonOffset, and would cost
-   early-z under the ground shader on exactly the GPUs §10b is for. */
+   early-z under the ground shader on exactly the GPUs render/quality.ts is for. */
 const DEPTH_SPLIT = 400;
 class SplitRenderPass extends RenderPass {
   render(renderer, writeBuffer, readBuffer) {
@@ -155,7 +155,7 @@ export const eyePass = (() => {
         // the ground it lights — feeds the bloom the same small glow
         // at every adaptation. The bloom blur is truncated at one sigma
         // and draws its kernel as a box around anything much brighter;
-        // the wide, round glare is the sprite in §7.
+        // the wide, round glare is the sprite in sky/sun.ts.
         vec3 c = texture2D( tSrc, vUv ).rgb * exp2( texture2D( tEye, vec2( 0.5 ) ).r );
         gl_FragColor = vec4( min( c, vec3( 6.0 ) ), 1.0 );
       }`,

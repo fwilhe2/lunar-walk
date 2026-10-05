@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { fbm, hash2, ridged } from '../kernel/noise';
 import { SUN_AZ, SUN_DIR, sunElev } from '../render/lights';
 import { scene } from '../render/renderer';
-import { world, worldId } from '../worlds/index';
+import { world } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
-   7. SKY — the Milky Way, nine thousand stars, the sun, and
+   SKY — the Milky Way, nine thousand stars, the sun, and
    whatever else is overhead.
 
    On the three airless bodies there is no twinkling, no skyglow,

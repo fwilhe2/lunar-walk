@@ -9,7 +9,7 @@ export function hash2(x, y) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 // Float-domain variant, for hashing a position rather than a lattice cell.
-function hashF(x, y) {
+export function hashF(x, y) {
   var s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
   return s - Math.floor(s);
 }

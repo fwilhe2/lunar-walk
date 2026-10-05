@@ -15,7 +15,7 @@ import { hud, locked, showOverlay } from '../ui/hud';
 import { world, worldId } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
-   13. DEMO — a slow walk, for a screensaver or a "walk with me" video.
+   DEMO — a slow walk, for a screensaver or a "walk with me" video.
 
    It holds no privileges: it presses the same keys and turns the
    same head a player does, so traction, jump arcs and chunk

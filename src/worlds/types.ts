@@ -12,7 +12,20 @@
    from the sun and derives what follows from them (name, gravity text).
    A field that is optional here is a feature a world opts into. */
 
-/* ── Terrain ─────────────────────────────────────────────────── */
+/* ── Terrain ─────────────────────────────────────────────────────
+   Gravity and radius are the real values; the rest describes what the
+   ground actually looks like on each body, and is shared verbatim with
+   the mesh workers.
+
+   Seeds are the dates that matter: Apollo 11's launch, Viking 1's
+   launch, Asaph Hall's two nights in August 1877, the morning
+   Venera 9 sent back the first picture ever taken on another
+   planet's surface, the night in January 1610 Galileo first saw
+   Europa and Io as two points of light instead of one, and the
+   day in February 1930 Clyde Tombaugh found Pluto on a pair of
+   photographic plates, the day in June 1978 James Christy noticed
+   that Pluto's image had a bump on it that moved, and the day in
+   March 1974 Mariner 10 flew past Mercury and showed it had a face. */
 
 /** One size class of craters, re-derived on demand per cell (kernel/craters.ts). */
 export interface CraterClass {

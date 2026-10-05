@@ -101,4 +101,3 @@ export const body = (() => {
   };
 })();
 
-const _tan = new THREE.Vector3();

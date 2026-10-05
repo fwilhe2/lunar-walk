@@ -157,7 +157,6 @@ function windStreak(x, z) {
 }
 
 function tintMars(x, z, h, slope, fresh, dark, yel, hol, out) {
-  var v;
   // Mars is two rocks: bright ferric dust that settles out of the
   // air onto anything flat, and the dark basaltic sand underneath
   // it. Everything the wind touches — slip faces, steep ground,

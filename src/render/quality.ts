@@ -10,7 +10,7 @@ import { terrainShadows } from '../terrain/shadows';
 import { LOD_COARSE, chunkStreamer, setLodCoarse } from '../terrain/streamer';
 
 /* ═════════════════════════════════════════════════════════════
-   10b. QUALITY — three tiers, and a governor on resolution.
+   QUALITY — three tiers, and a governor on resolution.
 
    Everything above is written for a discrete GPU. On an integrated
    one the costs that matter are per pixel and per byte moved, not

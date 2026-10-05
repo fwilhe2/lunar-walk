@@ -77,7 +77,6 @@ export const plumes = (() => {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  const _v = new THREE.Vector3();
   return {
     // specs: [{ brg (°), dist (m), H (m), W (canopy radius, m), shell, column, col, gain }]
     set(specs) {

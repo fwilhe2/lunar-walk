@@ -22,7 +22,7 @@ import { world } from '../worlds/index';
    the world has a sea, the terrain, the sky and the lander are drawn
    again each frame from the eye reflected in the sea's surface, at
    part resolution, into a texture the ground shader reads where it
-   draws the liquid (§4b). Only layer 1 is drawn, which the chunks,
+   draws the liquid (surface/shaders.ts). Only layer 1 is drawn, which the chunks,
    the dome, the lander and the lights are on; the ground discards
    what lies under the surface, against the curved level, so a far
    shore that has dropped below the eye's level is still in it. */

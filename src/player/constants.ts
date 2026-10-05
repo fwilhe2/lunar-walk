@@ -1,5 +1,5 @@
 /* ═════════════════════════════════════════════════════════════
-   12. PLAYER, MODES & LOOP
+   PLAYER, MODES & LOOP
    Three ways to move: EVA on foot, the rover, and free flight.
    All three stand on the same terrainHeight(), and all three
    stream the world through the same chunk manager.

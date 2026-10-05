@@ -12,7 +12,7 @@ import { worldId } from '../worlds/index';
    in reach. Level of detail goes by distance, not by what the lens
    magnifies, so it stops there: much narrower and the far rings'
    facets show. Stars are points and stay points, and dust sizes
-   itself by the lens (§9). The eye meters whatever the lens is on,
+   itself by the lens (effects/dust.ts). The eye meters whatever the lens is on,
    so zoom onto a full Earth and it stops down until the clouds are
    back.
 

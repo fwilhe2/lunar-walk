@@ -14,7 +14,7 @@ import { lander } from '../props/lander';
 import { rockSystem } from '../props/rocks';
 import { camera, pitchObj, yawObj } from '../render/renderer';
 import { prints } from '../surface/stamps';
-import { hudSpeed, note, setHudSpeed } from '../ui/hud';
+import { note, setHudSpeed } from '../ui/hud';
 import { rover } from '../vehicles/rover';
 import { world } from '../worlds/index';
 

@@ -569,7 +569,7 @@ function makeCompanion(spec) {
     })
   );
   if (spec.oblate) globe.scale.y = spec.oblate;
-  // After the stars, in the transparent queue: sky depth (§7) puts it
+  // After the stars, in the transparent queue: sky depth (sky/sun.ts) puts it
   // behind them, so it covers them by order. Still opaque in effect.
   globe.material.transparent = true;
   globe.renderOrder = -1.5;

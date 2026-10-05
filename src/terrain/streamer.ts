@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { scene } from '../render/renderer';
 import { groundMat } from '../surface/ground';
-import { curveAX, curveAZ, setCurveAX, setCurveAZ } from './anchor';
+import { setCurveAX, setCurveAZ } from './anchor';
 import { VIEW } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
-   5. CHUNK STREAMER
+   CHUNK STREAMER
    Four nested levels of absolutely-aligned square chunks:
 
      L0   256 m chunks, ±4  → ±1.15 km   step 1 m (2 m, 4 m out)
@@ -29,7 +29,7 @@ export const chunkGroup = new THREE.Group();
 scene.add(chunkGroup);
 
 let LEVELS = VIEW.moon.levels();
-// LOD_COARSE (set by §10b on low quality) doubles every step past the
+// LOD_COARSE (set by render/quality.ts on low quality) doubles every step past the
 // nearest ring: a third of the vertices, for ground far enough away
 // that the difference is a pixel or two.
 export let LOD_COARSE = false;
@@ -277,7 +277,7 @@ export const chunkStreamer = (() => {
           new THREE.Vector3(s.x0 + half, (yLo + yHi) / 2, s.z0 + half), Math.hypot(half * 1.42, (yHi - yLo) / 2) + 50);
         const mesh = new THREE.Mesh(geo, groundMat);
         mesh.userData.level = s.level;   // for debugging views; nothing reads it
-        mesh.layers.enable(1);            // seen in the sea's mirror (§10)
+        mesh.layers.enable(1);            // seen in the sea's mirror (render/sea.ts)
         mesh.receiveShadow = s.level === 0;
         chunks.set(job.key, { mesh, level: s.level, x0: s.x0, z0: s.z0, W: d.W, m: d.m, mask: 0 });
         chunkGroup.add(mesh);
@@ -347,7 +347,7 @@ export const chunkStreamer = (() => {
       return pendingPerLevel[0] + pendingPerLevel[1] + pendingPerLevel[2] + pendingPerLevel[3];
     },
     // The vertex spacing of the finest chunk drawn at (x, z), so a
-    // decal can sit on the triangles actually on screen (§8).
+    // decal can sit on the triangles actually on screen (surface/stamps.ts).
     stepAt(x, z) {
       const L = LEVELS[0], cx = Math.floor(x / L.size), cz = Math.floor(z / L.size);
       for (const s of [1, 2, 4, 8]) if (chunks.has('0:' + cx + ':' + cz + ':' + s)) return s;

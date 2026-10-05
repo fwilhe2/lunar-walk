@@ -5,7 +5,7 @@ import { mode, player, setModeRaw } from './player';
 import { camera, pitchObj, yawObj } from '../render/renderer';
 import { el, note, updateKeysHelp } from '../ui/hud';
 import { rover } from '../vehicles/rover';
-import { world, worldId } from '../worlds/index';
+import { world } from '../worlds/index';
 
 export function setMode(next) {
   if (next === mode) return;

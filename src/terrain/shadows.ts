@@ -5,7 +5,7 @@ import { TS } from '../surface/shaders';
 import { chunkGroup, chunkStreamer } from './streamer';
 
 /* ═════════════════════════════════════════════════════════════
-   5b. TERRAIN SHADOWS — the ground shadowing itself, at every range.
+   TERRAIN SHADOWS — the ground shadowing itself, at every range.
 
    Nothing about an airless surface is more characteristic than its
    shadows: at a low sun every crater is a bowl of black with a lit
@@ -31,7 +31,7 @@ import { chunkGroup, chunkStreamer } from './streamer';
         the steepest rise: tan of the skyline, the distance to it, and
         the ground height, packed into one RGBA texel.
      3. Every surface material compares that skyline against the sun
-        (§4b) — a single fetch per fragment.
+        (surface/shaders.ts) — a single fetch per fragment.
 
    The work is only redone when the ground itself changes, or you
    walk off the middle of the finest level, and it is spread over

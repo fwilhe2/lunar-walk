@@ -10,7 +10,7 @@ import { fbm } from '../../kernel/noise';
    south of it are the smoother plains of Vulcan Planitia, resurfaced
    from below. Charon is locked to Pluto as Pluto is to it, so the
    face you see never changes. */
-// Pure, so it can run off the main thread (OFF_THREAD).
+// Pure, so it can run off the main thread (workers/texgen.jobs.ts).
 export function charonPixels() {
   const W = 512, H = 256, DEG = Math.PI / 180;
   const smoothstep = (v, a, b) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };

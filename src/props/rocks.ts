@@ -12,7 +12,7 @@ import { moonRille } from '../worlds/moon/terrain';
 import { tiGravel } from '../worlds/titan/terrain';
 
 /* ═════════════════════════════════════════════════════════════
-   6. ROCKS — streamed with the ground, clustered on crater rims
+   ROCKS — streamed with the ground, clustered on crater rims
    where ejecta actually lands, and concentrated around the young
    craters: a fresh crater is ringed with blocks, an old one has
    ground its own down to soil. Deterministic per chunk, so a
@@ -41,7 +41,7 @@ export const rockSystem = (() => {
   };
 
   // round: a cobble, not a block — worn smooth by rolling along a
-  // stream bed, the way Titan's water-ice gravel is (§1, hTitan).
+  // stream bed, the way Titan's water-ice gravel is (worlds/titan/terrain.ts, tiGravel).
   function makeRock(seed, detail, fresh, cuts = 0, round = false) {
     let s = seed; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
     for (let i = 0; i < 5; i++) rnd();
@@ -214,7 +214,7 @@ export const rockSystem = (() => {
     return cells;
   }
   // Stones under this size are pressed into the soil by a boot or a
-  // wheel (§8); anything bigger you would step over or drive round.
+  // wheel (surface/stamps.ts); anything bigger you would step over or drive round.
   const PRESS_MAX = 0.12;
   // Every live print and track, by its slot in the stamp ring: an
   // oriented rectangle (centre, heading, half extents). Kept here so a
@@ -393,7 +393,7 @@ export const rockSystem = (() => {
         }
         mesh.castShadow = C.shadow;
         mesh.receiveShadow = C.receive;
-        // Stones by the shore show in the sea's mirror (§10), on the one
+        // Stones by the shore show in the sea's mirror (render/sea.ts), on the one
         // world with a sea; elsewhere the layer would cost nothing anyway.
         if (world.sea !== undefined) mesh.layers.enable(1);
         mesh.computeBoundingSphere();
@@ -406,7 +406,7 @@ export const rockSystem = (() => {
 
   /* Pressing a stone: flatten it to a third of its height and set its
      crown 3 mm above the print floor, measured on the stone's own
-     posed geometry and on the drawn mesh (mk.ground, from §8), so it
+     posed geometry and on the drawn mesh (mk.ground, from surface/stamps.ts), so it
      shows as a flush cap that casts next to no shadow — the way
      pebbles show in the floor of every Apollo boot print, pressed in
      rather than pushed aside. */

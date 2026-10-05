@@ -9,7 +9,7 @@ import { fbm } from '../../kernel/noise';
    terrains, old dark ground and younger bright grooved ice, and frost
    caps. Callisto is the darkest, oldest surface of the four,
    spattered with the bright ice of its craters. */
-// Pure, so it can run off the main thread (OFF_THREAD): no THREE, no
+// Pure, so it can run off the main thread (workers/texgen.jobs.ts): no THREE, no
 // module constants.
 export function galileanPixels(kind) {
   const W = 512, H = 256, DEG = Math.PI / 180;

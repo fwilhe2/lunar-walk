@@ -6,7 +6,7 @@ import { GLSL_GROUND, GLSL_HAPKE, GLSL_HAPKE_GROUND, GLSL_LAKE, GLSL_TS, GROUND_
      ground  — the terrain: Hapke, hex-tiled relief, micro-craters,
                grain shadows, the terrain shadow, glass sparkle
      print   — boot prints and wheel tracks: Hapke and terrain shadow,
-               output as a factor multiplied into the ground (§8)
+               output as a factor multiplied into the ground (surface/stamps.ts)
      rock    — Hapke, and the terrain shadow seen from above the ground
      object  — anything man-made: its own PBR, plus the terrain shadow
    `hpk` is a hapkeUniforms() set, for the three regolith kinds.     */
@@ -28,7 +28,7 @@ export function surfacePatch(mat, kind, hpk?, extra?) {
     let fs = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_TS + (kind === 'ground' ? GLSL_GROUND + skyDome.glsl + GLSL_LAKE : ''));
     // The sea reflects the sky through the dome's own function and
-    // uniforms (§7), shared, not copied.
+    // uniforms (sky/dome.ts), shared, not copied.
     if (kind === 'ground') Object.assign(shader.uniforms, skyDome.uniforms, LAKE_U);
     if (hpk) {
       fs = fs.replace('#include <lights_physical_pars_fragment>',
@@ -69,7 +69,7 @@ export const LAKE_U = {
   uLakeAbs: { value: new THREE.Vector3(0.12, 0.085, 0.11) },
   uLakeIn: { value: new THREE.Vector3() },
   uLakeT: { value: 0 },
-  // The mirror image (§10): its texture, and world → its texture coords.
+  // The mirror image (render/sea.ts): its texture, and world → its texture coords.
   uLakeMap: { value: null },
   uLakeMat: { value: new THREE.Matrix4() },
   uLakeMirror: { value: 0 },     // 1 while the mirror itself is drawn

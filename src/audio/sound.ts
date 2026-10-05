@@ -1,5 +1,5 @@
 /* ═════════════════════════════════════════════════════════════
-   11b. SOUND — what reaches the ear in a pressure suit, generated.
+   SOUND — what reaches the ear in a pressure suit, generated.
 
    In vacuum nothing outside reaches you at all. What you hear comes
    through the suit: your own breathing in the helmet, the fans and

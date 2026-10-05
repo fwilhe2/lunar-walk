@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { KEY_XZ } from '../render/lights';
 
-// Terrain horizon maps: four nested levels, written by §5b and read
+// Terrain horizon maps: four nested levels, written by terrain/shadows.ts and read
 // by everything standing on the ground.
 export const TS = {
   tsHz0: { value: null }, tsHz1: { value: null }, tsHz2: { value: null }, tsHz3: { value: null },

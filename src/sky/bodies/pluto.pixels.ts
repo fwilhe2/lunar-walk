@@ -16,9 +16,9 @@ import { fbm } from '../../kernel/noise';
 
    The map is centred on longitude 0, the point that faces Charon,
    so the seam, where the noise does not wrap, is on the far side. */
-// Pure, so it can run off the main thread (OFF_THREAD).
+// Pure, so it can run off the main thread (workers/texgen.jobs.ts).
 export function plutoPixels() {
-  const W = 512, H = 256, DEG = Math.PI / 180;
+  const W = 512, H = 256;
   const smoothstep = (v, a, b) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   const data = new Uint8ClampedArray(W * H * 4);
   const wrapD = (d) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);

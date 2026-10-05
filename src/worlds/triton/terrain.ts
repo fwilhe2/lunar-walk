@@ -22,7 +22,7 @@ import { WORLD } from '../../kernel/world';
    ridged seams. TR_CAP is how much cap there is at the last query
    point, TR_CV how near a dimple's rim, for the colour pass. */
 var TR_OX = -1250, TR_OZ = 1000, TR_CELL = 30000;
-var TR_CAP = 0, TR_CV = 0;
+export var TR_CAP = 0, TR_CV = 0;
 // The cap's margin, wandering east–west a few kilometres south of the
 // site, lobed and ragged.
 function trCap(x, z) {

@@ -22,7 +22,7 @@ import { scene } from '../render/renderer';
    The sky is the air in front of everything beyond it, not a
    backdrop behind it, so the function is shared: the dome draws it
    where nothing else is, and every companion body adds it over
-   itself (§7) through the same uniforms. On a world without a sky
+   itself (sky/companions.ts) through the same uniforms. On a world without a sky
    the gain and the optical depth are zeroed, not just the dome
    hidden, so the companions see no air there either.             */
 export const skyDome = (() => {

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
 /* ═════════════════════════════════════════════════════════════
-   4b. SURFACE LIGHT — how regolith reflects light, and where the
+   SURFACE LIGHT — how regolith reflects light, and where the
    ground shadows itself. Every material that sits on a world goes
    through surfacePatch() below: the ground, footprints and wheel
    tracks, rocks, and the man-made things.
 
    Two things are patched in. The first is the terrain shadow: the
-   horizon maps built in §5b say, for any point on the surface, how
+   horizon maps built in terrain/shadows.ts say, for any point on the surface, how
    high the skyline stands in the direction of the sun, so a single
    texture fetch decides whether that point can see the sun — from a
    pebble's crater to a massif ten kilometres off. The comparison is
@@ -32,7 +32,7 @@ import * as THREE from 'three';
    ═════════════════════════════════════════════════════════════ */
 export const DEG = Math.PI / 180;
 // The eye's adapted exposure (log2), as a texture, for the few things
-// that must look the same however open the eye is. Written by §10.
+// that must look the same however open the eye is. Written by render/post.ts.
 export const EYE_TEX = { value: null };
 
 // The same Hapke function as the shader below, used once per
@@ -80,7 +80,7 @@ function hapkeJS(mu0, mu, cosg, p) {
    arithmetic as the rest of the ground shader together — but it only
    ever depends on three numbers: the cosines of incidence and emission
    and the phase angle. So the tiers that cannot afford it per pixel
-   (§10b) read it from a 32³ table instead, one fetch. The phase axis
+   (render/quality.ts) read it from a 32³ table instead, one fetch. The phase axis
    runs in √(g/π), which spends most of the samples near zero phase,
    where the opposition surge is. */
 const HPK_N = 32;

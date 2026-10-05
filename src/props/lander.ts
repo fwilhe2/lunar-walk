@@ -7,7 +7,7 @@ import { dropAt } from '../terrain/anchor';
 import { world } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
-   6c. THE LANDER — the lunar module you came down in, where the
+   THE LANDER — the lunar module you came down in, where the
    world's row says it stands (WORLD.lander): built from primitives to
    the real thing's dimensions, as the rover is.
 
@@ -165,7 +165,7 @@ export const lander = (() => {
     for (const [x, z] of [[0.95, 1.25], [0.95, -1.25], [-1.05, 1.25], [-1.05, -1.25]]) {
       // RCS quads: a housing and four small nozzles each.
       box(g, M.grey, 0.32, 0.32, 0.32, x, A0 + 1.95, z);
-      for (const [nx, ny, nz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]) {
+      for (const [nx, ny] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]) {
         rod(g, M.black, V(x + nx * 0.14, A0 + 1.95 + ny * 0.14, z), V(x + nx * 0.34, A0 + 1.95 + ny * 0.34, z), 0.04, 6);
       }
     }
@@ -418,7 +418,7 @@ export const lander = (() => {
       holder.rotation.y = yaw;
       holder.add(lm);
       group.add(holder);
-      group.traverse((o) => o.layers.enable(1));   // and in the sea's mirror (§10)
+      group.traverse((o) => o.layers.enable(1));   // and in the sea's mirror (render/sea.ts)
       baseH = hc;
       group.position.set(x, hc, z);
       this.update();

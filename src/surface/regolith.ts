@@ -5,6 +5,28 @@ import { regolithData } from './regolith.pixels';
 import { offThread } from '../util/texgen';
 import { VIEW } from '../worlds/index';
 
+
+/* ═════════════════════════════════════════════════════════════
+   REGOLITH TEXTURES — generated, so nothing is ever fetched.
+   One pair per world, built on first visit and kept: the base
+   grey is the body's real reflectance carrier (the vertex colours
+   from surfaceTint do the rest), and the micro-relief differs
+   because the processes do. Lunar and Phobos regolith is a soil of
+   clods and grains, pitted by micrometeorites all the way down to
+   the millimetre and strewn with pebbles; Martian soil has that
+   planed off and wind-ripples written over it; Venus is a cracked
+   basalt pavement, which is neither.
+
+   The tile is 3 m of ground on 1024² texels, so ~3 mm a texel, and
+   everything is built periodic so it repeats without a seam. The
+   height field is in millimetres over millimetres, so the normals
+   it produces are real slopes. The normal map's alpha carries a
+   *horizon*: for each texel, how steeply the relief rises toward the
+   sun's azimuth — which never changes — so the shader can tell
+   whether that texel is in the shadow of the grain beside it. At a
+   low sun every clod and pit casts one, which is most of what makes
+   regolith look like regolith.
+   ═════════════════════════════════════════════════════════════ */
 function regolithTextures(d) {
   const tex = (data, srgb) => {
     const t = new THREE.DataTexture(data, d.S, d.S, THREE.RGBAFormat);

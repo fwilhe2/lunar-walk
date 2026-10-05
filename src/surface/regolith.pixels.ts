@@ -1,7 +1,7 @@
 import { CUBE_0, CUBE_K } from '../kernel/craters';
 import { clamp01, hash2, smoothT } from '../kernel/noise';
 
-// Pure: arrays only, so it runs in a worker too (regolithAsync below).
+// Pure: arrays only, so it runs in a worker too (regolithAsync in regolith.ts).
 // hx, hy: the sun's azimuth, for the baked micro-horizon.
 export function regolithData(v, hx, hy) {
   const S = 1024, MM = 3000 / S, N = S * S;

@@ -20,7 +20,7 @@ updateSunDir();
 export const sun = new THREE.DirectionalLight(0xfff8f2, 3.4);
 
 /* Shadow maps are for objects only — rocks, the rover, the flag. The
-   ground shadows itself through the horizon maps in §5b, at every
+   ground shadows itself through the horizon maps in terrain/shadows.ts, at every
    range, so it never renders into these.
 
    Two cascades. The sun is half a degree across, so the penumbra
@@ -32,7 +32,7 @@ export const sun = new THREE.DirectionalLight(0xfff8f2, 3.4);
    enough that its bias works out at about a centimetre, and a second,
    coarse one carries shadows out to 130 m. The second light only
    exists to own that shadow map: it has no intensity, and the patched
-   lighting in §4b picks between the two maps per fragment. */
+   lighting in surface/patch.ts picks between the two maps per fragment. */
 const SHADOW_NEAR = 24, SHADOW_FAR = 130;
 function shadowRig(light, half, dist, depth, bias, nBias) {
   light.castShadow = true;
@@ -62,35 +62,15 @@ scene.add(sun, sun.target, sunFar, sunFar.target);
 export const hemiLight = new THREE.HemisphereLight(0x0a0d14, 0x67645f, 0.36);
 export const ambLight = new THREE.AmbientLight(0x232634, 0.14);
 // Lights count only for cameras that share a layer with them, and the
-// sea's mirror (§10) looks at layer 1 alone.
+// sea's mirror (render/sea.ts) looks at layer 1 alone.
 for (const l of [sun, sunFar, hemiLight, ambLight]) l.layers.enable(1);
 scene.add(hemiLight, ambLight);
 
-/* ═════════════════════════════════════════════════════════════
-   4. REGOLITH TEXTURES — generated, so nothing is ever fetched.
-   One pair per world, built on first visit and kept: the base
-   grey is the body's real reflectance carrier (the vertex colours
-   from surfaceTint do the rest), and the micro-relief differs
-   because the processes do. Lunar and Phobos regolith is a soil of
-   clods and grains, pitted by micrometeorites all the way down to
-   the millimetre and strewn with pebbles; Martian soil has that
-   planed off and wind-ripples written over it; Venus is a cracked
-   basalt pavement, which is neither.
-
-   The tile is 3 m of ground on 1024² texels, so ~3 mm a texel, and
-   everything is built periodic so it repeats without a seam. The
-   height field is in millimetres over millimetres, so the normals
-   it produces are real slopes. The normal map's alpha carries a
-   *horizon*: for each texel, how steeply the relief rises toward the
-   sun's azimuth — which never changes — so the shader can tell
-   whether that texel is in the shadow of the grain beside it. At a
-   low sun every clod and pit casts one, which is most of what makes
-   regolith look like regolith.
-   ═════════════════════════════════════════════════════════════ */
+// The sun's azimuth as a unit vector in the ground plane.
 export const SUN_XZ = new THREE.Vector2(Math.cos(SUN_AZ), Math.sin(SUN_AZ));
 
 /* The key light: the sun by day and, by night on the bodies that
-   have one, the primary hanging overhead (updateKey, §12). What
+   have one, the primary hanging overhead (updateKey, app/lighting.ts). What
    shades by direction reads these — the light and its shadow maps,
    the terrain horizon maps, the micro-craters in the ground — while
    the sun keeps SUN_DIR for phases and the sky. The regolith map's

@@ -9,7 +9,7 @@ import { dropAt, terrainNormal } from '../terrain/anchor';
 import { chunkStreamer } from '../terrain/streamer';
 
 /* ═════════════════════════════════════════════════════════════
-   8. FOOTPRINTS & WHEEL TRACKS
+   FOOTPRINTS & WHEEL TRACKS
    Regolith takes a crisp print and holds it. On the airless
    bodies nothing will ever erase it. On Mars the wind eventually
    will — Spirit's tracks faded over years, not minutes — which is
@@ -51,7 +51,7 @@ export const PRINT_U = {
    decal or bury half of it. So each print is a small grid, and every
    grid point is put on the mesh triangle beneath it, reconstructed
    from the same lattice, the same diagonal and the same curvature
-   drop the chunk was built with (§5). */
+   drop the chunk was built with (terrain/streamer.ts). */
 const PRINT_GX = 5, PRINT_GY = 7;
 export const TRACK_L = 0.62;   // length of one wheel-track stamp
 
@@ -60,7 +60,7 @@ export const TRACK_L = 0.62;   // length of one wheel-track stamp
 // gives the height of lattice corner (i, j) — the caller decides how
 // it is cached and whether the curvature drop goes in. The one copy
 // of the triangulation outside the worker: prints and the rover's
-// wheels both stand on it (§8, §11).
+// wheels both stand on it (here, and vehicles/rover.ts).
 export function meshHeight(x, z, s, vtx) {
   const gx = x / s, gz = z / s, i = Math.floor(gx), j = Math.floor(gz);
   const fx = gx - i, fz = gz - j;
@@ -212,7 +212,7 @@ export const prints = (() => {
 
 /* Chevron wheel tracks, stamped in pairs behind the rover's front
    wheels, end to end: the band runs the full length of the stamp, so
-   one stamp takes over where the last left off (§11 lays them). */
+   one stamp takes over where the last left off (vehicles/rover.ts lays them). */
 export const tracks = (() => {
   const stamp = makeStampSystem(500,
     (x) => { x.fillRect(18, 0, 28, 64); },

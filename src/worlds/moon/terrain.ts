@@ -135,7 +135,7 @@ export const terrain: TerrainDef = {
   // Fresh ejecta is immature — not yet darkened by the solar wind
   // and micrometeorites — so every young crater wears a bright halo.
   halo: 0.55,
-  // Where the lunar module stands (§6c). Its descent engine blew the
+  // Where the lunar module stands (props/lander.ts). Its descent engine blew the
   // fines off the ground around it; the colour pass brightens that.
   lander: [23.8, -2.9],
   height: hMoon,

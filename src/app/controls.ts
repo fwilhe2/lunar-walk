@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { everStarted, setEverStarted } from './boot';
+import { setEverStarted } from './boot';
 import { demo } from './demo';
 import { updateSkyColors } from './lighting';
 import { lastHash, setLastHash, viewHash } from './view-hash';
 import { applyWorld } from './worlds';
 import { sound } from '../audio/sound';
-import { photoPending, setPhotoPending } from '../player/camera';
+import { setPhotoPending } from '../player/camera';
 import { G_EARTH } from '../player/constants';
 import { setViewMotion, viewMotion } from '../player/gait';
 import { input, keys, touch } from '../player/input';
@@ -39,7 +39,7 @@ function press(code) {
   if (code === 'KeyM') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
   if (code === 'KeyQ') note('QUALITY ' + quality.cycle());
   // At full resolution: the governor may have lowered it, and a resize
-  // has to happen before a frame is drawn, not after (§10b).
+  // has to happen before a frame is drawn, not after (render/quality.ts).
   if (code === 'KeyP') { quality.fullScale(); setPhotoPending(true); }
   if (code === 'KeyH') hud.classList.toggle('clean');
   if (code === 'KeyV') {

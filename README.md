@@ -4,24 +4,25 @@ A first-person planetary surface simulator with twenty-one bodies in it, from th
 
 ## Run
 
-ES modules need HTTP, so `file://` won't work:
+The app is TypeScript, built and served by [Vite](https://vite.dev). Install Node.js 20.19 or newer (or Bun), then:
 
 ```sh
-python3 -m http.server 8000
+npm install
+npm run dev
 ```
 
-Then open http://localhost:8000 and click to lock the pointer. The "GENERATING" screen is the opening rings of terrain being built in workers — a few seconds of CPU work, not a download.
+Then open http://localhost:5173 and click to lock the pointer. `npm run build` writes a static site to `dist/` that any web server can host; nothing is fetched at runtime. The "GENERATING" screen is the opening rings of terrain being built in workers — a few seconds of CPU work, not a download.
 
 ## Desktop builds
 
-The desktop app wraps the same local files in Electron, so it does not need a network connection or a separate server at runtime. Install Node.js 20 or newer, then run:
+The desktop app wraps the same build in Electron, so it does not need a network connection or a separate server at runtime:
 
 ```sh
 npm install
 make start
 ```
 
-Build an installer for the current operating system with `make build`, or choose one platform with `make build-linux`, `make build-mac` or `make build-windows`. Outputs go in `dist/` (Linux AppImage, macOS DMG and Windows installer). macOS and Windows releases are unsigned by default, so those operating systems may show their usual first-run security prompt.
+Build an installer for the current operating system with `make build`, or choose one platform with `make build-linux`, `make build-mac` or `make build-windows`. Outputs go in `release/` (Linux AppImage, macOS DMG and Windows installer). macOS and Windows releases are unsigned by default, so those operating systems may show their usual first-run security prompt.
 
 GitHub Actions builds all three platforms on their native runners for pushes to `main`, version tags (`v*`), pull requests and manual runs. Each run uploads the installers as downloadable workflow artifacts for 30 days.
 
@@ -321,7 +322,13 @@ Any key, or a click, hands the controls back.
 
 ## Files
 
-- `index.html` — everything: generation, streaming, shaders, physics, HUD.
-- `three.module.js` — vendored Three.js r160 (MIT).
-- `jsm/` — vendored Three.js post-processing addons (MIT).
-- `tools/` — development only: a headless-Firefox probe that drives the app and takes screenshots, and a Node check on the terrain kernel. Nothing in the app loads it.
+- `index.html` — the page: the opening screen, the HUD's markup, and the entry script.
+- `src/kernel/` — the terrain kernel: noise, craters, curvature, the active world. Pure, shared with the mesh workers.
+- `src/worlds/<id>/` — one folder per world: `terrain.ts` (what the ground is: gravity, craters, height and colour) and `view.ts` (what it looks like: light, sky, texture, what hangs overhead). `src/worlds/index.ts` lists them in order out from the sun.
+- `src/terrain/`, `src/surface/`, `src/sky/`, `src/props/`, `src/effects/`, `src/render/` — the engine: streaming and shadows, ground materials, the sky and its companions, rocks and landers, plumes and dust, post-processing and quality tiers.
+- `src/player/`, `src/vehicles/`, `src/audio/`, `src/ui/`, `src/app/` — walking, the rover, sound, the HUD and picker, and the application around them; `src/main.ts` is the entry point.
+- `src/workers/` — the mesh worker and the texture generator worker.
+- `tests/` — Vitest checks on the terrain kernel (`npm test`, `npm run perf`).
+- `tools/probe/` — development only: drives the app in a headless browser and takes screenshots. Nothing in the app loads it.
+
+Three.js r160 (MIT) comes from npm.

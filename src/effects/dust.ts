@@ -6,7 +6,7 @@ import { GLSL_TS, TS } from '../surface/shaders';
 import { world } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
-   9. DUST — in vacuum it flies in clean parabolas and never
+   DUST — in vacuum it flies in clean parabolas and never
    billows, which is the tell that you are not on Earth. Every
    grain follows the same trajectory regardless of size, lands,
    and stops. That is the Moon, Phobos and Deimos.
@@ -59,7 +59,7 @@ export const dust = (() => {
       uSun: { value: new THREE.Color() }, uFill: { value: new THREE.Color() },
       uSunDir: { value: SUN_DIR }, uSunView,
       uScale: { value: 400 },
-      // The sun's two shadow cascades (§3), sampled by hand: rover,
+      // The sun's two shadow cascades (render/lights.ts), sampled by hand: rover,
       // rocks and walker shade the dust that flies through their shadow.
       uShOn: { value: 0 },
       uShNear: { value: null }, uShNearM: { value: sun.shadow.matrix },

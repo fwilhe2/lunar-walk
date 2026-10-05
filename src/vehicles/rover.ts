@@ -12,7 +12,7 @@ import { chunkStreamer } from '../terrain/streamer';
 import { world } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
-   11. ROVER — the Lunar Roving Vehicle, built from primitives to its
+   ROVER — the Lunar Roving Vehicle, built from primitives to its
    real dimensions: 3.1 m long, a 2.29 m wheelbase and 1.83 m track,
    wheels 82 cm across. A tubular aluminium chassis on double
    wishbones; wheels with a spun-aluminium hub and a tyre of woven
@@ -315,7 +315,7 @@ export const rover = (() => {
      that are not drawn. And an 82 cm tyre does not follow a point: it
      bridges anything much narrower than itself and rests on the rims.
      So each wheel is a circle let down onto the drawn mesh (the same
-     reconstruction the prints stand on, §8): seven points along and
+     reconstruction the prints stand on, surface/stamps.ts): seven points along and
      across the contact patch, each asking how high the tyre's bottom
      must be to clear it, and the highest wins. */
   const GC = 512;                           // lattice corners, direct-mapped on integer keys
@@ -335,7 +335,7 @@ export const rover = (() => {
     .map(([d, l]) => [d, l, WHEEL_R - Math.sqrt(WHEEL_R * WHEEL_R - d * d)]);
   // Where the bottom of a tyre heading (fx, fz) comes to rest at (x, z),
   // on ground drawn with lattice step s.
-  // Stones from §6 are ground to a tyre too: it climbs one where the
+  // Stones from props/rocks.ts are ground to a tyre too: it climbs one where the
   // contact patch meets it, as on the mesh. Their lists are cached on
   // half-metre cells around the wheel, eight cells direct-mapped.
   const rkX = new Int32Array(8).fill(0x7fffffff), rkZ = new Int32Array(8), rkV = new Int32Array(8);

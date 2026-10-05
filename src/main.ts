@@ -140,7 +140,7 @@ renderer.setAnimationLoop(() => {
   }
   elapsed += dt;
   gradePass.uniforms.uTime.value = elapsed;
-  // The sea's level, in the frame the chunks are drawn in (§4b).
+  // The sea's level, in the frame the chunks are drawn in (surface/shaders.ts).
   LAKE_U.uLake.value.set(world.sea ?? 0, world.sea !== undefined ? 1 : 0, curveAX, curveAZ);
   LAKE_U.uLakeR.value.set(CURVE_R, CURVE_D02);
   LAKE_U.uLakeT.value = elapsed;
@@ -158,6 +158,6 @@ renderer.setAnimationLoop(() => {
 
 // Applied at the top of the next frame, not here: resizing the canvas
 // clears it, and between this event and the next frame that would put
-// an empty canvas on screen (§10b says the same of the governor).
+// an empty canvas on screen (render/quality.ts says the same of the governor).
 let resizeDue = false;
 addEventListener('resize', () => { resizeDue = true; });

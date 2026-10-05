@@ -1,8 +1,8 @@
 # Roadmap
 
-Features to build, in the suggested order. Each one says why, lists its substeps, and says how to check it's done. Line numbers refer to `index.html` as of `079e0f2`.
+Features to build, in the suggested order. Each one says why, lists its substeps, and says how to check it's done. Line numbers in the finished items refer to the single-file `index.html` as of `079e0f2`; the code has since moved to `src/` (see `CLAUDE.md`).
 
-Everything visual gets checked with the headless-Firefox probe described in `CLAUDE.md`. Everything touching `TERRAIN_SOURCE` also gets timed in Node before and after.
+Everything visual gets checked with the headless-browser probe described in `CLAUDE.md`. Everything touching the terrain kernel also gets timed (`npm run perf`) before and after.
 
 ---
 
@@ -283,7 +283,7 @@ Every tier has a milder version of this, in the partial-overlap band at each lev
 
 **Rules for the whole run**
 - One commit per working feature, straight to `main`, never pushed. Tick the box here in the same commit.
-- Every new height function: `node tools/check.mjs` (no NaN, pure across cache resets, µs per call recorded in the baseline with `--save` once it is meant to cost that). Budget: no world above ~1.5× the Moon's cost per query.
+- Every new height function: `npm test` (no NaN, pure across cache resets, fingerprint updated with `-u` on purpose) and `npm run perf` (µs per call, recorded with `PERF_SAVE=1` once it is meant to cost that). Budget: no world above ~1.5× the Moon's cost per query.
 - Every visual change: a probe shot from the site and from the flight ceiling on low, looked at, before committing. Nothing new in the default view may move the camera (motion sickness — see `CLAUDE.md`).
 - Each new world gets its README paragraph (surface, light, sky, physics table row) and its `CLAUDE.md` paragraph in the same commit or the one right after.
 
