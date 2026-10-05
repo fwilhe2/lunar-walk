@@ -7,6 +7,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { camera, renderer, scene } from './renderer';
 import { EYE_TEX } from '../surface/hapke';
+import { TypedShaderMaterial, type Uniforms } from '../util/three';
 
 /* ═════════════════════════════════════════════════════════════
    POST — eye adaptation, HDR bloom, then a mild visor grade.
@@ -37,6 +38,16 @@ const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
 });
 export const composer = new EffectComposer(renderer, rt);
 
+/* Given a ShaderMaterial, ShaderPass draws with it and keeps its
+   uniforms object as it is (given a plain shader it clones them), so
+   the pass's uniforms can keep the material's types. */
+class TypedShaderPass<U extends Uniforms> extends ShaderPass {
+  declare uniforms: U;
+  constructor(material: TypedShaderMaterial<U>) { super(material); }
+}
+// A texture uniform, empty until the first frame.
+const tex = () => new THREE.Uniform<THREE.Texture | null>(null);
+
 /* ── Depth in two ranges ────────────────────────────────────────
    The view runs from a boot 5 cm under the eye to a horizon 90 km
    off, and one 24-bit depth buffer cannot hold that: precision
@@ -63,14 +74,14 @@ export const composer = new EffectComposer(renderer, rt);
    early-z under the ground shader on exactly the GPUs render/quality.ts is for. */
 const DEPTH_SPLIT = 400;
 class SplitRenderPass extends RenderPass {
-  render(renderer, writeBuffer, readBuffer) {
+  render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {
     const cam = this.camera as THREE.PerspectiveCamera, near = cam.near, far = cam.far;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
 
     cam.near = DEPTH_SPLIT * 0.98;
     cam.updateProjectionMatrix();
-    super.render(renderer, writeBuffer, readBuffer, undefined, undefined);
+    super.render(renderer, writeBuffer, readBuffer, 0, false);
 
     cam.near = near;
     cam.far = DEPTH_SPLIT;
@@ -82,7 +93,7 @@ class SplitRenderPass extends RenderPass {
     const bg = this.scene.background;
     this.scene.background = null;
     this.clear = false;
-    super.render(renderer, writeBuffer, readBuffer, undefined, undefined);
+    super.render(renderer, writeBuffer, readBuffer, 0, false);
     this.clear = true;
     this.scene.background = bg;
 
@@ -97,13 +108,14 @@ export const eyePass = (() => {
     type: THREE.HalfFloatType, depthBuffer: false, generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
   });
-  const adapt = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, {
+  const pong = () => new THREE.WebGLRenderTarget(1, 1, {
     type: THREE.HalfFloatType, depthBuffer: false,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-  }));
+  });
+  const adapt = [pong(), pong()] as const;
   const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`;
-  const meter = new FullScreenQuad(new THREE.ShaderMaterial({
-    uniforms: { tSrc: { value: null }, uClip: { value: 0.3 } },
+  const meterMat = new TypedShaderMaterial({
+    uniforms: { tSrc: tex(), uClip: { value: 0.3 } },
     vertexShader: vs,
     fragmentShader: `
       uniform sampler2D tSrc;
@@ -120,9 +132,10 @@ export const eyePass = (() => {
         float w = exp( -dot( d, d ) * 2.5 );
         gl_FragColor = vec4( w * L, w * L * L, w, 1.0 );
       }`,
-  }));
+  });
+  const meter = new FullScreenQuad(meterMat);
   const adaptU = {
-    tMeter: { value: meterRT.texture }, tPrev: { value: null },
+    tMeter: { value: meterRT.texture }, tPrev: tex(),
     uKey: { value: 0.16 }, uRange: { value: new THREE.Vector2(0.5, 150) },
     uDt: { value: 0.016 }, uReset: { value: 1 },
   };
@@ -144,8 +157,8 @@ export const eyePass = (() => {
       }`,
   }));
   // Apply it: the frame, scaled by the adapted exposure.
-  const expose = new FullScreenQuad(new THREE.ShaderMaterial({
-    uniforms: { tSrc: { value: null }, tEye: { value: null } },
+  const exposeMat = new TypedShaderMaterial({
+    uniforms: { tSrc: tex(), tEye: tex() },
     vertexShader: vs,
     fragmentShader: `
       uniform sampler2D tSrc, tEye;
@@ -160,40 +173,41 @@ export const eyePass = (() => {
         gl_FragColor = vec4( min( c, vec3( 6.0 ) ), 1.0 );
       }`,
     depthTest: false, depthWrite: false,
-  }));
-  let cur = 0;
-  const pass = new Pass() as Pass & { uniforms: typeof adaptU; readback: () => number };
-  pass.uniforms = adaptU;
-  pass.render = (renderer, writeBuffer, readBuffer) => {
-    (meter.material as THREE.ShaderMaterial).uniforms.tSrc.value = readBuffer.texture;
-    renderer.setRenderTarget(meterRT);
-    meter.render(renderer);
-    adaptU.tPrev.value = adapt[cur].texture;
-    cur = 1 - cur;
-    renderer.setRenderTarget(adapt[cur]);
-    adaptQ.render(renderer);
-    adaptU.uReset.value = 0;
-    EYE_TEX.value = adapt[cur].texture;
-    // With no bloom after it, exposure can ride along in the grade pass
-    // and save a full-resolution read and write — which is most of what
-    // a pass costs on an integrated GPU.
-    const inGrade = !bloomPass.enabled;
-    pass.needsSwap = !inGrade;
-    gradePass.uniforms.uExpose.value = inGrade ? 1 : 0;
-    // ShaderPass cloned its uniforms, so it gets the texture directly.
-    gradePass.uniforms.tEye.value = adapt[cur].texture;
-    if (inGrade) return;
-    (expose.material as THREE.ShaderMaterial).uniforms.tSrc.value = readBuffer.texture;
-    (expose.material as THREE.ShaderMaterial).uniforms.tEye.value = adapt[cur].texture;
-    renderer.setRenderTarget(writeBuffer);
-    expose.render(renderer);
-  };
-  pass.readback = () => {    // for tuning only
-    const b = new Uint16Array(4);
-    renderer.readRenderTargetPixels(adapt[cur], 0, 0, 1, 1, b);
-    return Math.pow(2, THREE.DataUtils.fromHalfFloat(b[0]));
-  };
-  return pass;
+  });
+  const expose = new FullScreenQuad(exposeMat);
+  let cur: 0 | 1 = 0;
+  class EyePass extends Pass {
+    uniforms = adaptU;
+    render(renderer: THREE.WebGLRenderer, writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget) {
+      meterMat.uniforms.tSrc.value = readBuffer.texture;
+      renderer.setRenderTarget(meterRT);
+      meter.render(renderer);
+      adaptU.tPrev.value = adapt[cur].texture;
+      cur = cur === 0 ? 1 : 0;
+      renderer.setRenderTarget(adapt[cur]);
+      adaptQ.render(renderer);
+      adaptU.uReset.value = 0;
+      EYE_TEX.value = adapt[cur].texture;
+      // With no bloom after it, exposure can ride along in the grade pass
+      // and save a full-resolution read and write — which is most of what
+      // a pass costs on an integrated GPU.
+      const inGrade = !bloomPass.enabled;
+      this.needsSwap = !inGrade;
+      gradePass.uniforms.uExpose.value = inGrade ? 1 : 0;
+      gradePass.uniforms.tEye.value = adapt[cur].texture;
+      if (inGrade) return;
+      exposeMat.uniforms.tSrc.value = readBuffer.texture;
+      exposeMat.uniforms.tEye.value = adapt[cur].texture;
+      renderer.setRenderTarget(writeBuffer);
+      expose.render(renderer);
+    }
+    readback() {    // for tuning only
+      const b = new Uint16Array(4);
+      renderer.readRenderTargetPixels(adapt[cur], 0, 0, 1, 1, b);
+      return Math.pow(2, THREE.DataUtils.fromHalfFloat(b[0]!));
+    }
+  }
+  return new EyePass();
 })();
 composer.addPass(eyePass);
 
@@ -204,9 +218,10 @@ composer.addPass(eyePass);
 export const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.65, 3.0);
 composer.addPass(bloomPass);
 
-export const gradePass = new ShaderPass({
+
+export const gradePass = new TypedShaderPass(new TypedShaderMaterial({
   uniforms: {
-    tDiffuse: { value: null }, tEye: { value: null }, uExpose: { value: 0 },
+    tDiffuse: tex(), tEye: tex(), uExpose: { value: 0 },
     uTime: { value: 0 }, uRes: { value: new THREE.Vector2() },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
@@ -231,14 +246,14 @@ export const gradePass = new ShaderPass({
       col += g * 0.0025;
       gl_FragColor = vec4( max( col, 0.0 ), 1.0 );
     }`,
-});
+}));
 composer.addPass(gradePass);
 composer.addPass(new OutputPass());
 
 // FXAA, for the low tier, which gives up MSAA. It runs last, on the
 // tone-mapped image, where luminance edges are what the eye sees.
-export const fxaaPass = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uInv: { value: new THREE.Vector2(1 / innerWidth, 1 / innerHeight) } },
+export const fxaaPass = new TypedShaderPass(new TypedShaderMaterial({
+  uniforms: { tDiffuse: tex(), uInv: { value: new THREE.Vector2(1 / innerWidth, 1 / innerHeight) } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
   fragmentShader: `
     uniform sampler2D tDiffuse; uniform vec2 uInv;
@@ -261,6 +276,6 @@ export const fxaaPass = new ShaderPass({
       float lB = lum( b );
       gl_FragColor = vec4( ( lB < lMin || lB > lMax ) ? a : b, 1.0 );
     }`,
-});
+}));
 fxaaPass.enabled = false;
 composer.addPass(fxaaPass);

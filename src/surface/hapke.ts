@@ -33,7 +33,7 @@ import * as THREE from 'three';
 export const DEG = Math.PI / 180;
 // The eye's adapted exposure (log2), as a texture, for the few things
 // that must look the same however open the eye is. Written by render/post.ts.
-export const EYE_TEX = { value: null };
+export const EYE_TEX = new THREE.Uniform<THREE.Texture | null>(null);
 
 // The same Hapke function as the shader below, used once per
 // parameter set to normalise it: at the standard i = 30°, e = 0°,
