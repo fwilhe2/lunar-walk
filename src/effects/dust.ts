@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SUN_DIR, ambLight, hemiLight, sun, sunFar } from '../render/lights';
 import { camera, renderer, scene } from '../render/renderer';
 import { uSunView } from '../surface/ground';
-import { GLSL_TS, TS } from '../surface/shaders';
+import { GLSL, TS } from '../surface/shaders';
 import { world } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
@@ -87,7 +87,7 @@ export const dust = (() => {
         vTone = aTone;
         gl_Position = projectionMatrix * mv;
       }`,
-    fragmentShader: GLSL_TS + `
+    fragmentShader: GLSL.TS + `
       #include <packing>
       uniform vec3 color, uSun, uFill, uSunDir, uSunView;
       uniform float uShOn;

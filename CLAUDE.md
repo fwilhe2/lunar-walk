@@ -113,6 +113,8 @@ If the sun ever has to move in azimuth, all three need rebuilding for the new di
 
 ## Surface materials (`surface/patch.ts`)
 
+The ground's GLSL lives in `src/surface/glsl/*.glsl` and is read through the getters on `GLSL` (`surface/shaders.ts`) at compile time. In the dev server a saved `.glsl` file hot-swaps: `glsl/index.ts` accepts its own update, copies the sources into the original `SRC` object (kept across reloads in `import.meta.hot.data`), bumps `glslState.version`, and every material that went through `surfacePatch()` recompiles under a new program cache key — the scene, the place you are standing and the light stay as they are. Keep the literal `import.meta.hot.accept(` there; Vite finds self-accepting modules by that text. Snippets compose by string replacement (`// #lake-surface` in `ground-sparkle.glsl`; prints' `HAPKE_GROUND` is cut from `hapke.glsl`), so there is still one copy of each piece of maths.
+
 Every `MeshStandardMaterial` in the scene goes through `surfacePatch(material, kind, hapke, extra)`, kinds `ground` / `print` / `rock` / `object`:
 
 - **Terrain shadow**: one fetch from the horizon maps (`tsFetch`/`terrainShadow`), compared against the sun's true angular radius. `rock` and `object` kinds pass `lifted = true`, which uses the stored distance-to-skyline to see over it from above the ground.
