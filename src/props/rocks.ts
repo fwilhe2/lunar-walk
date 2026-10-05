@@ -174,7 +174,12 @@ export const rockSystem = (() => {
   // settles on whatever faces up. On Mars the dust is the bright part.
   const rockHapke = hapkeUniforms();
   const ROCK_U = { rkSoil: { value: new THREE.Vector4(0.1, 0.1, 0.1, 0.5) } };
-  const rockMat = surfacePatch(new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 }), 'rock', rockHapke, ROCK_U);
+  // Front faces into the shadow maps, not three's default back faces: a
+  // rock's far side runs down into the soil, so the depth the ground
+  // was tested against lay at or under the ground right round the foot,
+  // and the shadow left out the rock's own footprint and a lit seam
+  // along it. The sunward faces stand well clear of the ground there.
+  const rockMat = surfacePatch(new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, shadowSide: THREE.FrontSide }), 'rock', rockHapke, ROCK_U);
   const prevCompile = rockMat.onBeforeCompile;
   rockMat.onBeforeCompile = (shader, renderer) => {
     prevCompile(shader, renderer);

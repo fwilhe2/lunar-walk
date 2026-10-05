@@ -50,6 +50,31 @@ export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind,
       shadow = `float surfShadow = terrainShadow( vWPos, ${kind === 'rock' || kind === 'object'} ) * devilShadow( vWPos );`;
     }
     let lights = LIGHTS_BEGIN;
+    // The ground never draws into the shadow maps (render/lights.ts), so
+    // it cannot shadow itself and needs no bias against acne. The bias
+    // the rocks need, a centimetre along the beam plus one along the
+    // normal, would at a low sun lift a rock's shadow centimetres off
+    // its foot; and the near cascade is read through a filter as soft as
+    // the sun's penumbra (glsl/sun-shadow.glsl), so the shadow starts at
+    // the contact. Prints lie on the ground and take the same light.
+    const nb = 'directionalLightShadows[ i ].shadowNormalBias';
+    if (!THREE.ShaderChunk.shadowmap_vertex.includes(nb)) throw new Error('shadowmap_vertex: normal bias changed');
+    // Rocks draw their sunward faces into the maps (props/rocks.ts), the
+    // faces they are lit on, so they need more offset than back faces
+    // would to keep off their own depth.
+    if (kind === 'rock') {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <shadowmap_vertex>', THREE.ShaderChunk.shadowmap_vertex.replace(nb, `( ${nb} * 4.0 )`));
+    }
+    if (kind === 'ground' || kind === 'print') {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <shadowmap_vertex>', THREE.ShaderChunk.shadowmap_vertex.replace(nb, '0.0'));
+      fs = fs.replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n#ifdef USE_SHADOWMAP' + GLSL.SUN_SHADOW + '\n#endif');
+      const near = /getShadow\( directionalShadowMap\[ 0 \], directionalLightShadows\[ 0 \]\.shadowMapSize, directionalLightShadows\[ 0 \]\.shadowBias, directionalLightShadows\[ 0 \]\.shadowRadius, /g;
+      if ((lights.match(near) ?? []).length !== 2) throw new Error('LIGHTS_BEGIN: near cascade lookup changed');
+      lights = lights.replace(near, 'groundSunShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, ')
+                     .replace('directionalLightShadows[ 1 ].shadowBias', '0.0');
+    }
     if (kind === 'print') {
       // Keep the sun's irradiance, shadowed, for the ratio.
       const at = 'directLight.color *= objShadow * surfShadow;';
