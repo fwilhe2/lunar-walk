@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { scene } from '../render/renderer';
 import { groundMat } from '../surface/ground';
 import { setCurveAnchor } from './anchor';
+import { gridTriangles, holeTriangles } from './lattice';
 import type { ChunkReply, ChunkRequest } from '../workers/mesh.protocol';
 import type { WorldId } from '../worlds/terrains';
 import { VIEW } from '../worlds/index';
@@ -80,16 +81,7 @@ export const chunkStreamer = (() => {
   function gridIndex(W: number) {
     let idx = indexCache.get(W);
     if (idx) return idx;
-    const arr = new Uint32Array((W - 1) * (W - 1) * 6);
-    let o = 0;
-    for (let j = 0; j < W - 1; j++) {
-      for (let i = 0; i < W - 1; i++) {
-        const a = j * W + i, b = a + 1, c = a + W, d = c + 1;
-        arr[o++] = a; arr[o++] = c; arr[o++] = b;
-        arr[o++] = b; arr[o++] = c; arr[o++] = d;
-      }
-    }
-    idx = new THREE.BufferAttribute(arr, 1);
+    idx = new THREE.BufferAttribute(gridTriangles(W), 1);
     indexCache.set(W, idx);
     return idx;
   }
@@ -107,41 +99,7 @@ export const chunkStreamer = (() => {
     const key = W + ':' + m + ':' + mask;
     let idx = indexCache.get(key);
     if (idx) return idx;
-    const n = W - 3, per = n / m, V = W * W, out: number[] = [];
-    const cut = (fx: number, fz: number) => (mask >> (fz * m + fx)) & 1;
-    const cl = (g: number) => (g < 0 ? 0 : g > n ? n : g);
-    // The cell a quad belongs to, by its centre; skirt quads, which
-    // have no width, fall in the cell whose edge they hang from.
-    const cellOf = (i: number) => Math.min(m - 1, Math.floor((cl(i - 1) + cl(i)) / 2 / per));
-    for (let j = 0; j < W - 1; j++) {
-      const fz = cellOf(j);
-      for (let i = 0; i < W - 1; i++) {
-        if (cut(cellOf(i), fz)) continue;
-        const a = j * W + i, b = a + 1, c = a + W, d = c + 1;
-        out.push(a, c, b, b, c, d);
-      }
-    }
-    for (let L = 1; L < m; L++) {
-      // Along x = L·per, between cells L − 1 and L.
-      const ci = L * per, xb = V + (L - 1) * (n + 1);
-      for (let cj = 0; cj < n; cj++) {
-        const fz = Math.floor((cj + 0.5) / per), l = cut(L - 1, fz), r = cut(L, fz);
-        if (l === r) continue;
-        const t0 = (cj + 1) * W + ci + 1, t1 = t0 + W, b0 = xb + cj, b1 = b0 + 1;
-        if (r) out.push(b0, t0, t1, b0, t1, b1);        // faces +x, into the hole
-        else out.push(b0, t1, t0, b0, b1, t1);          // faces −x
-      }
-      // Along z = L·per, between cells L − 1 and L.
-      const cj = L * per, zb = V + (m - 1) * (n + 1) + (L - 1) * (n + 1);
-      for (let ci2 = 0; ci2 < n; ci2++) {
-        const fx = Math.floor((ci2 + 0.5) / per), u = cut(fx, L - 1), v = cut(fx, L);
-        if (u === v) continue;
-        const t0 = (cj + 1) * W + ci2 + 1, t1 = t0 + 1, b0 = zb + ci2, b1 = b0 + 1;
-        if (v) out.push(b0, t1, t0, b0, b1, t1);        // faces +z
-        else out.push(b0, t0, t1, b0, t1, b1);          // faces −z
-      }
-    }
-    idx = new THREE.BufferAttribute(new Uint32Array(out), 1);
+    idx = new THREE.BufferAttribute(holeTriangles(W, m, mask), 1);
     indexCache.set(key, idx);
     return idx;
   }

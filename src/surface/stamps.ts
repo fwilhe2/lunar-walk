@@ -6,6 +6,7 @@ import { groundHapke } from './ground';
 import { hapkeUniforms } from './hapke';
 import { surfacePatch } from './patch';
 import { dropAt, terrainNormal } from '../terrain/anchor';
+import { meshHeight } from '../terrain/lattice';
 import { chunkStreamer } from '../terrain/streamer';
 
 /* ═════════════════════════════════════════════════════════════
@@ -51,24 +52,11 @@ export const PRINT_U = {
    decal or bury half of it. So each print is a small grid, and every
    grid point is put on the mesh triangle beneath it, reconstructed
    from the same lattice, the same diagonal and the same curvature
-   drop the chunk was built with (terrain/streamer.ts). */
+   drop the chunk was built with (terrain/streamer.ts), by meshHeight()
+   (terrain/lattice.ts). */
 const PRINT_GX = 5, PRINT_GY = 7;
 export const TRACK_L = 0.62;   // length of one wheel-track stamp
 
-// Height of the drawn mesh at (x, z): the chunk lattice of spacing s,
-// split along the b–c diagonal as gridIndex() splits it. vtx(i, j, s)
-// gives the height of lattice corner (i, j) — the caller decides how
-// it is cached and whether the curvature drop goes in. The one copy
-// of the triangulation outside the worker: prints and the rover's
-// wheels both stand on it (here, and vehicles/rover.ts).
-export function meshHeight(x: number, z: number, s: number, vtx: (i: number, j: number, s: number) => number) {
-  const gx = x / s, gz = z / s, i = Math.floor(gx), j = Math.floor(gz);
-  const fx = gx - i, fz = gz - j;
-  const hb = vtx(i + 1, j, s), hc = vtx(i, j + 1, s);
-  if (fx + fz <= 1) { const ha = vtx(i, j, s); return ha + fx * (hb - ha) + fz * (hc - ha); }
-  const hd = vtx(i + 1, j + 1, s);
-  return hd + (1 - fx) * (hc - hd) + (1 - fz) * (hb - hd);
-}
 type Draw = (x: CanvasRenderingContext2D) => void;
 /** One kind of print: stamp(x, z, yaw) lays the next one, oldest replaced first. */
 export interface StampSystem {

@@ -7,7 +7,8 @@ import { rockSystem, type Solid } from '../props/rocks';
 import { scene } from '../render/renderer';
 import { COMPANION_AIM } from '../sky/frames';
 import { surfacePatch } from '../surface/patch';
-import { TRACK_L, meshHeight, tracks } from '../surface/stamps';
+import { TRACK_L, tracks } from '../surface/stamps';
+import { meshHeight } from '../terrain/lattice';
 import { chunkStreamer } from '../terrain/streamer';
 import { world } from '../worlds/index';
 
