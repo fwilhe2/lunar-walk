@@ -6537,6 +6537,9 @@ const rockSystem = (() => {
         }
         mesh.castShadow = C.shadow;
         mesh.receiveShadow = C.receive;
+        // Stones by the shore show in the sea's mirror (§10), on the one
+        // world with a sea; elsewhere the layer would cost nothing anyway.
+        if (world.sea !== undefined) mesh.layers.enable(1);
         mesh.computeBoundingSphere();
         group.add(mesh);
       });
