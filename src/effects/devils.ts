@@ -4,6 +4,7 @@ import { terrainHeight } from '../kernel/terrain';
 import { CURVE_R } from '../kernel/world';
 import { DEPTH_SPLIT, scene } from '../render/renderer';
 import { skyDome } from '../sky/dome';
+import { DV, DV_MAX, GLSL } from '../surface/shaders';
 import { WIND_A } from '../worlds/mars/terrain';
 import { TypedShaderMaterial } from '../util/three';
 
@@ -37,8 +38,8 @@ import { TypedShaderMaterial } from '../util/three';
    is drawn in the sky's own light (sky/dome.ts): the radiance the sky
    would have along the line of sight with the horizon's long column
    of dust in it — the same scattering angle, so the same aureole —
-   a little paler and twice as bright, since the column is denser and
-   lower than the haze. The dome carries the aureole as a colour more
+   a little paler and half again as bright, since the column is denser
+   and lower than the haze. The dome carries the aureole as a colour more
    than a brightness — the glare round the sun is the corona sprite,
    over everything — so a part of the dust's own forward scattering
    (g = 0.6) is put back: against the light at 30° a devil is twice as
@@ -73,8 +74,7 @@ export const devils = (() => {
   // at the ground and opening to several times its width aloft, as on
   // PIA26528; the knot is the dust being torn off the ground, small and
   // dense, gone within a third of a width.
-  const shape = `
-    float colR( float t ) { return 0.7 + 2.0 * t + 1.0 * smoothstep( 0.5, 1.0, t ); }
+  const shape = GLSL.DEVIL_SHAPE + `
     float knot( float t ) { return exp( - t * uH / ( 0.35 * uW ) ); }`;
   const vs = `
     attribute float aSide;
@@ -89,7 +89,7 @@ export const devils = (() => {
       // Wide enough for the cone swollen by its ragged edge and shifted
       // by its wandering axis (see the fragment shader), with room to
       // spare: dust reaching the ribbon's edge would cut there.
-      float env = ( 1.9 * colR( t ) + 1.2 ) * uWs;
+      float env = ( 1.9 * devilR( t ) + 1.2 ) * uWs;
       vec3 V = normalize( P - cameraPosition );
       vec3 S = normalize( cross( vec3( 0.0, 1.0, 0.0 ), V ) );
       P += S * aSide * env * 0.5 * uW;
@@ -129,7 +129,7 @@ export const devils = (() => {
       // The two depth ranges overlap by 2%; dust drawn in both would
       // count twice there, a bright line across a near devil. Split it.
       if ( vNear > ${DEPTH_SPLIT * 0.5}.0 ? vDepth < ${DEPTH_SPLIT * 0.99}.0 : vDepth >= ${DEPTH_SPLIT * 0.99}.0 ) discard;
-      float t = vT, rc = colR( t ) * uWs, kn = knot( t ) * ( 1.0 - uLift );
+      float t = vT, rc = devilR( t ) * uWs, kn = knot( t ) * ( 1.0 - uLift );
       float hm = t * uH - uRise, age = 0.25 * uRise, lo = t * uH / ( 1.2 * uW );
       // The large shapes, slow and torn: the axis wanders more the higher
       // it is, and the two edges swell and pinch on their own, so the
@@ -202,11 +202,12 @@ export const devils = (() => {
     set(n: number | undefined) {
       for (const d of live) { group.remove(d.mesh); d.mesh.material.dispose(); }
       live = [];
+      DV.dvN.value = 0;
       for (let k = 0; k < (n || 0); k++) {
         const mat = new TypedShaderMaterial<DevilUniforms>({
           uniforms: {
             // The dome's uniform objects, shared, not copied.
-            ...skyDome.uniforms, uPale: { value: new THREE.Color(1.9, 2.13, 2.28) },
+            ...skyDome.uniforms, uPale: { value: new THREE.Color(1.5, 1.68, 1.8) },
             uFade: { value: 0 }, uR: { value: 1e6 }, uSway: { value: 0 }, uW: { value: 60 }, uH: { value: 600 },
             uWind: { value: new THREE.Vector2(Math.cos(WIND_A), Math.sin(WIND_A)) },
             uSpin: { value: 0 }, uRise: { value: 0 }, uDust: { value: 0.6 },
@@ -225,6 +226,10 @@ export const devils = (() => {
       }
     },
     update(t: number, cam: THREE.Vector3) {
+      // Their shadows (surface/glsl/devil-shadow.glsl): one entry a slot,
+      // dust zero while the slot is empty.
+      DV.dvN.value = Math.min(live.length, DV_MAX);
+      DV.dvWind.value.set(Math.cos(WIND_A), Math.sin(WIND_A));
       for (let k = 0; k < live.length; k++) {
         const d = live[k]!, T = t + api.skew + k * P / live.length, ep = Math.floor(T / P), s = T - ep * P;
         if (ep !== d.epoch) {
@@ -248,6 +253,7 @@ export const devils = (() => {
         }
         d.f = d.L ? s / d.L : 1;
         d.mesh.visible = d.f < 1;
+        if (k < DV_MAX) DV.dvB.value[k]!.z = 0;   // k < DV_MAX, in range
         if (!d.mesh.visible) continue;
         const f = d.f;
         // Walked downwind at its own pace.
@@ -267,12 +273,18 @@ export const devils = (() => {
         // A longer chord through a wide one, but not proportionally more:
         // linear in width, a wide devil near you stood out like a pillar.
         // The same dust spread wider is thinner, and a mature devil holds
-        // more of it.
+        // more of it. Dense enough to cast a shadow you can see (with
+        // uPale, which keeps its contrast against the sky where it was).
         u.uW.value = d.W; u.uH.value = d.H;
-        u.uDust.value = 0.44 * Math.sqrt(d.W / 40) * u.uWs.value ** -0.7 * (0.75 + 0.25 * tight);
+        u.uDust.value = 0.88 * Math.sqrt(d.W / 40) * u.uWs.value ** -0.7 * (0.75 + 0.25 * tight);
         // The wall turns at the tangential wind; the dust rises at 4 m/s.
         // Both from its birth, so they stay small.
         u.uSpin.value = (s * d.w) % 6.2832; u.uRise.value = s * 4;
+        if (k < DV_MAX) {
+          // k < DV_MAX, so both arrays have the entry.
+          DV.dvA.value[k]!.set(x, d.mesh.position.y, z, d.H);
+          DV.dvB.value[k]!.set(0.5 * d.W * u.uWs.value, u.uHv.value, u.uDust.value * u.uFade.value, u.uLift.value);
+        }
         if (scene.fog instanceof THREE.FogExp2) { u.fogColor.value.copy(scene.fog.color); u.fogDensity.value = scene.fog.density; }
       }
     },

@@ -14,6 +14,18 @@ export const TS = {
 
 // → glsl/terrain-shadow.glsl (GLSL.TS)
 
+// The dust devils' shadows, written by effects/devils.ts and read, like
+// the terrain's, by everything standing on the ground. The arrays hold
+// DV_MAX entries (glsl/devil-shadow.glsl); dvN says how many are live.
+export const DV_MAX = 6;
+export const DV = {
+  dvN: { value: 0 },
+  dvA: { value: Array.from({ length: DV_MAX }, () => new THREE.Vector4()) },   // base x, y, z; height
+  dvB: { value: Array.from({ length: DV_MAX }, () => new THREE.Vector4()) },   // radius, visible height, dust, lift
+  dvWind: { value: new THREE.Vector2() },
+};
+// → glsl/devil-shape.glsl (GLSL.DEVIL_SHAPE), glsl/devil-shadow.glsl (GLSL.DEVIL_SHADOW)
+
 // → glsl/hapke.glsl (GLSL.HAPKE)
 
 // Ground only: texture bombing, the second relief octave, and the
@@ -95,6 +107,8 @@ export const LIGHTS_BEGIN = (() => {
    whatever the dev server last loaded (glsl/index.ts). */
 export const GLSL = {
   get TS() { return '\n' + SRC.terrainShadow; },
+  get DEVIL_SHAPE() { return '\n' + SRC.devilShape; },
+  get DEVIL_SHADOW() { return '\n' + SRC.devilShadow; },
   get HAPKE() { return '\n' + SRC.hapke; },
   get GROUND() { return '\n' + SRC.ground; },
   get GROUND_MAP() { return '\n' + SRC.groundMap; },
