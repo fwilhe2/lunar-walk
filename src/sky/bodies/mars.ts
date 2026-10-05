@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { fbm } from '../../kernel/noise';
+import type { BodyMaps } from './types';
 
 /* ── Mars, from orbit ───────────────────────────────────────────
    Seen from Phobos this fills 42° of sky, which magnifies the map
@@ -20,17 +21,19 @@ import { fbm } from '../../kernel/noise';
 
    The third layer is procedural and lives in the shader, so it
    stays sharp however close you get.                             */
-export function marsMaps() {
+// Fresh canvases always have a 2d context, and pixel indices stay
+// inside the W×H (EW×EH) images they read.
+export function marsMaps(): BodyMaps {
   const W = 1024, H = 512;          // per-pixel base
   const W2 = 2048, H2 = 1024;       // crisp overlay: features, craters
-  const lon2x = (lo) => (lo + 180) / 360 * W;
-  const lat2y = (la) => (90 - la) / 180 * H;
+  const lon2x = (lo: number) => (lo + 180) / 360 * W;
+  const lat2y = (la: number) => (90 - la) / 180 * H;
 
   // ── albedo features, as soft blobs on a darkness mask
   const dc = document.createElement('canvas'); dc.width = W; dc.height = H;
-  const dx = dc.getContext('2d');
+  const dx = dc.getContext('2d')!;
   dx.fillStyle = '#000'; dx.fillRect(0, 0, W, H);
-  const blob = (lo, la, rx, ry, rot, a) => {
+  const blob = (lo: number, la: number, rx: number, ry: number, rot: number, a: number) => {
     dx.save();
     dx.globalAlpha = a; dx.fillStyle = '#fff';
     dx.translate(lon2x(lo), lat2y(la)); dx.rotate(rot);
@@ -62,9 +65,9 @@ export function marsMaps() {
   const dark = dx.getImageData(0, 0, W, H).data;
 
   // The volcanoes: bright dusty shields with dark summit calderas.
-  const VOLC = [[-134, 18, 30], [-113, 12, 17], [-112, 4, 17], [-110, -3, 17], [-98, 12, 14], [147, 25, 20]];
+  const VOLC = [[-134, 18, 30], [-113, 12, 17], [-112, 4, 17], [-110, -3, 17], [-98, 12, 14], [147, 25, 20]] as const;
   const vc = document.createElement('canvas'); vc.width = W; vc.height = H;
-  const vx = vc.getContext('2d');
+  const vx = vc.getContext('2d')!;
   vx.fillStyle = '#000'; vx.fillRect(0, 0, W, H);
   for (const [lo, la, r] of VOLC) {
     const g = vx.createRadialGradient(lon2x(lo), lat2y(la), 0, lon2x(lo), lat2y(la), r);
@@ -78,13 +81,13 @@ export function marsMaps() {
 
   // ── per-pixel base colour
   const base = document.createElement('canvas'); base.width = W; base.height = H;
-  const bctx = base.getContext('2d');
+  const bctx = base.getContext('2d')!;
   const bimg = bctx.createImageData(W, H);
   for (let y = 0; y < H; y++) {
     const lat = 90 - y / H * 180, alat = Math.abs(lat);
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
-      const dk = dark[i] / 255, vo = volc[i] / 255;
+      const dk = dark[i]! / 255, vo = volc[i]! / 255;
       const n1 = fbm(x * 0.013, y * 0.013, 4);
       const n2 = fbm(x * 0.07 + 40, y * 0.07 - 20, 3);
 
@@ -130,7 +133,7 @@ export function marsMaps() {
   // degree is 59 km on Mars, so most of these are ordinary craters
   // and the handful of big ones top out around Argyre. Hellas is
   // not in here — it is drawn by hand, once, with the basins.
-  const CRA = [];
+  const CRA: { lo: number; la: number; r: number; k: number }[] = [];
   for (let i = 0; i < 5200; i++) {
     const la = Math.asin(rnd() * 2 - 1) * 57.2958;
     // Craters survive on the ancient southern highlands and are
@@ -140,7 +143,7 @@ export function marsMaps() {
   }
 
   const day = document.createElement('canvas'); day.width = W2; day.height = H2;
-  const cx2 = day.getContext('2d');
+  const cx2 = day.getContext('2d')!;
   cx2.imageSmoothingEnabled = true;
   cx2.drawImage(base, 0, 0, W2, H2);
   const sx = W2 / 360, sy = H2 / 180;
@@ -160,8 +163,8 @@ export function marsMaps() {
   // ── elevation, for the terminator to shade
   const EW = 1024, EH = 512;
   const el = document.createElement('canvas'); el.width = EW; el.height = EH;
-  const ex = el.getContext('2d');
-  const elon = (lo) => (lo + 180) / 360 * EW, elat = (la) => (90 - la) / 180 * EH;
+  const ex = el.getContext('2d')!;
+  const elon = (lo: number) => (lo + 180) / 360 * EW, elat = (la: number) => (90 - la) / 180 * EH;
   // Datum, with the dichotomy: old high south, resurfaced low north.
   const grad = ex.createLinearGradient(0, 0, 0, EH);
   grad.addColorStop(0.00, '#5a5a5a');
@@ -170,7 +173,7 @@ export function marsMaps() {
   grad.addColorStop(1.00, '#9a9a9a');
   ex.fillStyle = grad; ex.fillRect(0, 0, EW, EH);
 
-  const bump = (lo, la, r, col, stop?) => {
+  const bump = (lo: number, la: number, r: number, col: string, stop?: [offset: number, color: string]) => {
     const g = ex.createRadialGradient(elon(lo), elat(la), 0, elon(lo), elat(la), r);
     g.addColorStop(0, col);
     if (stop) g.addColorStop(stop[0], stop[1]);
@@ -213,13 +216,13 @@ export function marsMaps() {
     for (let x = 0; x < EW; x++) {
       const i = (y * EW + x) * 4;
       const n = fbm(x * 0.05, y * 0.05, 3) - 0.5;
-      const v = eimg.data[i] + n * 46;
+      const v = eimg.data[i]! + n * 46;
       eimg.data[i] = eimg.data[i + 1] = eimg.data[i + 2] = v < 0 ? 0 : v > 255 ? 255 : v;
     }
   }
   ex.putImageData(eimg, 0, 0);
 
-  const mk = (c) => {
+  const mk = (c: HTMLCanvasElement) => {
     const t = new THREE.CanvasTexture(c);
     t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = 4;

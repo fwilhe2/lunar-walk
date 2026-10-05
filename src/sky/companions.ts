@@ -4,6 +4,7 @@ import { scene } from '../render/renderer';
 import { charonMaps } from './bodies/charon';
 import { earthMaps } from './bodies/earth';
 import { galileanMaps } from './bodies/galilean';
+import type { GalileanMoon } from './bodies/galilean.pixels';
 import { jupiterMaps } from './bodies/jupiter';
 import { marsMaps } from './bodies/mars';
 import { moonletMaps } from './bodies/moonlets';
@@ -11,12 +12,14 @@ import { neptuneMaps } from './bodies/neptune';
 import { plutoMaps } from './bodies/pluto';
 import { RING_TAU, saturnMaps, saturnMoonMaps } from './bodies/saturn';
 import { URING_KM, uranusMaps } from './bodies/uranus';
+import type { BodyMaps } from './bodies/types';
 import { venusMaps } from './bodies/venus';
 import { skyDome } from './dome';
-import { CAL, CHARON, COMPANION_AIM, COMPANION_DIST, DIO, ENC, GAN, IAP, IOJ, JOV, MIM, MIR, PLUTO, TRI } from './frames';
+import { CAL, CHARON, COMPANION_AIM, COMPANION_DIST, DIO, ENC, GAN, IAP, IOJ, JOV, MIM, MIR, PLUTO, TRI, type OrbitFrame, type Vec3 } from './frames';
 import { skyDepth } from './sun';
 import { DEG } from '../surface/hapke';
 import { offThread } from '../util/texgen';
+import type { RGB } from '../worlds/view-types';
 import { world } from '../worlds/index';
 
 const TEXGEN = {
@@ -30,24 +33,51 @@ const TEXGEN = {
   ariel: () => saturnMoonMaps('ariel'), umbriel: () => saturnMoonMaps('umbriel'),
   titania: () => saturnMoonMaps('titania'), oberon: () => saturnMoonMaps('oberon'),
   enceladus: () => saturnMoonMaps('enceladus'),
-};
-const texCache = new Map();
+} satisfies Record<string, () => BodyMaps>;
+/** A body whose maps can be drawn: a key of the generators above. */
+type TexKey = keyof typeof TEXGEN;
+const texCache = new Map<TexKey, BodyMaps>();
 // Maps whose costly part can run off the main thread: built ahead of
 // the companion that needs them (companionsAsync), then cached here.
-const TEXGEN_OFF = {
+const TEXGEN_OFF: Partial<Record<TexKey, () => Promise<BodyMaps>>> = {
   jupiter: () => offThread('jupiterPixels', 1024, 512).then(jupiterMaps),
-  ...Object.fromEntries(['io', 'europa', 'ganymede', 'callisto'].map((k) =>
+  ...Object.fromEntries((['io', 'europa', 'ganymede', 'callisto'] satisfies GalileanMoon[]).map((k) =>
     [k, () => offThread('galileanPixels', k).then((px) => galileanMaps(k, px))])),
   charon: () => offThread('charonPixels').then(charonMaps),
   pluto: () => offThread('plutoPixels').then(plutoMaps),
   neptune: () => offThread('neptunePixels', 512, 256).then(neptuneMaps),
   uranus: () => offThread('uranusPixels', 512, 256).then(uranusMaps),
 };
-function bodyTex(k) {
+function bodyTex(k: TexKey) {
   let t = texCache.get(k);
   if (!t) texCache.set(k, t = TEXGEN[k]());
   return t;
 }
+
+/* How a body in the sky is drawn and where it hangs. r is its radius in
+   scene units on the COMPANION_DIST shell (1 for kepler ones, whose
+   group is scaled from their true distance); dir, tilt, pole and face
+   are scene directions and Euler angles; the rest switch on parts of
+   the globe's shader. */
+interface CompanionBase {
+  tex: TexKey; r: number; gain: number; bright?: number;
+  dir?: Vec3; tilt?: Vec3; pole?: Vec3; face?: Vec3;
+  oblate?: number; spin?: number; limb?: number;
+  clouds?: true; night?: true; ocean?: true;
+  relief?: number; detail?: number; detailScale?: number; detailBump?: number;
+  rings?: [number, number];
+  // Swings dir about axis (Phobos and Deimos from Mars).
+  orbit?: { rate: number; axis: Vec3 };
+  kepler?: Kepler;
+}
+/** A moon placed each tick from the two orbits (a, R in km) in a frame
+    (JOV unless given): see makeCompanion(). */
+interface Kepler { a: number; R: number; rate: number; phase: number; frame?: OrbitFrame }
+// The shell off the limb and the veil over the disc each come with
+// their strength, or not at all.
+type Atmo = { atmo: RGB; atmoK: number; atmoR?: number } | { atmo?: never; atmoK?: never; atmoR?: never };
+type Haze = { haze: RGB; hazeK: number; hazeTau?: number } | { haze?: never; hazeK?: never; hazeTau?: never };
+type CompanionSpec = CompanionBase & Atmo & Haze;
 
 const COMPANIONS = {
   /* Earth from the Moon is 1.9° across, and drawn so: four Moons'
@@ -356,17 +386,40 @@ const COMPANIONS = {
   'venus-star': {
     tex: 'venus', r: 10, dir: [0.62, 0.40, -0.20], gain: 1.0, bright: 0.31,
   },
-};
+} satisfies Record<string, CompanionSpec>;
 /** A body that can hang in some world's sky: a key of the table above. */
 export type CompanionId = keyof typeof COMPANIONS;
 
-function makeCompanion(spec) {
+/** What a companion's group carries for the frame loop and the key light. */
+interface CompanionData {
+  pos: THREE.Vector3;                 // where it hangs, from the camera
+  bright: THREE.IUniform<number>;     // its own light (uBright) …
+  bright0: number;                    // … as the spec set it
+  sync(): void;
+  tick(t: number): void;
+}
+// Only narrows the declared type of userData (a declare field emits
+// nothing); makeCompanion() fills it before handing the group out.
+class CompanionGroup extends THREE.Group {
+  declare userData: CompanionData;
+}
+
+type GlobeUniforms = typeof skyDome.uniforms & {
+  dayMap: THREE.IUniform<THREE.Texture>; sunDir: THREE.IUniform<THREE.Vector3>;
+  cloudShift: THREE.IUniform<number>; uBright: THREE.IUniform<number>;
+  // Only for the specs that ask for them.
+  nightMap?: THREE.IUniform<THREE.Texture | undefined>; specMap?: THREE.IUniform<THREE.Texture | undefined>;
+  cloudMap?: THREE.IUniform<THREE.Texture | undefined>; elevMap?: THREE.IUniform<THREE.Texture | undefined>;
+  ringMap?: THREE.IUniform<THREE.Texture | undefined>;
+};
+
+function makeCompanion(spec: CompanionSpec) {
   const T = bodyTex(spec.tex);
-  const group = new THREE.Group();
+  const group = new CompanionGroup();
   if (spec.tilt) group.rotation.set(spec.tilt[0], spec.tilt[1], spec.tilt[2]);
   if (spec.pole) group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...spec.pole).normalize());
 
-  const uni: Record<string, any> = {
+  const uni: GlobeUniforms = {
     dayMap: { value: T.day },
     sunDir: { value: new THREE.Vector3() },
     cloudShift: { value: 0 },
@@ -381,7 +434,7 @@ function makeCompanion(spec) {
   if (spec.clouds) { uni.cloudMap = { value: T.clouds }; decl += 'uniform sampler2D cloudMap;\n'; }
   if (spec.relief) { uni.elevMap = { value: T.elev }; decl += 'uniform sampler2D elevMap;\n'; }
   // Rings, in the globe's equatorial plane, radii in scene units.
-  const ringR = spec.rings ? [spec.r * spec.rings[0], spec.r * spec.rings[1]] : null;
+  const ringR: [number, number] | null = spec.rings ? [spec.r * spec.rings[0], spec.r * spec.rings[1]] : null;
   if (spec.rings) {
     uni.ringMap = { value: T.ring };
     decl += 'uniform sampler2D ringMap;\n';
@@ -548,7 +601,7 @@ function makeCompanion(spec) {
           // it, and its night side is exactly the sky's colour, as the
           // dark part of the Moon in a daytime sky at home is blue. On
           // the airless worlds both terms are zero.
-          ` + (spec.rings ? `
+          ` + (ringR ? `
           // The rings' shadow: follow the sunlight back from this point
           // to the ring plane, and dim it by the rings' optical depth
           // there, along the slant it crosses them at.
@@ -584,7 +637,7 @@ function makeCompanion(spec) {
   }
   group.add(globe);
 
-  if (spec.rings) {
+  if (ringR) {
     /* The rings: a flat annulus in the equatorial plane, lit as a slab
        of particles by single scattering (Chandrasekhar's): on the face
        the sun is on, light comes back up out of the top layer, so the
@@ -597,7 +650,7 @@ function makeCompanion(spec) {
     const rg = new THREE.RingGeometry(ringR[0], ringR[1], 360, 1);
     rg.rotateX(-Math.PI / 2);
     const ring = new THREE.Mesh(rg, new THREE.ShaderMaterial({
-      uniforms: { ringMap: uni.ringMap, sunDir: uni.sunDir, uBright: uni.uBright, ...skyDome.uniforms },
+      uniforms: { ringMap: uni.ringMap!, sunDir: uni.sunDir, uBright: uni.uBright, ...skyDome.uniforms },
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
       vertexShader: `
@@ -700,7 +753,7 @@ function makeCompanion(spec) {
   // observer's own orbit it may cross in front of Jupiter, so it is
   // drawn in front of it; further, behind.
   const kp = spec.kepler, kv = new THREE.Vector3(), KF = kp && kp.frame || JOV;
-  const tickKepler = (t) => {
+  const tickKepler = (kp: Kepler, t: number) => {
     const ph = kp.phase + t * kp.rate;
     const rx = kp.a * Math.cos(ph) - KF.aE, ry = kp.a * Math.sin(ph), d = Math.hypot(rx, ry);
     const D = d < KF.aE ? 4600 : 7800;
@@ -708,19 +761,20 @@ function makeCompanion(spec) {
     pos.copy(kv).multiplyScalar(D / d);
     group.scale.setScalar(D * kp.R / d);
   };
-  if (kp) tickKepler(0);
+  if (kp) tickKepler(kp, 0);
 
   group.userData.tick = (t) => {
-    if (kp) tickKepler(t);
-    if (axis) pos.copy(base).applyAxisAngle(axis, t * spec.orbit.rate).multiplyScalar(COMPANION_DIST);
+    if (kp) tickKepler(kp, t);
+    // axis is set exactly when spec.orbit is.
+    if (axis) pos.copy(base).applyAxisAngle(axis, t * spec.orbit!.rate).multiplyScalar(COMPANION_DIST);
     if (spec.clouds) uni.cloudShift.value = t * 0.0006;   // clouds drift over a turning globe
     if (spec.spin) globe.rotation.y = t * spec.spin;
   };
   return group;
 }
 
-const companionCache = new Map();
-export let liveCompanions = [];
+const companionCache = new Map<CompanionId, CompanionGroup>();
+export let liveCompanions: CompanionGroup[] = [];
 // Venus is the one world with nothing overhead: the cloud deck is
 // opaque in both directions, so there is no Earth to find, no sun,
 // and no stars. A rover there talks to an orbiter it cannot see, so
@@ -730,9 +784,9 @@ const ZENITH_AIM = new THREE.Vector3(0, COMPANION_DIST, 0);
 // From Europa and Pluto the relay is Earth, which never strays far
 // from the sun, so the dish tracks a point just along the sky from it.
 const _up = new THREE.Vector3(0, 1, 0);
-export function relayAim(out) {
+export function relayAim(out: THREE.Vector3) {
   if (world.relay) return out.copy(SUN_DIR).applyAxisAngle(_up, world.relay).multiplyScalar(COMPANION_DIST);
-  return out.copy(liveCompanions.length ? liveCompanions[0].userData.pos : ZENITH_AIM);
+  return out.copy(liveCompanions.length ? liveCompanions[0]!.userData.pos : ZENITH_AIM);   // [0] exists by the length test
 }
 
 // The maps of what hangs in a sky are generated on the main thread (they
@@ -746,7 +800,7 @@ export async function companionsAsync(ids: readonly CompanionId[], ready = () =>
   const missing = ids.filter((id) => !companionCache.has(id));
   if (!missing.length) return;
   // The workers can start at once, in parallel; only what runs here waits.
-  const off = {};
+  const off: Partial<Record<TexKey, Promise<BodyMaps>>> = {};
   for (const id of missing) {
     const k = COMPANIONS[id].tex;
     if (TEXGEN_OFF[k] && !texCache.has(k)) off[k] ||= TEXGEN_OFF[k]();

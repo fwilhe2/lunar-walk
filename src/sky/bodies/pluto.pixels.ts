@@ -19,17 +19,18 @@ import { fbm } from '../../kernel/noise';
 // Pure, so it can run off the main thread (workers/texgen.jobs.ts).
 export function plutoPixels() {
   const W = 512, H = 256;
-  const smoothstep = (v, a, b) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const smoothstep = (v: number, a: number, b: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   const data = new Uint8ClampedArray(W * H * 4);
-  const wrapD = (d) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
+  const wrapD = (d: number) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
   // [east longitude, latitude, half-width and half-height in degrees, strength]
-  const DARK = [
+  type Oval = [lon: number, lat: number, hw: number, hh: number, k: number];
+  const DARK: Oval[] = [
     [95, -6, 66, 15, 1.0],                                          // Cthulhu
     [283, -11, 12, 8, 0.9], [312, -9, 11, 8, 0.95],                 // the string of maculae
     [340, -12, 12, 9, 0.9], [8, -9, 10, 7, 0.85],
     [255, -8, 16, 12, 0.6],                                         // Krun, and the dark ground by it
   ];
-  const BRIGHT = [
+  const BRIGHT: Oval[] = [
     [176, 25, 24, 20, 1.0],                                         // Sputnik Planitia
     [214, 4, 22, 24, 0.8],                                          // Tombaugh Regio's eastern lobe
   ];
@@ -40,7 +41,7 @@ export function plutoPixels() {
     const lon = (rnd() < 0.55 ? 250 + rnd() * 150 : 20 + rnd() * 150) % 360, w = 4 + rnd() * 8;
     DARK.push([lon, -24 + rnd() * 26, w, w * (0.3 + rnd() * 0.3), 0.3 + rnd() * 0.35]);
   }
-  const blob = (lon, lat, b, n) => {
+  const blob = (lon: number, lat: number, b: Oval, n: number) => {
     const dx = wrapD(lon - b[0]) / b[2], dy = (lat - b[1]) / b[3];
     if (dx * dx + dy * dy > 4) return 0;
     return (1 - smoothstep(Math.sqrt(dx * dx + dy * dy) + (n - 0.5) * 1.1, 0.6, 1.0)) * b[4];

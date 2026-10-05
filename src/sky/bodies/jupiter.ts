@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { jupiterPixels } from './jupiter.pixels';
+import type { BodyMaps } from './types';
 
-export function jupiterMaps(px) {
+export function jupiterMaps(px?: ImageDataArray): BodyMaps {
   const W = 1024, H = 512;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d');
+  // A fresh canvas always has a 2d context.
+  const x = c.getContext('2d')!;
   x.putImageData(new ImageData(px || jupiterPixels(W, H), W, H), 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;

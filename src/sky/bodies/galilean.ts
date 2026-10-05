@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { galileanPixels } from './galilean.pixels';
+import { galileanPixels, type GalileanMoon } from './galilean.pixels';
+import type { BodyMaps } from './types';
 
-export function galileanMaps(kind, px?) {
+export function galileanMaps(kind: GalileanMoon, px?: ImageDataArray): BodyMaps {
   const W = 512, H = 256;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
-  c.getContext('2d').putImageData(new ImageData(px || galileanPixels(kind), W, H), 0, 0);
+  // A fresh canvas always has a 2d context.
+  c.getContext('2d')!.putImageData(new ImageData(px || galileanPixels(kind), W, H), 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;
   t.anisotropy = 4;

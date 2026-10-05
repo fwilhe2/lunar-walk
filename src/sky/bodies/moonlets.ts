@@ -1,19 +1,21 @@
 import * as THREE from 'three';
+import type { BodyMaps } from './types';
 
 /* ── The moonlets ───────────────────────────────────────────────
    Both are all but black — a 7% albedo, the reflectance of fresh
    asphalt — and covered in craters. Phobos additionally gets
    Stickney, 9 km across on a 22 km body, and the grooves.        */
-export function moonletMaps(kind) {
+export function moonletMaps(kind: 'phobos' | 'deimos'): BodyMaps {
   const W = 512, H = 256;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d');
+  // A fresh canvas always has a 2d context.
+  const x = c.getContext('2d')!;
   x.fillStyle = '#4a443e'; x.fillRect(0, 0, W, H);
 
   let s = kind === 'phobos' ? 8181 : 3733;
   const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
-  const crater = (cx, cy, r, k) => {
+  const crater = (cx: number, cy: number, r: number, k: number) => {
     const g = x.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx, cy, r);
     g.addColorStop(0, 'rgba(20,17,14,' + (0.55 * k) + ')');
     g.addColorStop(0.72, 'rgba(36,32,28,' + (0.4 * k) + ')');

@@ -9,9 +9,9 @@ import { hash2, smoothT } from '../../kernel/noise';
    of them between 41,800 and 51,200 km, the ε ring outermost and
    widest (20–96 km), all with reflectances of a couple of per cent, so
    from Miranda they are a faint dark thread across the planet. */
-export function uranusPixels(W, H) {
+export function uranusPixels(W: number, H: number) {
   const px = new Uint8ClampedArray(W * H * 4);
-  const pn = (x, y, P) => {
+  const pn = (x: number, y: number, P: number) => {
     const xi = Math.floor(x), yi = Math.floor(y), u = smoothT(x - xi), v = smoothT(y - yi);
     const x0 = ((xi % P) + P) % P, x1 = (x0 + 1) % P;
     return (hash2(x0, yi) * (1 - u) + hash2(x1, yi) * u) * (1 - v) + (hash2(x0, yi + 1) * (1 - u) + hash2(x1, yi + 1) * u) * v;

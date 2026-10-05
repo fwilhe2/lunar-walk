@@ -17,17 +17,17 @@ import { clamp01, hash2, smoothT } from '../../kernel/noise';
    the warm depths, trailing festoons across the Equatorial Zone.
    Colours are true colour, which is subtler than most pictures of
    it: cream and tan and brown, and only the Red Spot is red. */
-export function jupiterPixels(W, H) {
+export function jupiterPixels(W: number, H: number) {
   const px = new Uint8ClampedArray(W * H * 4);
   // Noise that wraps in longitude, period P lattice cells.
-  const pn = (x, y, P) => {
+  const pn = (x: number, y: number, P: number) => {
     const xi = Math.floor(x), yi = Math.floor(y);
     const u = smoothT(x - xi), v = smoothT(y - yi);
     const x0 = ((xi % P) + P) % P, x1 = (x0 + 1) % P;
     return (hash2(x0, yi) * (1 - u) + hash2(x1, yi) * u) * (1 - v)
          + (hash2(x0, yi + 1) * (1 - u) + hash2(x1, yi + 1) * u) * v;
   };
-  const pf = (x, y, P, oct) => {
+  const pf = (x: number, y: number, P: number, oct: number) => {
     let sum = 0, amp = 0.5, f = 1, n = 0;
     for (let i = 0; i < oct; i++) { sum += amp * pn(x * f, y * f, P * f); n += amp; amp *= 0.5; f *= 2; }
     return sum / n;
@@ -57,30 +57,32 @@ export function jupiterPixels(W, H) {
     [-58, 148, 140, 128, 0.8],
     [-65, 158, 152, 142, 0.7],
     [-90, 118, 116, 114, 0.9],   // south polar region
-  ];
+  ] as const;
   // Tabulated at 0.05°, and softened, so band edges are sharp but not
   // aliased: a jet boundary on Jupiter is a few hundred kilometres.
+  // Indices are in range by construction: b stops at the last band, and
+  // j, k and the clamped row stay inside the LN rows.
   const LN = 3601, lut = new Float32Array(LN * 4);
   for (let k = 0; k < LN; k++) {
     const lat = 90 - k * 0.05;
     let b = 0;
-    while (b < BANDS.length - 1 && lat < BANDS[b][0]) b++;
-    lut.set([BANDS[b][1], BANDS[b][2], BANDS[b][3], BANDS[b][4]], k * 4);
+    while (b < BANDS.length - 1 && lat < BANDS[b]![0]) b++;
+    lut.set([BANDS[b]![1], BANDS[b]![2], BANDS[b]![3], BANDS[b]![4]], k * 4);
   }
   const soft = new Float32Array(LN * 4);
   for (let k = 0; k < LN; k++) {
     for (let c = 0; c < 4; c++) {
       let s = 0, n = 0;
-      for (let d = -14; d <= 14; d++) { const j = Math.min(LN - 1, Math.max(0, k + d)); s += lut[j * 4 + c]; n++; }
+      for (let d = -14; d <= 14; d++) { const j = Math.min(LN - 1, Math.max(0, k + d)); s += lut[j * 4 + c]!; n++; }
       soft[k * 4 + c] = s / n;
     }
   }
-  const at = (lat, c) => soft[Math.min(LN - 1, Math.max(0, Math.round((90 - lat) * 20))) * 4 + c];
+  const at = (lat: number, c: 0 | 1 | 2 | 3) => soft[Math.min(LN - 1, Math.max(0, Math.round((90 - lat) * 20))) * 4 + c]!;
 
   // Eddies: one chance per cell of a grid in (lon, lat), turning the
   // sample point around the cell's centre. They roll up on the band
   // boundaries, anticyclonic in zones, cyclonic in belts.
-  const eddy = (lon, lat) => {
+  const eddy = (lon: number, lat: number): [number, number] => {
     const ci = Math.floor(lon / 7), cj = Math.floor((lat + 90) / 4.5);
     for (let dj = -1; dj <= 1; dj++) {
       for (let di = -1; di <= 1; di++) {
@@ -102,14 +104,14 @@ export function jupiterPixels(W, H) {
 
   // The named features, at stated longitudes: [lon, lat, half-width
   // in longitude, half-height in latitude, colour, spin].
-  const GRS = [60, -22.5, 7.0, 4.9];
-  const OVALS: [number, number, number, number, number[]][] = [[112, -33, 3.2, 2.2, [226, 216, 200]]];                  // oval BA
+  const GRS = [60, -22.5, 7.0, 4.9] as const;
+  const OVALS: [lon: number, lat: number, rx: number, ry: number, rgb: [number, number, number]][] = [[112, -33, 3.2, 2.2, [226, 216, 200]]];                  // oval BA
   for (let k = 0; k < 8; k++) OVALS.push([150 + k * 24 + hash2(k, 5) * 8, -40.5, 1.5, 1.0, [236, 232, 222]]);
-  const BARGES = [];
+  const BARGES: [lon: number, lat: number, rx: number, ry: number][] = [];
   for (let k = 0; k < 6; k++) BARGES.push([20 + k * 57 + hash2(k, 9) * 20, 15.2, 3.4, 1.1]);
-  const SPOTS = [];
+  const SPOTS: [lon: number, lat: number][] = [];
   for (let k = 0; k < 10; k++) SPOTS.push([k * 36 + hash2(k, 21) * 10, 6.8]);
-  const wrapD = (d) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
+  const wrapD = (d: number) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
 
   for (let y = 0; y < H; y++) {
     const v = (y + 0.5) / H, lat0 = 90 - v * 180;

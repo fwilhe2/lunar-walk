@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { fbm, hash2, ridged } from '../kernel/noise';
 import { SUN_AZ, SUN_DIR, sunElev } from '../render/lights';
 import { scene } from '../render/renderer';
+import { TypedShaderMaterial } from '../util/three';
 import { world } from '../worlds/index';
 
 /* ═════════════════════════════════════════════════════════════
@@ -25,7 +26,7 @@ skyGroup.rotation.set(1.02, 0.2, 0.45);
 function milkyWay() {
   const W = 1024, H = 320;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
+  const ctx = c.getContext('2d')!;   // a fresh canvas always has one
   const img = ctx.createImageData(W, H);
   for (let y = 0; y < H; y++) {
     const v = y / H - 0.5;
@@ -53,10 +54,11 @@ function milkyWay() {
       // Unresolved star speckle, kept subtle: the crisp stars are
       // drawn as points elsewhere.
       if (hash2(x, y) > 0.9985) {
+        // i is a pixel's first byte in a W×H image, so i+2 is in range.
         const s2 = (30 + hash2(y, x) * 60) * (0.4 + band);
-        img.data[i] = Math.min(255, img.data[i] + s2);
-        img.data[i + 1] = Math.min(255, img.data[i + 1] + s2);
-        img.data[i + 2] = Math.min(255, img.data[i + 2] + s2);
+        img.data[i] = Math.min(255, img.data[i]! + s2);
+        img.data[i + 1] = Math.min(255, img.data[i + 1]! + s2);
+        img.data[i + 2] = Math.min(255, img.data[i + 2]! + s2);
       }
       img.data[i + 3] = 255;
     }
@@ -98,7 +100,7 @@ skyGroup.add(milkyWayMesh);
    The ecliptic here is the plane the sun moves in, the vertical
    circle through SUN_AZ. */
 export const zodiacal = (() => {
-  const mat = new THREE.ShaderMaterial({
+  const mat = new TypedShaderMaterial({
     uniforms: { uSun: { value: new THREE.Vector3() }, uN: { value: new THREE.Vector3() }, uGain: { value: 0 } },
     vertexShader: `
       varying vec3 vD;
@@ -134,7 +136,7 @@ export const zodiacal = (() => {
   return {
     mesh,
     // Once a frame, after the sky has followed the camera.
-    update(cam, gain) {
+    update(cam: THREE.Vector3, gain: number) {
       mesh.position.copy(cam);
       mat.uniforms.uSun.value.copy(SUN_DIR);
       mat.uniforms.uN.value.set(-Math.sin(SUN_AZ), 0, Math.cos(SUN_AZ));
@@ -172,7 +174,7 @@ export const starPoints = (() => {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
-  const starMat = new THREE.ShaderMaterial({
+  const starMat = new TypedShaderMaterial({
     uniforms: { uGain: { value: 1 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `

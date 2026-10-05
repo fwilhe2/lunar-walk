@@ -11,9 +11,9 @@ import { hash2, smoothT } from '../../kernel/noise';
    further south; the second dark spot, D2, with a bright core; and
    long streaks of white cirrus stretched along the latitudes by winds
    that blow at 400 m/s, the fastest in the solar system. */
-export function neptunePixels(W, H) {
+export function neptunePixels(W: number, H: number) {
   const px = new Uint8ClampedArray(W * H * 4);
-  const pn = (x, y, P) => {
+  const pn = (x: number, y: number, P: number) => {
     const xi = Math.floor(x), yi = Math.floor(y), u = smoothT(x - xi), v = smoothT(y - yi);
     const x0 = ((xi % P) + P) % P, x1 = (x0 + 1) % P;
     return (hash2(x0, yi) * (1 - u) + hash2(x1, yi) * u) * (1 - v) + (hash2(x0, yi + 1) * (1 - u) + hash2(x1, yi + 1) * u) * v;
@@ -24,7 +24,7 @@ export function neptunePixels(W, H) {
     [292, -55, 6, 3.5, 84, 112, 166, 0.7],     // D2
     [292, -55, 1.6, 1.2, 226, 234, 240, 0.8],  // its bright core
     [250, -42, 3, 1.4, 236, 240, 244, 0.85],   // the Scooter
-  ];
+  ] as const;
   for (let y = 0; y < H; y++) {
     const v = (y + 0.5) / H, lat0 = 90 - v * 180;
     for (let x = 0; x < W; x++) {

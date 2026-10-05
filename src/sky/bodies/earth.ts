@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { hash2, smoothT } from '../../kernel/noise';
+import type { BodyMaps } from './types';
 
 /* ── Earth ──────────────────────────────────────────────────────
    Coastlines as coarse lon/lat polygons, rasterised to an
@@ -20,10 +21,12 @@ import { hash2, smoothT } from '../../kernel/noise';
    planet covered, which is what makes Earth from space mostly white
    and blue. Every noise field here wraps in longitude, so nothing
    seams at the date line.                                        */
-export function earthMaps() {
+// Fresh canvases always have a 2d context, and pixel indices stay
+// inside the W×H (M2W×M2H) images they read.
+export function earthMaps(): BodyMaps {
   const W = 1024, H = 512;
-  const lon2x = (lo) => (lo + 180) / 360 * W;
-  const lat2y = (la) => (90 - la) / 180 * H;
+  const lon2x = (lo: number) => (lo + 180) / 360 * W;
+  const lat2y = (la: number) => (90 - la) / 180 * H;
 
   const LAND = {
     namerica: [[-168,65],[-165,60],[-153,57],[-140,60],[-130,54],[-124,48],[-124,40],[-117,32],[-110,23],[-105,20],[-97,16],[-92,15],[-88,21],[-97,26],[-93,30],[-84,30],[-81,25],[-80,32],[-75,35],[-70,42],[-66,45],[-60,47],[-55,52],[-64,60],[-78,62],[-95,60],[-85,68],[-95,70],[-125,70],[-141,70],[-160,71]],
@@ -56,18 +59,18 @@ export function earthMaps() {
     svalbard: [[12,77],[22,79],[16,80],[11,79]],
     nzemlya: [[52,71],[58,71],[68,76],[60,76]],
     sakhalin: [[142,46],[143,50],[143,54],[142,53]],
-  };
+  } satisfies Record<string, [lon: number, lat: number][]>;
 
   // Wrapping noise in x: lattice x runs modulo P, so the field closes
   // on itself at the date line. Coordinates are in lattice cells.
-  const pnx = (x, y, P) => {
+  const pnx = (x: number, y: number, P: number) => {
     const xi = Math.floor(x), yi = Math.floor(y);
     const u = smoothT(x - xi), v = smoothT(y - yi);
     const x0 = ((xi % P) + P) % P, x1 = (x0 + 1) % P;
     return (hash2(x0, yi) * (1 - u) + hash2(x1, yi) * u) * (1 - v)
          + (hash2(x0, yi + 1) * (1 - u) + hash2(x1, yi + 1) * u) * v;
   };
-  const pfx = (x, y, P, oct) => {
+  const pfx = (x: number, y: number, P: number, oct: number) => {
     let sum = 0, amp = 0.5, f = 1, n = 0;
     for (let i = 0; i < oct; i++) { sum += amp * pnx(x * f, y * f, P * f); n += amp; amp *= 0.5; f *= 2; }
     return sum / n;
@@ -76,7 +79,7 @@ export function earthMaps() {
   // ── land mask: polygons at 2×, softened, then fractal coasts
   const M2W = W * 2, M2H = H * 2;
   const mc2 = document.createElement('canvas'); mc2.width = M2W; mc2.height = M2H;
-  const mx2 = mc2.getContext('2d');
+  const mx2 = mc2.getContext('2d')!;
   mx2.scale(2, 2);
   mx2.fillStyle = '#000'; mx2.fillRect(0, 0, W, H);
   mx2.fillStyle = '#fff';
@@ -94,7 +97,7 @@ export function earthMaps() {
   }
   mx2.lineTo(W, H); mx2.closePath(); mx2.fill();
   const mb = document.createElement('canvas'); mb.width = M2W; mb.height = M2H;
-  const mbx = mb.getContext('2d');
+  const mbx = mb.getContext('2d')!;
   mbx.filter = 'blur(4px)'; mbx.drawImage(mc2, 0, 0);
   const soft = mbx.getImageData(0, 0, M2W, M2H).data;
 
@@ -107,20 +110,20 @@ export function earthMaps() {
       const wy = (pfx(u * 20 + 7.3, v * 10 + 3.1, 20, 4) - 0.5) * 26 + (pfx(u * 80 + 3.7, v * 40 - 5, 80, 3) - 0.5) * 7;
       let sx = Math.round((x + wx) * 2), sy = Math.round((y + wy) * 2);
       sx = ((sx % M2W) + M2W) % M2W; sy = sy < 0 ? 0 : sy >= M2H ? M2H - 1 : sy;
-      const t = soft[(sy * M2W + sx) * 4] / 255 + (pfx(u * 48, v * 24, 48, 4) - 0.5) * 0.55;
+      const t = soft[(sy * M2W + sx) * 4]! / 255 + (pfx(u * 48, v * 24, 48, 4) - 0.5) * 0.55;
       land[y * W + x] = THREE.MathUtils.smoothstep(t, 0.47, 0.53);
     }
   }
   // Shelf: a blurred copy of the final coast, for shallow water.
   const lc = document.createElement('canvas'); lc.width = W; lc.height = H;
-  const lcx = lc.getContext('2d');
+  const lcx = lc.getContext('2d')!;
   const limg = lcx.createImageData(W, H);
   for (let i = 0; i < W * H; i++) {
-    limg.data[i * 4] = limg.data[i * 4 + 1] = limg.data[i * 4 + 2] = land[i] * 255; limg.data[i * 4 + 3] = 255;
+    limg.data[i * 4] = limg.data[i * 4 + 1] = limg.data[i * 4 + 2] = land[i]! * 255; limg.data[i * 4 + 3] = 255;
   }
   lcx.putImageData(limg, 0, 0);
   const bc = document.createElement('canvas'); bc.width = W; bc.height = H;
-  const bx = bc.getContext('2d');
+  const bx = bc.getContext('2d')!;
   bx.filter = 'blur(3px)'; bx.drawImage(lc, 0, 0);
   const shelf = bx.getImageData(0, 0, W, H).data;
 
@@ -128,7 +131,7 @@ export function earthMaps() {
   const day = document.createElement('canvas'); day.width = W; day.height = H;
   const night = document.createElement('canvas'); night.width = W; night.height = H;
   const spec = document.createElement('canvas'); spec.width = W; spec.height = H;
-  const dctx = day.getContext('2d'), nctx = night.getContext('2d'), sctx = spec.getContext('2d');
+  const dctx = day.getContext('2d')!, nctx = night.getContext('2d')!, sctx = spec.getContext('2d')!;
   const dimg = dctx.createImageData(W, H), nimg = nctx.createImageData(W, H), simg = sctx.createImageData(W, H);
   let rs = 5150; const rnd = () => (rs = (rs * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
@@ -136,8 +139,8 @@ export function earthMaps() {
     const lat = 90 - y / H * 180, alat = Math.abs(lat), v = y / H;
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4, u = x / W;
-      const L = land[y * W + x];
-      const nearCoast = shelf[i] / 255;
+      const L = land[y * W + x]!;
+      const nearCoast = shelf[i]! / 255;
       const n1 = pfx(u * 14, v * 7, 14, 4);
       const n2 = pfx(u * 60 + 9, v * 30, 60, 3);
       const n3 = pfx(u * 160, v * 80 + 5, 160, 2);
@@ -191,7 +194,7 @@ export function earthMaps() {
   // ── clouds
   // Cyclones: midlatitude lows (big, comma-shaped, spinning with the
   // hemisphere) and a few tropical ones (small and tight).
-  const VORT = [];
+  const VORT: { x: number; y: number; r: number; spin: number }[] = [];
   {
     let s = 3131; const r = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
     for (let i = 0; i < 16; i++) {
@@ -205,7 +208,7 @@ export function earthMaps() {
     }
   }
   const cl = document.createElement('canvas'); cl.width = W; cl.height = H;
-  const cctx = cl.getContext('2d');
+  const cctx = cl.getContext('2d')!;
   const cimg = cctx.createImageData(W, H);
   for (let y = 0; y < H; y++) {
     const lat = 90 - y / H * 180, alat = Math.abs(lat);
@@ -238,7 +241,7 @@ export function earthMaps() {
       const n = pfx(uu * 18, vv * 16, 18, 6);
       // Convective texture: cumulus fields inside the cloud masses.
       const cu = pfx(u * 96 + 1.7, v * 70, 96, 3);
-      const L = land[y * W + x];
+      const L = land[y * W + x]!;
       const cv = cover - L * Math.exp(-Math.pow((alat - 22) / 10, 2)) * 0.18;
       let a = THREE.MathUtils.smoothstep(n, 1.02 - cv - 0.10, 1.02 - cv + 0.14);
       a *= 0.72 + 0.28 * cu;
@@ -249,7 +252,7 @@ export function earthMaps() {
   }
   cctx.putImageData(cimg, 0, 0);
 
-  const tex = (c) => {
+  const tex = (c: HTMLCanvasElement) => {
     const t = new THREE.CanvasTexture(c);
     t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = 4;

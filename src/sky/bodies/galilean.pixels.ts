@@ -11,13 +11,14 @@ import { fbm } from '../../kernel/noise';
    spattered with the bright ice of its craters. */
 // Pure, so it can run off the main thread (workers/texgen.jobs.ts): no THREE, no
 // module constants.
-export function galileanPixels(kind) {
+export type GalileanMoon = 'io' | 'europa' | 'ganymede' | 'callisto';
+export function galileanPixels(kind: GalileanMoon) {
   const W = 512, H = 256, DEG = Math.PI / 180;
-  const smoothstep = (v, a, b) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const smoothstep = (v: number, a: number, b: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   const data = new Uint8ClampedArray(W * H * 4);
   let s = kind === 'io' ? 1979 : kind === 'ganymede' ? 1610 : kind === 'europa' ? 1996 : 4242;
   const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const spots = Array.from({ length: kind === 'callisto' ? 260 : 90 }, () =>
+  const spots = Array.from({ length: kind === 'callisto' ? 260 : 90 }, (): [x: number, y: number, r: number, k: number] =>
     [rnd() * W, Math.acos(1 - 2 * rnd()) / Math.PI * H, 0.8 + Math.pow(rnd(), 3) * 7, rnd()]);
   for (let y = 0; y < H; y++) {
     const lat = 90 - (y + 0.5) / H * 180, alat = Math.abs(lat);

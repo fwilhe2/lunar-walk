@@ -13,13 +13,13 @@ import { fbm } from '../../kernel/noise';
 // Pure, so it can run off the main thread (workers/texgen.jobs.ts).
 export function charonPixels() {
   const W = 512, H = 256, DEG = Math.PI / 180;
-  const smoothstep = (v, a, b) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const smoothstep = (v: number, a: number, b: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   const data = new Uint8ClampedArray(W * H * 4);
   let s = 2015; const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const craters = Array.from({ length: 150 }, () =>
+  const craters = Array.from({ length: 150 }, (): [x: number, y: number, r: number, k: number] =>
     [rnd() * W, Math.acos(1 - 2 * rnd()) / Math.PI * H, 0.8 + Math.pow(rnd(), 3) * 6, rnd()]);
   // The canyon belt: a few long troughs, roughly east–west, wandering.
-  const troughs = Array.from({ length: 3 }, () => [4 + rnd() * 16, rnd() * 6.28, 1.6 + rnd() * 1.4]);
+  const troughs = Array.from({ length: 3 }, (): [lat: number, phase: number, width: number] => [4 + rnd() * 16, rnd() * 6.28, 1.6 + rnd() * 1.4]);
   for (let y = 0; y < H; y++) {
     const lat = 90 - (y + 0.5) / H * 180;
     for (let xx = 0; xx < W; xx++) {
