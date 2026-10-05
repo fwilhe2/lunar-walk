@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { SUN_XZ } from '../render/lights';
 import { ANISO } from '../render/renderer';
-import { regolithData } from './regolith.pixels';
+import type { regolithData } from './regolith.pixels';
 import { offThread } from '../util/texgen';
+import { runJob } from '../workers/texgen.jobs';
 import { VIEW, type WorldId } from '../worlds/index';
 
 
@@ -67,7 +68,7 @@ export function regolithAsync(id: WorldId) {
 }
 export function regolithFor(id: WorldId) {
   let m = regoCache.get(id);
-  if (!m) { const a = regoArgs(id); regoCache.set(id, m = regolithTextures(regolithData(a.v, a.hx, a.hy))); }
+  if (!m) { const a = regoArgs(id); regoCache.set(id, m = regolithTextures(runJob('regolithData', [a.v, a.hx, a.hy]))); }
   return m;
 }
 // What the ground holds until its world's set arrives. Never drawn —

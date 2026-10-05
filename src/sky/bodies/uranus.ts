@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RING_TAU } from './saturn';
-import { uranusPixels } from './uranus.pixels';
+import { runJob } from '../../workers/texgen.jobs';
 import type { BodyMaps } from './types';
 
 export const URING_KM = [41700, 51300] as const;
@@ -36,7 +36,7 @@ export function uranusMaps(px?: ImageDataArray): BodyMaps {
   const W = 512, H = 256;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   // A fresh canvas always has a 2d context.
-  c.getContext('2d')!.putImageData(new ImageData(px || uranusPixels(W, H), W, H), 0, 0);
+  c.getContext('2d')!.putImageData(new ImageData(px || runJob('uranusPixels', [W, H]), W, H), 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;
   t.anisotropy = 4;

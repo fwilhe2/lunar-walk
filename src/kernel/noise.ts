@@ -1,4 +1,7 @@
-export var SEED = 19690720;
+// The seed before any world is selected — which it never is in the
+// texgen worker, so every generated map is drawn under it (runJob()).
+export const SEED_DEFAULT = 19690720;
+export var SEED = SEED_DEFAULT;
 
 // Integer bit-mix rather than the usual sin() trick: this is called
 // tens of millions of times while chunks are built, and sin() costs
