@@ -777,6 +777,29 @@ var WORLDS = {
     Dtr: 38000,
   },
 
+  /* Mimas: the smallest body known to be round by its own gravity, and
+     as cratered as anything that size can be — saturated, the bowls
+     deep and fresh-edged, nothing to soften them (Schenk 1989). On this,
+     the side facing Saturn, there is no Herschel: that is on the leading
+     face, where Saturn is below the horizon. In gravity this weak no
+     crater in reach is complex. Seed: 17 September 1789, when William
+     Herschel found it. */
+  mimas: {
+    id: 'mimas', kind: 18, seed: 17890917,
+    g: 0.064, R: 198200,
+    lander: [36.9, -9.2],
+    craters: [
+      { cell: 32768, salt:  7, rMin: 4000, rMax: 16000, count: 1, prob: 0.60, ageK: 1.3 },
+      { cell:  8192, salt: 13, rMin: 1000, rMax:  4000, count: 2, prob: 0.85, ageK: 1.6 },
+      { cell:  2048, salt: 29, rMin:  250, rMax:  1000, count: 2, prob: 0.85, ageK: 1.9 },
+      { cell:   512, salt: 41, rMin:   60, rMax:   250, count: 2, prob: 0.75, ageK: 2.2, rocks: 1 },
+      { cell:   128, salt: 53, rMin:   15, rMax:    60, count: 2, prob: 0.65, ageK: 2.4, rocks: 1 },
+      { cell:    32, salt: 61, rMin:    4, rMax:    15, count: 1, prob: 0.40, ageK: 2.5, rocks: 1 },
+    ],
+    craterAmp: 1, depthK: 1.0, rampart: 0, halo: 0.2,
+    Dtr: 40000,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -2941,6 +2964,26 @@ function hVesta(x, z) {
   return h + craterAt(x, z);
 }
 
+/* ── Mimas ──────────────────────────────────────────────────────
+   Craters on craters, and under them a regional swell of kilometres —
+   a body 400 km across holds relief like that — with a few troughs, the
+   chasmata, cutting across in long shallow lines. */
+function hMimas(x, z) {
+  var h = (fbm(x * 0.00002 + 1, z * 0.00002 - 3, 4) - 0.5) * 3000;
+  h += (fbm(x * 0.0003 - 4, z * 0.0003 + 2, 3) - 0.5) * 90;
+  h += (fbm(x * 0.003 + 6, z * 0.003, 2) - 0.5) * 8;
+  h += (fbm(x * 0.03, z * 0.03 - 2, 2) - 0.5) * 1.0;
+  h += (fbm(x * 0.15 + 2, z * 0.15, 2) - 0.5) * 0.16;
+  // A chasma: a trough a couple of kilometres wide and some hundreds of
+  // metres deep, one at most per 40 km lane.
+  var t = z * 0.94 - x * 0.34, li = Math.floor(t / 40000);
+  if (cellRnd(li, 0, 101, 0) < 0.5) {
+    var a = (t - (li + 0.5) * 40000 - (valueNoise(x * 0.00002, li) - 0.5) * 12000) / 1500;
+    if (a > -2 && a < 2) h -= 300 * Math.exp(-a * a * 1.5) * sstep(0.3, 0.5, valueNoise(x * 0.00001, li * 1.7 + 3));
+  }
+  return h + craterAt(x, z);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2953,7 +2996,7 @@ function terrainHeight(x, z) {
        : WK === 11 ? hCallisto(x, z) : WK === 12 ? hGanymede(x, z)
        : WK === 13 ? hTriton(x, z) : WK === 14 ? hCeres(x, z)
        : WK === 15 ? hIapetus(x, z) : WK === 16 ? hMiranda(x, z)
-       : WK === 17 ? hVesta(x, z) : hSmall(x, z);
+       : WK === 17 ? hVesta(x, z) : WK === 18 ? hMimas(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -3349,6 +3392,14 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     var cl = fresh * WORLD.halo + rayBrightness(x, z);
     v = (1.0 + (n1 - 0.5) * 0.14 + (n2 - 0.5) * 0.1 + slope * 0.35 + cl) * (1 - dkm * 0.65);
     out[0] = v * 1.04; out[1] = v * 1.0; out[2] = v * 0.93;
+
+  } else if (WK === 18) {
+    // Mimas is clean water ice, the second-brightest of Saturn's inner
+    // moons after Enceladus, a little grey; crater walls a shade bluer
+    // where fresher ice shows.
+    var n1 = valueNoise(x * 0.0008 + 2, z * 0.0008 - 1), n2 = valueNoise(x * 0.05, z * 0.05);
+    v = (1.0 + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.06) * (1 + slope * 0.12 + fresh * WORLD.halo);
+    out[0] = v * (0.985 - slope * 0.02); out[1] = v * 0.993; out[2] = v * (1.0 + slope * 0.02);
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -3885,6 +3936,45 @@ const VIEW = {
     look: [-1.64, 0.12],
   },
 
+  /* Mimas has Enceladus's sun in Enceladus's units, on ice nearly as
+     bright. Saturn is 186,000 km off, three of its own radii: 38°
+     across, seventy-six full Moons, 50° up in the east from the site
+     (5°N, 40° west of the point beneath it), and fixed. The rings are
+     a line through it — Mimas orbits 1.6° out of their plane at most —
+     and their shadow a band across it; Mimas itself clears a gap in
+     them, the Cassini Division, by resonance. Night under Saturn is 5%
+     of the sun, the brightest planetshine anywhere here. The gravity is
+     a hundred-and-fiftieth of Earth's: jets and the beacon. */
+  mimas: {
+    name: 'MIMAS', site: 'Saturn-facing hemisphere', gTxt: '0.064 m/s²',
+    title: 'Mimas Walk', sub: 'Saturn-facing hemisphere · 0.007 g · surface unbounded',
+    fine: 'Craters on craters on a moon barely big enough to be round. Saturn fills 38° of the<br>' +
+          'sky in the east, its rings a line through it, and never moves. A push would keep you<br>' +
+          'up for a minute: use the jets. <b>Esc</b> picks another world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 0.378, sunSize: 5.9, sunHDR: [60, 57, 52],
+    corona: 1600, coronaColor: [0.68, 0.66, 0.62],
+    hemi: [0x1a1b1e, 0x3e4044, 12.0], amb: [0x000000, 0],
+    fog: null, sky: null,
+    grey: 222, mapTint: [0.99, 1.0, 1.015], pits: 40, grain: 0.6, clods: 0.45, pebbles: 60,
+    // Mimas's photometry (Verbiscer & Veverka 1992): very bright grains,
+    // backscattering, rougher than Enceladus.
+    hapke: { w: 0.94, b: 0.30, c: 0.45, B0: 0.8, h: 0.006, theta: 25, Bc0: 0.4, hc: 0.003 },
+    micro: [0.25, 0.22, 0.3], sparkle: 2.5,
+    levels: LE, fly: 400, rover: false, jets: true,
+    mu: 0.5,
+    dustColor: 0xdfe2e6, dustDrag: 0, stampColor: 0xcdd2d8, soil: 0xe0e3e7,
+    rockTint: [0.98, 0.99, 1.02], rockAlb: [0.6, 0.2], rockN: 0.4,
+    landmark: 'beacon', flagColor: 0xb9bcc2,
+    lander: 'generic',
+    exposure: 1.0, eye: [0.40, 0.05, 15], starGain: 0.012, bloom: [0.5, 0.65, 3.0],
+    companions: ['saturn-mim', 'enceladus-mim', 'tethys-mim', 'dione-mim', 'rhea-mim', 'titan-mim'],
+    // Night: Saturn, 38° across at albedo 0.47 — 5% of the sun.
+    night: { ratio: 0.050, radius: 0.331, color: 0xfff0d8, label: 'SATURNLIT', stars: 8 },
+    relay: 0.1,
+    look: [-1.674, 0.66],
+  },
+
   /* Iapetus is 9.5 AU out with Saturn: 15 W/m², a ninetieth of the
      Moon's. Light is kept in units a hundred times the Moon's, Titan's,
      because the dark lag here is darker than lunar soil and in Europa's
@@ -4353,7 +4443,7 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'vesta', 'ceres', 'io', 'europa', 'ganymede', 'callisto', 'enceladus', 'titan', 'iapetus', 'miranda', 'triton', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'vesta', 'ceres', 'io', 'europa', 'ganymede', 'callisto', 'mimas', 'enceladus', 'titan', 'iapetus', 'miranda', 'triton', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
@@ -8780,7 +8870,8 @@ function saturnMoonMaps(kind) {
   const img = x.createImageData(W, H);
   // Uranus's moons too: Ariel brightest, Umbriel darkest, all grey.
   const base = { titan: [214, 150, 72], tethys: [226, 226, 226], dione: [212, 212, 214], rhea: [206, 204, 202], mimas: [196, 196, 198],
-    ariel: [214, 212, 208], umbriel: [118, 116, 113], titania: [184, 178, 172], oberon: [168, 160, 152] }[kind];
+    ariel: [214, 212, 208], umbriel: [118, 116, 113], titania: [184, 178, 172], oberon: [168, 160, 152],
+    enceladus: [240, 243, 246] }[kind];
   for (let y = 0; y < H; y++) {
     for (let xx = 0; xx < W; xx++) {
       const n = fbm(xx * 0.06 + base[0], y * 0.06, 3);
@@ -8844,6 +8935,7 @@ const TEXGEN = {
   neptune: neptuneMaps, uranus: uranusMaps,
   ariel: () => saturnMoonMaps('ariel'), umbriel: () => saturnMoonMaps('umbriel'),
   titania: () => saturnMoonMaps('titania'), oberon: () => saturnMoonMaps('oberon'),
+  enceladus: () => saturnMoonMaps('enceladus'),
 };
 
 /* Where a locked companion hangs, and how it is turned, as seen from
@@ -8919,6 +9011,15 @@ const GAN = (() => {
    orbit is tilted to Saturn's equator, so the ring plane is not the
    orbit plane: the pole is turned 12° toward the line of sight, and
    the rings open by that much. */
+/* Saturn from Mimas, 5°N, 40° west of the point beneath it: 185,539 km
+   off, 38° across, 50° up in the east, the observer's offset kept. */
+const MIM = (() => {
+  const F = siteFrame(5, -40), a = 185539, R = 198.2, b = 5 * DEG, l = -40 * DEG;
+  const rel = [a - R * Math.cos(b) * Math.cos(l), -R * Math.cos(b) * Math.sin(l), -R * Math.sin(b)];
+  const d = Math.hypot(...rel);
+  return { J: F(rel.map((v) => v / d)), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: a, ang: Math.asin(60268 / d) };
+})();
+
 const IAP = (() => {
   const F = siteFrame(1.7, -50), t = 12 * DEG;
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), pole: F([-Math.sin(t), 0, Math.cos(t)]), aE: 3560820 };
@@ -9176,6 +9277,26 @@ const COMPANIONS = {
     kepler: { a: 435910, R: 788.9, rate: -0.0219, phase: 4.3, frame: MIR } },
   'oberon-mir': { tex: 'oberon', r: 1, gain: 1.0, bright: 0.36,
     kepler: { a: 583520, R: 761.4, rate: -0.0234, phase: 5.6, frame: MIR } },
+
+  /* Saturn from Mimas: 38° across at true size, the rings edge-on; the
+     outer moons along the ring line at their synodic rates about Mimas,
+     compressed like the others'. Enceladus and Tethys pass within half a
+     degree's size. */
+  'saturn-mim': {
+    tex: 'saturn', r: COMPANION_DIST * Math.sin(MIM.ang), dir: MIM.J, pole: MIM.Z, oblate: 0.902, spin: 0.011,
+    gain: 1.0, bright: 0.15, limb: 0.9, rings: [66900 / 60268, 140500 / 60268],
+    atmo: [0.55, 0.52, 0.45], atmoK: 0.06, atmoR: 1.004,
+  },
+  'enceladus-mim': { tex: 'enceladus', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 238020, R: 252.1, rate: -0.0123, phase: 0.7, frame: MIM } },
+  'tethys-mim': { tex: 'tethys', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 294619, R: 531.1, rate: -0.0197, phase: 2.0, frame: MIM } },
+  'dione-mim': { tex: 'dione', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 377396, R: 561.4, rate: -0.0258, phase: 3.3, frame: MIM } },
+  'rhea-mim': { tex: 'rhea', r: 1, gain: 1.0, bright: 0.15,
+    kepler: { a: 527108, R: 763.8, rate: -0.0311, phase: 4.6, frame: MIM } },
+  'titan-mim': { tex: 'titan', r: 1, gain: 1.0, bright: 0.13, atmo: [0.9, 0.62, 0.32], atmoK: 0.5, atmoR: 1.12,
+    kepler: { a: 1221870, R: 2574.7, rate: -0.037, phase: 5.8, frame: MIM } },
 
   /* Saturn from Iapetus: 1.94° across, rings 4.4° tip to tip and open by
      12°, the brightness the same as from Enceladus, here in units ten
@@ -12112,7 +12233,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { vesta: 0.25, miranda: 0.079, iapetus: 0.223, ceres: 0.284, triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { mimas: 0.064, vesta: 0.25, miranda: 0.079, iapetus: 0.223, ceres: 0.284, triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A first-person planetary surface simulator — Mercury, Venus, Moon, Mars, Phobos, Deimos, Vesta, Ceres, Io, Europa, Ganymede, Callisto, Enceladus, Titan, Iapetus, Miranda, Triton, Pluto, Charon, in order out from the sun — with an **unbounded, streamed surface** and three locomotion modes (EVA / rover / flight). Three.js r160, **no build step, no package manager, no tests, no network at runtime** — every texture is generated in the browser at load, and terrain chunks are generated forever in Web Workers as the player moves. `README.md` documents the physical modelling decisions (crater morphometry, Hapke photometry, terrain shadows, eye adaptation, curvature, Earth's phase); read it before changing anything that claims to be realistic, since most constants there are deliberate rather than tuned by eye.
+A first-person planetary surface simulator — Mercury, Venus, Moon, Mars, Phobos, Deimos, Vesta, Ceres, Io, Europa, Ganymede, Callisto, Mimas, Enceladus, Titan, Iapetus, Miranda, Triton, Pluto, Charon, in order out from the sun — with an **unbounded, streamed surface** and three locomotion modes (EVA / rover / flight). Three.js r160, **no build step, no package manager, no tests, no network at runtime** — every texture is generated in the browser at load, and terrain chunks are generated forever in Web Workers as the player moves. `README.md` documents the physical modelling decisions (crater morphometry, Hapke photometry, terrain shadows, eye adaptation, curvature, Earth's phase); read it before changing anything that claims to be realistic, since most constants there are deliberate rather than tuned by eye.
 
 ## Running
 
@@ -73,6 +73,8 @@ Two things look like exceptions and are not:
 **Vesta (`hVesta`, kind 17)**: saturated craters (none complex in reach) and Divalia Fossa's troughs (`veTrough`, one per 34 km lane, each inside its lane, segments hundreds of km long), shifted by `VE_OX`/`VE_OZ` to put the site on a north rim. Dark material is colour only.
 
 **Dust devils (`devils`, §7, `world.devils` is how many)** are camera-facing ribbon columns like the geysers but standing in the streamed range, on `terrainHeight()` at their place and dropped by the curve from the camera; each slot lives `LIFE` seconds, then respawns 3–8 km round the camera, seeded by slot and epoch, and walks downwind (`WIND_A`). They take scene fog. Mars's dust-devil *tracks* (`devilTracks`) are colour only, in the kernel.
+
+**Mimas (`hMimas`, kind 18)**: six saturated crater classes over a kilometres-high regional swell and occasional chasmata (troughs in 40 km lanes). Saturn-facing site (`MIM` frame, parallax kept), so no Herschel. Enceladus has a small-moon map now (`saturnMoonMaps('enceladus')`) for its companion role.
 
 **Saturn's rings** are a companion capability: `rings: [inner, outer]` in planet radii adds an annulus in the group's equatorial plane, profiled by `saturnRingProfile()` (colour in RGB, optical depth / `RING_TAU` in alpha, returned as `T.ring` by the body's map generator), lit by single scattering with Saturn's shadow, and adds the rings' shadow to the globe shader (ray to the ring plane, using varyings `vC`/`vP` for centre and pole). From Enceladus they are edge-on by geometry, not by choice.
 
