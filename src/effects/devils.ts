@@ -2,9 +2,8 @@ import * as THREE from 'three';
 import { hash2 } from '../kernel/noise';
 import { terrainHeight } from '../kernel/terrain';
 import { CURVE_R } from '../kernel/world';
-import { KEY, SUN_DIR, hemiLight } from '../render/lights';
 import { DEPTH_SPLIT, scene } from '../render/renderer';
-import { world } from '../worlds/index';
+import { skyDome } from '../sky/dome';
 import { WIND_A } from '../worlds/mars/terrain';
 import { TypedShaderMaterial } from '../util/three';
 
@@ -24,12 +23,25 @@ import { TypedShaderMaterial } from '../util/three';
    updraft, so the lumps climb in a helix as on Perseverance's navcam
    sequences (PIA26528). The column leans and bends downwind, where
    the wind is stronger aloft. Each lives ten minutes, fading in and
-   out, and the next rises somewhere else round wherever you then are. */
-type DevilUniforms = {
-  uSun: THREE.IUniform<THREE.Vector3>; uLight: THREE.IUniform<number>; uCol: THREE.IUniform<THREE.Color>;
+   out, and the next rises somewhere else round wherever you then are.
+
+   The dust is the dust the sky is made of, lit by the same sun, so it
+   is drawn in the sky's own light (sky/dome.ts): the radiance the sky
+   would have along the line of sight with the horizon's long column
+   of dust in it — the same scattering angle, so the same aureole —
+   a little paler and twice as bright, since the column is denser and
+   lower than the haze. The dome carries the aureole as a colour more
+   than a brightness — the glare round the sun is the corona sprite,
+   over everything — so a part of the dust's own forward scattering
+   (g = 0.6) is put back: against the light at 30° a devil is twice as
+   bright as from the side, not four times, which made it a white
+   flare. It turns blue in the aureole like the haze, and dims with
+   the sky at dusk. */
+type DevilUniforms = typeof skyDome.uniforms & {
+  uPale: THREE.IUniform<THREE.Color>;
   uFade: THREE.IUniform<number>; uR: THREE.IUniform<number>; uSway: THREE.IUniform<number>;
   uW: THREE.IUniform<number>; uH: THREE.IUniform<number>; uWind: THREE.IUniform<THREE.Vector2>;
-  uSpin: THREE.IUniform<number>; uRise: THREE.IUniform<number>; uTau: THREE.IUniform<number>;
+  uSpin: THREE.IUniform<number>; uRise: THREE.IUniform<number>; uDust: THREE.IUniform<number>;
   fogColor: THREE.IUniform<THREE.Color>; fogDensity: THREE.IUniform<number>;
 };
 /* A devil's slot: its column, the epoch it was last respawned in, where
@@ -76,7 +88,7 @@ export const devils = (() => {
       gl_Position = projectionMatrix * viewMatrix * vec4( P, 1.0 );
     }`;
   const fs = `
-    uniform vec3 uSun, uCol; uniform float uLight, uFade, uW, uH, uSpin, uRise, uTau;
+    uniform vec3 uPale; uniform float uFade, uW, uH, uSpin, uRise, uDust;
     varying float vT, vX, vE, vNear, vDepth; varying vec3 vP;
     ${shape}
     float hash3( vec3 p ) {
@@ -120,17 +132,16 @@ export const devils = (() => {
       // Skirt: the dust being lifted, low, wide and dense.
       float us = vX / ( ( 1.0 + 1.1 * sk ) * ( 0.7 + 0.55 * nb ) );
       float tauS = max( 0.0, 1.0 - us * us ) * sk * ( 0.5 + n );
-      float tau = uTau * ( tauC + 1.2 * tauS ) * uFade * smoothstep( 1.0, 0.9, abs( vE ) );
+      float tau = uDust * ( tauC + 1.2 * tauS ) * uFade * smoothstep( 1.0, 0.9, abs( vE ) );
       float a = 1.0 - exp( - tau );
-      // Fine dust, forward-scattering (g = 0.6), lit by the sun and,
-      // a good deal, by the dusty sky; the sunward side of the column
-      // a little brighter.
+      // In the sky's light with the horizon's column, with some of its
+      // forward scattering (see above; 1 at 90°); the sunward side of
+      // the column a little brighter.
       vec3 V = normalize( vP - cameraPosition ), L = normalize( uSun );
+      float hg = 0.85 + 0.375 * 0.64 / pow( 1.36 - 1.2 * dot( V, L ), 1.5 );
       vec3 S = normalize( cross( vec3( 0.0, 1.0, 0.0 ), V ) ), Vh = normalize( vec3( V.x, 0.0, V.z ) );
-      float c = dot( V, L );
-      float hg = 0.64 / pow( 1.36 - 1.2 * c, 1.5 );
       float side = 0.75 + 0.25 * dot( S * xc - Vh * sqrt( 1.0 - xc * xc ), L );
-      gl_FragColor = vec4( uCol * uLight * ( 0.10 + 0.16 * hg ) * side * a, a );
+      gl_FragColor = vec4( uPale * skyRadianceT( V, 1.0 ) * hg * side * a, a );
       // Premultiplied, so fog is too: toward fogColor × a, or the fog
       // colour paints the whole ribbon however thin the dust.
       #include <fog_fragment>
@@ -162,14 +173,15 @@ export const devils = (() => {
       for (let k = 0; k < (n || 0); k++) {
         const mat = new TypedShaderMaterial<DevilUniforms>({
           uniforms: {
-            uSun: { value: new THREE.Vector3() }, uLight: { value: 1 }, uCol: { value: new THREE.Color(0.78, 0.52, 0.33) },
+            // The dome's uniform objects, shared, not copied.
+            ...skyDome.uniforms, uPale: { value: new THREE.Color(1.9, 2.13, 2.28) },
             uFade: { value: 0 }, uR: { value: 1e6 }, uSway: { value: 0 }, uW: { value: 60 }, uH: { value: 600 },
             uWind: { value: new THREE.Vector2(Math.cos(WIND_A), Math.sin(WIND_A)) },
-            uSpin: { value: 0 }, uRise: { value: 0 }, uTau: { value: 0.6 },
+            uSpin: { value: 0 }, uRise: { value: 0 }, uDust: { value: 0.6 },
             fogColor: { value: new THREE.Color() }, fogDensity: { value: 0 },
           },
           vertexShader: vs.replace('void main() {', '#include <fog_pars_vertex>\nvoid main() {').replace('gl_Position = projectionMatrix * viewMatrix * vec4( P, 1.0 );', 'vec4 mvPosition = viewMatrix * vec4( P, 1.0 ); gl_Position = projectionMatrix * mvPosition;\n#include <fog_vertex>'),
-          fragmentShader: '#include <fog_pars_fragment>\n' + fs.replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor,', 'fogColor * gl_FragColor.a,')),
+          fragmentShader: '#include <fog_pars_fragment>\n' + skyDome.glsl + fs.replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor,', 'fogColor * gl_FragColor.a,')),
           side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: true,
           blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
         });
@@ -196,13 +208,11 @@ export const devils = (() => {
         d.mesh.position.set(x, terrainHeight(x, z), z);
         const u = d.mesh.material.uniforms;
         u.uFade.value = Math.sin(Math.PI * f) ** 0.5;
-        u.uSun.value.copy(SUN_DIR);
-        u.uLight.value = world.sunPower * KEY.scale + hemiLight.intensity * 0.5;
         u.uR.value = CURVE_R;
         u.uSway.value = t * 0.3 + k;
         // A longer chord through a wide one, but not proportionally more:
         // linear in width, a wide devil near you stood out like a pillar.
-        u.uW.value = d.W; u.uH.value = d.H; u.uTau.value = 0.44 * Math.sqrt(d.W / 40);
+        u.uW.value = d.W; u.uH.value = d.H; u.uDust.value = 0.44 * Math.sqrt(d.W / 40);
         // The wall turns at the tangential wind; the dust rises at 4 m/s.
         // Both from its birth, so they stay small.
         u.uSpin.value = (f * LIFE * d.w) % 6.2832; u.uRise.value = f * LIFE * 4;

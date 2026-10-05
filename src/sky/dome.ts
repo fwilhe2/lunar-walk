@@ -40,10 +40,10 @@ export const skyDome = (() => {
     uniform vec3 uSun, uZenith, uHorizon, uAureole;
     uniform float uK, uAmt, uGain, uTau;
 
-    vec3 skyRadiance( vec3 D ) {
-      // The dust column is longest along the horizon, so that is
-      // where the scattered light piles up.
-      float t = pow( 1.0 - clamp( D.y, 0.0, 1.0 ), 2.6 );
+    // t is how much of the horizon's long dust column is in the line
+    // of sight (1 at the horizon); the dust devils (effects/devils.ts)
+    // ask for the horizon's at every elevation.
+    vec3 skyRadianceT( vec3 D, float t ) {
       vec3 col = mix( uZenith, uHorizon, t );
 
       // The forward-scattering halo: on Mars narrow, strong and
@@ -60,6 +60,11 @@ export const skyDome = (() => {
       // shows when you look down from altitude.
       col *= 1.0 - smoothstep( 0.0, -0.12, D.y ) * 0.45;
       return col * uGain;
+    }
+    vec3 skyRadiance( vec3 D ) {
+      // The dust column is longest along the horizon, so that is
+      // where the scattered light piles up.
+      return skyRadianceT( D, pow( 1.0 - clamp( D.y, 0.0, 1.0 ), 2.6 ) );
     }
 
     // What the air lets through along D, from a body beyond it. The
