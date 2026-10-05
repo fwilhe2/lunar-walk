@@ -34,7 +34,7 @@ export const sun = new THREE.DirectionalLight(0xfff8f2, 3.4);
    exists to own that shadow map: it has no intensity, and the patched
    lighting in surface/patch.ts picks between the two maps per fragment. */
 const SHADOW_NEAR = 24, SHADOW_FAR = 130;
-function shadowRig(light, half, dist, depth, bias, nBias) {
+function shadowRig(light: THREE.DirectionalLight, half: number, dist: number, depth: number, bias: number, nBias: number) {
   light.castShadow = true;
   light.shadow.mapSize.set(2048, 2048);
   const c = light.shadow.camera;
@@ -107,4 +107,4 @@ export const KEY_XZ = SUN_XZ.clone();
    strong one under Charon, whose nights are thirty times darker. */
 export const KEY = { night: false, tan: 0.29, rad: 0.0046, elev: 0.28, scale: 1, U: 1, stars: 1 };
 
-export function setSunElev(v) { return (sunElev = v); }
+export function setSunElev(v: number) { return (sunElev = v); }

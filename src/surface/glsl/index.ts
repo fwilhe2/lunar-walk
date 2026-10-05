@@ -30,5 +30,8 @@ if (hot) {
   }
   hot.data.SRC = SRC;
   hot.data.state = glslState;
-  import.meta.hot.accept();   // spelled out: Vite finds self-accepting modules by this text
+  // Spelled out: Vite finds self-accepting modules by this text, in the
+  // JS esbuild leaves, which has no `!`; TypeScript does not narrow
+  // import.meta.hot from `hot` above.
+  import.meta.hot!.accept();
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WorldView } from '../worlds/view-types';
 
 /* ═════════════════════════════════════════════════════════════
    SURFACE LIGHT — how regolith reflects light, and where the
@@ -31,6 +32,8 @@ import * as THREE from 'three';
    et al. 2014, from LROC); everything else here is scaled per body.
    ═════════════════════════════════════════════════════════════ */
 export const DEG = Math.PI / 180;
+/** A Hapke parameter set: a world's (world.hapke), or one derived from it. */
+export type HapkeParams = WorldView['hapke'];
 // The eye's adapted exposure (log2), as a texture, for the few things
 // that must look the same however open the eye is. Written by render/post.ts.
 export const EYE_TEX = new THREE.Uniform<THREE.Texture | null>(null);
@@ -40,15 +43,15 @@ export const EYE_TEX = new THREE.Uniform<THREE.Texture | null>(null);
 // g = 30° geometry a patch reflects exactly what a Lambertian one of
 // the same albedo would, so the albedos the kernel writes keep
 // meaning what they say.
-function hapkeJS(mu0, mu, cosg, p) {
+function hapkeJS(mu0: number, mu: number, cosg: number, p: HapkeParams) {
   const tt = Math.tan(p.theta * DEG);
   const ci = mu0, ce = mu, si = Math.sqrt(1 - ci * ci), se = Math.sqrt(1 - ce * ce);
   const i = Math.max(Math.acos(ci), 1e-3), e = Math.max(Math.acos(ce), 1e-3);
   const cphi = si * se > 1e-4 ? Math.max(-1, Math.min(1, (cosg - ci * ce) / (si * se))) : 1;
   const phi = Math.min(Math.acos(cphi), Math.PI - 1e-3);
   const chi = 1 / Math.sqrt(1 + Math.PI * tt * tt);
-  const E1 = (x) => Math.exp(-2 / (Math.PI * tt * Math.tan(x)));
-  const E2 = (x) => { const t = tt * Math.tan(x); return Math.exp(-1 / (Math.PI * t * t)); };
+  const E1 = (x: number) => Math.exp(-2 / (Math.PI * tt * Math.tan(x)));
+  const E2 = (x: number) => { const t = tt * Math.tan(x); return Math.exp(-1 / (Math.PI * t * t)); };
   const etai = chi * (ci + si * tt * E2(i) / (2 - E1(i)));
   const etae = chi * (ce + se * tt * E2(e) / (2 - E1(e)));
   const s2 = Math.sin(phi / 2) ** 2, f = Math.exp(-2 * Math.tan(phi / 2));
@@ -84,8 +87,8 @@ function hapkeJS(mu0, mu, cosg, p) {
    runs in √(g/π), which spends most of the samples near zero phase,
    where the opposition surge is. */
 const HPK_N = 32;
-const hpkLuts = new Map();
-function hapkeLut(p, norm) {
+const hpkLuts = new Map<string, THREE.Data3DTexture>();
+function hapkeLut(p: HapkeParams, norm: number) {
   const key = JSON.stringify(p);
   let t = hpkLuts.get(key);
   if (t) return t;
@@ -111,11 +114,16 @@ function hapkeLut(p, norm) {
   return t;
 }
 
-export function hapkeUniforms() {
+/** The uniforms one Hapke set is drawn with; setHapke() fills them. */
+export interface HapkeUniforms {
+  hpkA: THREE.IUniform<THREE.Vector4>; hpkB: THREE.IUniform<THREE.Vector4>;
+  hpkN: THREE.IUniform<number>; hpkLut: THREE.IUniform<THREE.Data3DTexture | null>;
+}
+export function hapkeUniforms(): HapkeUniforms {
   return { hpkA: { value: new THREE.Vector4() }, hpkB: { value: new THREE.Vector4() },
            hpkN: { value: 1 }, hpkLut: { value: null } };
 }
-export function setHapke(u, p) {
+export function setHapke(u: HapkeUniforms, p: HapkeParams) {
   u.hpkA.value.set(p.w, p.b, p.c, p.B0);
   u.hpkB.value.set(p.h, Math.tan(p.theta * DEG), p.Bc0, p.hc);
   const c30 = Math.cos(30 * DEG);

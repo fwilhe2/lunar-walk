@@ -33,4 +33,4 @@ yawObj.add(pitchObj); pitchObj.add(camera); scene.add(yawObj);
 
 
 
-export function setAniso(v) { return (ANISO = v); }
+export function setAniso(v: number) { return (ANISO = v); }

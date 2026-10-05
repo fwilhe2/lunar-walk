@@ -5,7 +5,8 @@ import { SRC } from './glsl';
 // Terrain horizon maps: four nested levels, written by terrain/shadows.ts and read
 // by everything standing on the ground.
 export const TS = {
-  tsHz0: { value: null }, tsHz1: { value: null }, tsHz2: { value: null }, tsHz3: { value: null },
+  tsHz0: new THREE.Uniform<THREE.Texture | null>(null), tsHz1: new THREE.Uniform<THREE.Texture | null>(null),
+  tsHz2: new THREE.Uniform<THREE.Texture | null>(null), tsHz3: new THREE.Uniform<THREE.Texture | null>(null),
   tsLv: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, 1, 0)) },   // (cx, cz, span, refY)
   tsSun: { value: new THREE.Vector4(0.28, 0.0046, 0, 0) },   // (tan elev, angular radius, on, –)
   sunXZ: { value: KEY_XZ },

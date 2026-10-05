@@ -18,7 +18,7 @@ import { chunkStreamer } from '../terrain/streamer';
    dust exposes the darker soil underneath, which is why every
    rover on Mars drives in a dark stripe of its own making.
    ═════════════════════════════════════════════════════════════ */
-export const stampSystems = [];
+export const stampSystems: StampSystem[] = [];
 // Pressed soil loses the open, fairy-castle structure that makes the
 // opposition surge: a print is barely there across the sun and turns
 // visibly darker looking down-sun, which is how the Apollo prints
@@ -61,7 +61,7 @@ export const TRACK_L = 0.62;   // length of one wheel-track stamp
 // it is cached and whether the curvature drop goes in. The one copy
 // of the triangulation outside the worker: prints and the rover's
 // wheels both stand on it (here, and vehicles/rover.ts).
-export function meshHeight(x, z, s, vtx) {
+export function meshHeight(x: number, z: number, s: number, vtx: (i: number, j: number, s: number) => number) {
   const gx = x / s, gz = z / s, i = Math.floor(gx), j = Math.floor(gz);
   const fx = gx - i, fz = gz - j;
   const hb = vtx(i + 1, j, s), hc = vtx(i, j + 1, s);
@@ -69,11 +69,18 @@ export function meshHeight(x, z, s, vtx) {
   const hd = vtx(i + 1, j + 1, s);
   return hd + (1 - fx) * (hc - hd) + (1 - fz) * (hb - hd);
 }
-function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
+type Draw = (x: CanvasRenderingContext2D) => void;
+/** One kind of print: stamp(x, z, yaw) lays the next one, oldest replaced first. */
+export interface StampSystem {
+  (px: number, pz: number, yaw: number): void;
+  material: THREE.MeshStandardMaterial;
+  reset: () => void;
+}
+function makeStampSystem(maxCount: number, drawSole: Draw, drawTread: Draw, w: number, h: number, sole: [number, number]) {
   const S = 128;
-  const draw = (blur, fn) => {
+  const draw = (blur: number, fn: Draw) => {
     const c = document.createElement('canvas'); c.width = c.height = S;
-    const x = c.getContext('2d');
+    const x = c.getContext('2d')!;   // a new canvas always has one
     x.fillStyle = '#000'; x.fillRect(0, 0, S, S);
     x.scale(S / 64, S / 64);
     x.filter = 'blur(' + blur + 'px)';
@@ -84,11 +91,12 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
   const Hd = draw(0.6, (x) => { x.fillStyle = '#fff'; drawSole(x); x.fillStyle = '#6a6a6a'; drawTread(x); });
   const alpha = new Uint8Array(S * S * 4), nrm = new Uint8Array(S * S * 4);
   const mmX = w * 1000 / S, mmY = h * 1000 / S, DEPTH = 16;
-  const hAt = (x, y) => -Hd[(Math.min(S - 1, Math.max(0, y)) * S + Math.min(S - 1, Math.max(0, x))) * 4] / 255 * DEPTH;
+  // A, Hd, alpha and nrm are S × S × 4; every index is clamped or in the loop's range.
+  const hAt = (x: number, y: number) => -Hd[(Math.min(S - 1, Math.max(0, y)) * S + Math.min(S - 1, Math.max(0, x))) * 4]! / 255 * DEPTH;
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const i = (y * S + x) * 4;
-      alpha[i] = alpha[i + 1] = alpha[i + 2] = A[i]; alpha[i + 3] = 255;
+      alpha[i] = alpha[i + 1] = alpha[i + 2] = A[i]!; alpha[i + 3] = 255;
       const nx = (hAt(x - 1, y) - hAt(x + 1, y)) / (2 * mmX);
       const ny = (hAt(x, y - 1) - hAt(x, y + 1)) / (2 * mmY);
       const l = Math.hypot(nx, ny, 1);
@@ -96,7 +104,7 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
       nrm[i + 2] = (1 / l * 0.5 + 0.5) * 255; nrm[i + 3] = 255;
     }
   }
-  const tex = (d) => {
+  const tex = (d: Uint8Array<ArrayBuffer>) => {
     const t = new THREE.DataTexture(d, S, S, THREE.RGBAFormat);
     t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
     t.generateMipmaps = true; t.needsUpdate = true;
@@ -147,8 +155,8 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
   let cursor = 0;
   // Lattice corners for meshHeight(), with the drop applied per vertex
   // as the worker applies it; cleared per print.
-  const vh = new Map();
-  const vtx = (i, j, s) => {
+  const vh = new Map<string, number>();
+  const vtx = (i: number, j: number, s: number) => {
     const k = i + ',' + j + ',' + s;
     let y = vh.get(k);
     if (y === undefined) {
@@ -158,7 +166,7 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
     return y;
   };
 
-  const stamp = (px, pz, yaw) => {
+  const stamp = (px: number, pz: number, yaw: number) => {
     const s = chunkStreamer.stepAt(px, pz);
     const n = terrainNormal(px, pz, 0.4);
     const c = Math.cos(yaw), sn = Math.sin(yaw);
@@ -181,7 +189,7 @@ function makeStampSystem(maxCount, drawSole, drawTread, w, h, sole) {
     // Kept by the rock system for chunks it builds later, so the
     // lookup must not depend on this print's vertex cache.
     rockSystem.press(sysId + ':' + cursor, px, pz, yaw, w * sole[0] / 2, h * sole[1] / 2,
-                     (x, z) => { vh.clear(); return meshHeight(x, z, s, vtx); });
+                     (x: number, z: number) => { vh.clear(); return meshHeight(x, z, s, vtx); });
     cursor = (cursor + 1) % maxCount;
   };
   stamp.material = material;
@@ -202,7 +210,7 @@ export const prints = (() => {
     0.34, 0.5, [36 / 64, 48 / 64]);
   let side = 1;
   return {
-    place(x0, z0, yaw) {
+    place(x0: number, z0: number, yaw: number) {
       side = -side;
       const ox = Math.cos(yaw) * 0.17 * side, oz = -Math.sin(yaw) * 0.17 * side;
       stamp(x0 + ox, z0 + oz, yaw);
@@ -225,7 +233,7 @@ export const tracks = (() => {
       }
     }, 0.26, TRACK_L, [28 / 64, 1]);
   return {
-    place(x0, z0, yaw, half) {   // half = track gauge / 2
+    place(x0: number, z0: number, yaw: number, half: number) {   // half = track gauge / 2
       const ox = Math.cos(yaw) * half, oz = -Math.sin(yaw) * half;
       stamp(x0 + ox, z0 + oz, yaw);
       stamp(x0 - ox, z0 - oz, yaw);

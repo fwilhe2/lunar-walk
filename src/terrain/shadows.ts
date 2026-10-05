@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { KEY_XZ } from '../render/lights';
 import { renderer, scene } from '../render/renderer';
 import { TS } from '../surface/shaders';
+import { TypedShaderMaterial } from '../util/three';
 import { chunkGroup, chunkStreamer } from './streamer';
 
 /* ═════════════════════════════════════════════════════════════
@@ -41,14 +42,15 @@ import { chunkGroup, chunkStreamer } from './streamer';
 export const terrainShadows = (() => {
   let N = 1024, minGap = 350;
   const SPANS = [512, 2048, 8192, 32768];
-  const rt = (format, depth) => new THREE.WebGLRenderTarget(N, N, {
+  const rt = (format: THREE.PixelFormat, depth: boolean) => new THREE.WebGLRenderTarget(N, N, {
     type: THREE.HalfFloatType, format, depthBuffer: depth, stencilBuffer: false,
     minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
   });
-  let hRT = [], zRT = [];     // heights relative to refY; skyline tan, distance, height
+  // One of everything per level, so every k below is < SPANS.length.
+  let hRT: THREE.WebGLRenderTarget[] = [], zRT: THREE.WebGLRenderTarget[] = [];     // heights relative to refY; skyline tan, distance, height
 
   // ── 1. heights
-  const heightMat = new THREE.ShaderMaterial({
+  const heightMat = new TypedShaderMaterial({
     uniforms: { uRef: { value: 0 } },
     vertexShader: `
       uniform float uRef;
@@ -73,7 +75,8 @@ export const terrainShadows = (() => {
 
   // ── 2. horizons
   const hzU = {
-    tH0: { value: null }, tH1: { value: null }, tH2: { value: null }, tH3: { value: null },
+    tH0: new THREE.Uniform<THREE.Texture | null>(null), tH1: new THREE.Uniform<THREE.Texture | null>(null),
+    tH2: new THREE.Uniform<THREE.Texture | null>(null), tH3: new THREE.Uniform<THREE.Texture | null>(null),
     uHp: { value: SPANS.map(() => new THREE.Vector4()) },   // height levels (cx, cz, span, texel)
     uOut: { value: new THREE.Vector4() },                   // this level
     uDir: { value: KEY_XZ },
@@ -128,6 +131,8 @@ export const terrainShadows = (() => {
   const qScene = new THREE.Scene();
   qScene.add(quad);
   const qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  // The per-level texture uniforms, in level order.
+  const tsHz = [TS.tsHz0, TS.tsHz1, TS.tsHz2, TS.tsHz3], tH = [hzU.tH0, hzU.tH1, hzU.tH2, hzU.tH3];
 
   const cen = SPANS.map(() => ({ x: 0, z: 0 }));
   let refY = 0, seq = -1, dirty = true, lastVersion = -1, lastStart = -1e9;
@@ -139,8 +144,8 @@ export const terrainShadows = (() => {
     for (const r of zRT) r.dispose();
     hRT = SPANS.map(() => rt(THREE.RedFormat, true));
     zRT = SPANS.map(() => rt(THREE.RGBAFormat, false));
-    zRT.forEach((r, k) => { TS['tsHz' + k].value = r.texture; });
-    hRT.forEach((r, k) => { hzU['tH' + k].value = r.texture; });
+    zRT.forEach((r, k) => { tsHz[k]!.value = r.texture; });
+    hRT.forEach((r, k) => { tH[k]!.value = r.texture; });
   }
   alloc();
 
@@ -152,34 +157,34 @@ export const terrainShadows = (() => {
     heightMat.uniforms.uRef.value = refY;
     hScene.add(chunkGroup);                   // borrowed for the pass
     for (let k = 0; k < SPANS.length; k++) {
-      const h = SPANS[k] / 2;
+      const h = SPANS[k]! / 2;
       ortho.left = -h; ortho.right = h; ortho.top = h; ortho.bottom = -h;
-      ortho.position.set(cen[k].x, refY + 10000, cen[k].z);
-      ortho.lookAt(cen[k].x, refY, cen[k].z);
+      ortho.position.set(cen[k]!.x, refY + 10000, cen[k]!.z);
+      ortho.lookAt(cen[k]!.x, refY, cen[k]!.z);
       ortho.updateProjectionMatrix();
-      renderer.setRenderTarget(hRT[k]);
+      renderer.setRenderTarget(hRT[k]!);
       renderer.render(hScene, ortho);
-      hzU.uHp.value[k].set(cen[k].x, cen[k].z, SPANS[k], SPANS[k] / N);
+      hzU.uHp.value[k]!.set(cen[k]!.x, cen[k]!.z, SPANS[k]!, SPANS[k]! / N);
     }
     scene.add(chunkGroup);
     renderer.setClearColor(_c, prevAlpha);
     renderer.setRenderTarget(prevTarget);
   }
 
-  function renderHorizon(k) {
+  function renderHorizon(k: number) {
     const prevTarget = renderer.getRenderTarget();
-    hzU.uOut.value.set(cen[k].x, cen[k].z, SPANS[k], SPANS[k] / N);
+    hzU.uOut.value.set(cen[k]!.x, cen[k]!.z, SPANS[k]!, SPANS[k]! / N);
     hzU.uTMax.value = reach;
-    renderer.setRenderTarget(zRT[k]);
+    renderer.setRenderTarget(zRT[k]!);
     renderer.render(qScene, qCam);
     renderer.setRenderTarget(prevTarget);
     // Publish this level to the surfaces only now that it is written.
-    TS.tsLv.value[k].set(cen[k].x, cen[k].z, SPANS[k], refY);
+    TS.tsLv.value[k]!.set(cen[k]!.x, cen[k]!.z, SPANS[k]!, refY);
   }
 
   return {
     // A new world starts clean, and dark until its first pass is done.
-    reset(worldReach, enabled) {
+    reset(worldReach: number, enabled: boolean) {
       reach = worldReach;
       on = enabled;
       seq = -1; dirty = true; lastVersion = -1;
@@ -187,7 +192,7 @@ export const terrainShadows = (() => {
     },
     // Clipmap resolution and the shortest gap between rebuilds, set by
     // quality. A new resolution rebuilds everything in one frame.
-    configure(n, gap) {
+    configure(n: number, gap: number) {
       minGap = gap;
       if (n === N) return;
       N = n;
@@ -200,10 +205,10 @@ export const terrainShadows = (() => {
     /* Call every frame. `now` forces the whole pass into this frame —
        used once, when a world has finished loading, so the first frame
        anyone sees already has its shadows. */
-    update(fx, fz, groundY, now) {
+    update(fx: number, fz: number, groundY: number, now: boolean) {
       if (!on) { TS.tsSun.value.z = 0; return; }
       const v = chunkStreamer.version;
-      if (v !== lastVersion || Math.hypot(fx - cen[0].x, fz - cen[0].z) > 40) dirty = true;
+      if (v !== lastVersion || Math.hypot(fx - cen[0]!.x, fz - cen[0]!.z) > 40) dirty = true;
       const t = performance.now();
       if (forceNow) { now = true; forceNow = false; }
       if (seq < 0 && dirty && (now || t - lastStart > minGap)) {
@@ -211,9 +216,9 @@ export const terrainShadows = (() => {
         // sampling grid never shifts by a fraction of one and the
         // shadows do not crawl when they are rebuilt.
         for (let k = 0; k < SPANS.length; k++) {
-          const q = SPANS[k] / N * 16;
-          cen[k].x = Math.round(fx / q) * q;
-          cen[k].z = Math.round(fz / q) * q;
+          const q = SPANS[k]! / N * 16;
+          cen[k]!.x = Math.round(fx / q) * q;
+          cen[k]!.z = Math.round(fz / q) * q;
         }
         refY = groundY;
         renderHeights();

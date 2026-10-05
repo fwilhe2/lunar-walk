@@ -35,23 +35,39 @@ let LEVELS = VIEW.moon.levels();
 // nearest ring: a third of the vertices, for ground far enough away
 // that the difference is a pixel or two.
 export let LOD_COARSE = false;
-const l0Step = (ring) => (ring <= 1 ? 1 : ring <= 2 ? (LOD_COARSE ? 4 : 2) : (LOD_COARSE ? 8 : 4));
+const l0Step = (ring: number) => (ring <= 1 ? 1 : ring <= 2 ? (LOD_COARSE ? 4 : 2) : (LOD_COARSE ? 8 : 4));
 
+/* A chunk wanted around the player: what the worker is asked to build,
+   plus its level, the ring it is in (build order) and the cells per
+   side a hole can be cut in (m, 0 on the finest level). */
+type ChunkSpec = Omit<ChunkRequest, 'id' | 'world' | 'm'> & { level: number; ring: number; m: number };
+interface Job { id: number; key: string; spec: ChunkSpec }
+// A built chunk; mask is the set of its m×m cells cut away (holeIndex).
+interface Chunk {
+  mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  level: number; x0: number; z0: number; W: number; m: number; mask: number;
+}
+type MeshWorker = Worker & { _idle?: boolean };
+
+/* Levels are indexed by a chunk's or a loop's li, always < LEVELS.length
+   (LEVELS changes only in setWorld(), which drops every chunk and job),
+   and pendingPerLevel has a slot for each of the four levels a world may
+   have. Every level past the first gives its step. */
 export const chunkStreamer = (() => {
-  const chunks = new Map();          // key → { mesh, level, x0, z0, W, m, mask }
-  const queue = [];                  // jobs waiting for a worker
-  const inFlight = new Map();        // job id → job
-  const pendingPerLevel = [0, 0, 0, 0];
+  const chunks = new Map<string, Chunk>();
+  const queue: Job[] = [];           // jobs waiting for a worker
+  const inFlight = new Map<number, Job>();   // job id → job
+  const pendingPerLevel: [number, number, number, number] = [0, 0, 0, 0];
   let jobSeq = 0;
-  let desired = new Map();
-  let lastCell = null;
+  let desired = new Map<string, ChunkSpec>();
+  let lastCell: string | null = null;
   let activeWorld: WorldId = 'moon';
   let version = 0;                   // bumped whenever the set of meshes changes
 
-  const workers = [];
+  const workers: MeshWorker[] = [];
   function spawnWorkers() {
     for (let i = 0; i < Math.min(4, navigator.hardwareConcurrency || 2); i++) {
-      const w = new Worker(new URL('../workers/mesh.worker.ts', import.meta.url), { type: 'module' }) as Worker & { _idle?: boolean };
+      const w: MeshWorker = new Worker(new URL('../workers/mesh.worker.ts', import.meta.url), { type: 'module' });
       w.onmessage = (e: MessageEvent<ChunkReply>) => onChunkBuilt(e.data, w);
       w._idle = true;
       workers.push(w);
@@ -60,8 +76,8 @@ export const chunkStreamer = (() => {
   spawnWorkers();
 
   // One shared index buffer per grid width.
-  const indexCache = new Map();
-  function gridIndex(W) {
+  const indexCache = new Map<number | string, THREE.BufferAttribute>();
+  function gridIndex(W: number) {
     let idx = indexCache.get(W);
     if (idx) return idx;
     const arr = new Uint32Array((W - 1) * (W - 1) * 6);
@@ -87,16 +103,16 @@ export const chunkStreamer = (() => {
      runs on under the fine one and shows through wherever the ground
      dips below its long chords: every crater floor bigger than the
      coarse step. Shared, like gridIndex. */
-  function holeIndex(W, m, mask) {
+  function holeIndex(W: number, m: number, mask: number) {
     const key = W + ':' + m + ':' + mask;
     let idx = indexCache.get(key);
     if (idx) return idx;
-    const n = W - 3, per = n / m, V = W * W, out = [];
-    const cut = (fx, fz) => (mask >> (fz * m + fx)) & 1;
-    const cl = (g) => (g < 0 ? 0 : g > n ? n : g);
+    const n = W - 3, per = n / m, V = W * W, out: number[] = [];
+    const cut = (fx: number, fz: number) => (mask >> (fz * m + fx)) & 1;
+    const cl = (g: number) => (g < 0 ? 0 : g > n ? n : g);
     // The cell a quad belongs to, by its centre; skirt quads, which
     // have no width, fall in the cell whose edge they hang from.
-    const cellOf = (i) => Math.min(m - 1, Math.floor((cl(i - 1) + cl(i)) / 2 / per));
+    const cellOf = (i: number) => Math.min(m - 1, Math.floor((cl(i - 1) + cl(i)) / 2 / per));
     for (let j = 0; j < W - 1; j++) {
       const fz = cellOf(j);
       for (let i = 0; i < W - 1; i++) {
@@ -136,22 +152,22 @@ export const chunkStreamer = (() => {
      is built on it, or if every cell of the next finer level inside it
      is solid — on low quality a 4 km chunk runs over 1 km cells that
      were never built, because 256 m chunks already cover them. */
-  const built = new Map();
-  const cellKey = (li, cx, cz) => li + ':' + cx + ':' + cz;
-  function solid(li, cx, cz) {
+  const built = new Map<string, Set<string>>();
+  const cellKey = (li: number, cx: number, cz: number) => li + ':' + cx + ':' + cz;
+  function solid(li: number, cx: number, cz: number): boolean {
     if (built.has(cellKey(li, cx, cz))) return true;
     if (li === 0) return false;
-    const m = LEVELS[li].size / LEVELS[li - 1].size;
+    const m = LEVELS[li]!.size / LEVELS[li - 1]!.size;
     for (let fz = 0; fz < m; fz++) {
       for (let fx = 0; fx < m; fx++) if (!solid(li - 1, cx * m + fx, cz * m + fz)) return false;
     }
     return true;
   }
   // Re-cut one coarse chunk against what finer ground now stands on it.
-  function recut(key) {
+  function recut(key: string) {
     const c = chunks.get(key);
     if (!c || !c.m) return;
-    const m = c.m, cx = Math.round(c.x0 / LEVELS[c.level].size), cz = Math.round(c.z0 / LEVELS[c.level].size);
+    const m = c.m, cx = Math.round(c.x0 / LEVELS[c.level]!.size), cz = Math.round(c.z0 / LEVELS[c.level]!.size);
     let mask = 0;
     for (let fz = 0; fz < m; fz++) {
       for (let fx = 0; fx < m; fx++) if (solid(c.level - 1, cx * m + fx, cz * m + fz)) mask |= 1 << (fz * m + fx);
@@ -163,29 +179,29 @@ export const chunkStreamer = (() => {
     version++;
   }
   // A chunk came or went at (x, z): re-cut every coarser chunk over it.
-  function recutOver(level, x, z) {
+  function recutOver(level: number, x: number, z: number) {
     for (let li = level + 1; li < LEVELS.length; li++) {
-      const S = LEVELS[li].size;
+      const S = LEVELS[li]!.size;
       const keys = built.get(cellKey(li, Math.floor(x / S), Math.floor(z / S)));
       if (keys) for (const k of keys) recut(k);
     }
   }
-  function drop(key, c) {
+  function drop(key: string, c: Chunk) {
     chunkGroup.remove(c.mesh);
     // Detach the shared index first: disposing a geometry frees its
     // index's GL buffer, and every other chunk of that width uses it.
     c.mesh.geometry.setIndex(null);
     c.mesh.geometry.dispose();
     chunks.delete(key);
-    const ck = cellKey(c.level, Math.round(c.x0 / LEVELS[c.level].size), Math.round(c.z0 / LEVELS[c.level].size));
+    const ck = cellKey(c.level, Math.round(c.x0 / LEVELS[c.level]!.size), Math.round(c.z0 / LEVELS[c.level]!.size));
     const set = built.get(ck);
     if (set) { set.delete(key); if (!set.size) built.delete(ck); }
     version++;
     recutOver(c.level, c.x0 + 1, c.z0 + 1);
   }
 
-  function computeDesired(px, pz) {
-    const out = new Map();
+  function computeDesired(px: number, pz: number) {
+    const out = new Map<string, ChunkSpec>();
     // Anchor for the curvature drop: the player's current L0 cell
     // centre. Near chunks are rebuilt often enough that the drop at
     // the player's own feet stays under a centimetre.
@@ -195,14 +211,14 @@ export const chunkStreamer = (() => {
 
     // On low quality the 1 km ring stops a chunk short where a coarser
     // level follows it: 32 fewer draws, and the 4 km chunks take over.
-    const extOf = (li) => LEVELS[li].ext - (LOD_COARSE && li === 1 && LEVELS.length > 2 ? 1 : 0);
+    const extOf = (li: number) => LEVELS[li]!.ext - (LOD_COARSE && li === 1 && LEVELS.length > 2 ? 1 : 0);
     for (let li = 0; li < LEVELS.length; li++) {
-      const L = LEVELS[li], ext = extOf(li);
+      const L = LEVELS[li]!, ext = extOf(li);
       const ccx = Math.floor(px / L.size), ccz = Math.floor(pz / L.size);
       // Box covered by the previous (finer) level, for skipping.
-      let cov = null;
+      let cov: { x0: number; x1: number; z0: number; z1: number } | null = null;
       if (li > 0) {
-        const P = LEVELS[li - 1], pe = extOf(li - 1);
+        const P = LEVELS[li - 1]!, pe = extOf(li - 1);
         const pcx = Math.floor(px / P.size), pcz = Math.floor(pz / P.size);
         cov = {
           x0: (pcx - pe) * P.size, x1: (pcx + pe + 1) * P.size,
@@ -222,14 +238,14 @@ export const chunkStreamer = (() => {
           // chunk comes back as a degenerate triangle across the
           // screen. Derive n first, then the step that fits it, so a
           // size and step that do not divide evenly can never do that.
-          const n = Math.max(1, Math.round(L.size / (li === 0 ? l0Step(ring) : L.step * (LOD_COARSE ? 2 : 1))));
+          const n = Math.max(1, Math.round(L.size / (li === 0 ? l0Step(ring) : L.step! * (LOD_COARSE ? 2 : 1))));
           const step = L.size / n;
           out.set(li + ':' + cx + ':' + cz + ':' + step, {
             level: li, x0, z0, step, n,
             ax: a0x, az: a0z, ring: ring + li * 10,
             // Cells per side, one per chunk of the finer level: where a
             // hole can be cut (see holeIndex).
-            m: li > 0 ? L.size / LEVELS[li - 1].size : 0,
+            m: li > 0 ? L.size / LEVELS[li - 1]!.size : 0,
           });
         }
       }
@@ -240,10 +256,10 @@ export const chunkStreamer = (() => {
   function dispatch() {
     for (const w of workers) {
       if (!w._idle) continue;
-      let job;
+      let job: Job | null | undefined;
       while ((job = queue.shift())) {
         if (desired.has(job.key) && !chunks.has(job.key)) break;   // stale, skip
-        pendingPerLevel[job.spec.level]--;
+        pendingPerLevel[job.spec.level]!--;
         job = null;
       }
       if (!job) return;
@@ -255,13 +271,13 @@ export const chunkStreamer = (() => {
     }
   }
 
-  function onChunkBuilt(d: ChunkReply, w: Worker & { _idle?: boolean }) {
+  function onChunkBuilt(d: ChunkReply, w: MeshWorker) {
     w._idle = true;
     const job = inFlight.get(d.id);
     inFlight.delete(d.id);
     if (job) {
       const s = job.spec;
-      pendingPerLevel[s.level]--;
+      pendingPerLevel[s.level]!--;
       if (desired.has(job.key)) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
@@ -274,7 +290,7 @@ export const chunkStreamer = (() => {
         // centred at zero, and would be culled.
         const half = (s.n * s.step) / 2;
         let yLo = Infinity, yHi = -Infinity;
-        for (let i = 1; i < d.pos.length; i += 3) { const y = d.pos[i]; if (y < yLo) yLo = y; if (y > yHi) yHi = y; }
+        for (let i = 1; i < d.pos.length; i += 3) { const y = d.pos[i]!; if (y < yLo) yLo = y; if (y > yHi) yHi = y; }
         geo.boundingSphere = new THREE.Sphere(
           new THREE.Vector3(s.x0 + half, (yLo + yHi) / 2, s.z0 + half), Math.hypot(half * 1.42, (yHi - yLo) / 2) + 50);
         const mesh = new THREE.Mesh(geo, groundMat);
@@ -283,9 +299,9 @@ export const chunkStreamer = (() => {
         mesh.receiveShadow = s.level === 0;
         chunks.set(job.key, { mesh, level: s.level, x0: s.x0, z0: s.z0, W: d.W, m: d.m, mask: 0 });
         chunkGroup.add(mesh);
-        const ck = cellKey(s.level, Math.round(s.x0 / LEVELS[s.level].size), Math.round(s.z0 / LEVELS[s.level].size));
+        const ck = cellKey(s.level, Math.round(s.x0 / LEVELS[s.level]!.size), Math.round(s.z0 / LEVELS[s.level]!.size));
         if (!built.has(ck)) built.set(ck, new Set());
-        built.get(ck).add(job.key);
+        built.get(ck)!.add(job.key);   // set just above if it was missing
         version++;
         recut(job.key);
         recutOver(s.level, s.x0 + 1, s.z0 + 1);
@@ -293,7 +309,7 @@ export const chunkStreamer = (() => {
       // Purge stale chunks of a level only once it has nothing pending:
       // the old ring keeps the ground solid while the new one builds.
       for (let li = 0; li < LEVELS.length; li++) {
-        if (pendingPerLevel[li] > 0) continue;
+        if (pendingPerLevel[li]! > 0) continue;
         for (const [key, c] of chunks) {
           if (c.level !== li || desired.has(key)) continue;
           drop(key, c);
@@ -309,7 +325,7 @@ export const chunkStreamer = (() => {
        body, and its reply would arrive keyed to a stale job. Rather
        than track that, terminate them and start clean — it costs a
        few milliseconds behind a loading screen that is already up. */
-    setWorld(id) {
+    setWorld(id: WorldId) {
       for (const w of workers) w.terminate();
       workers.length = 0;
       spawnWorkers();
@@ -329,7 +345,7 @@ export const chunkStreamer = (() => {
       activeWorld = id;
       LEVELS = VIEW[id].levels();
     },
-    update(px, pz) {
+    update(px: number, pz: number) {
       const cell = Math.floor(px / 256) + ':' + Math.floor(pz / 256);
       if (cell === lastCell) { dispatch(); return; }
       lastCell = cell;
@@ -340,7 +356,7 @@ export const chunkStreamer = (() => {
       for (const [key, spec] of desired) {
         if (known.has(key)) continue;
         queue.push({ id: ++jobSeq, key, spec });
-        pendingPerLevel[spec.level]++;
+        pendingPerLevel[spec.level]!++;
       }
       queue.sort((a, b) => a.spec.ring - b.spec.ring);
       dispatch();
@@ -350,8 +366,8 @@ export const chunkStreamer = (() => {
     },
     // The vertex spacing of the finest chunk drawn at (x, z), so a
     // decal can sit on the triangles actually on screen (surface/stamps.ts).
-    stepAt(x, z) {
-      const L = LEVELS[0], cx = Math.floor(x / L.size), cz = Math.floor(z / L.size);
+    stepAt(x: number, z: number) {
+      const L = LEVELS[0]!, cx = Math.floor(x / L.size), cz = Math.floor(z / L.size);
       for (const s of [1, 2, 4, 8]) if (chunks.has('0:' + cx + ':' + cz + ':' + s)) return s;
       return 1;
     },
@@ -362,4 +378,4 @@ export const chunkStreamer = (() => {
   };
 })();
 
-export function setLodCoarse(v) { return (LOD_COARSE = v); }
+export function setLodCoarse(v: boolean) { return (LOD_COARSE = v); }

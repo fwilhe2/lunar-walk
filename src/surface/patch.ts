@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { skyDome } from '../sky/dome';
 import { glslState } from './glsl';
+import type { HapkeUniforms } from './hapke';
 import { GLSL, LIGHTS_BEGIN, TS } from './shaders';
+import type { Uniforms } from '../util/three';
 
 /* Patch a MeshStandardMaterial into one of four kinds of surface:
      ground  — the terrain: Hapke, hex-tiled relief, micro-craters,
@@ -11,7 +13,8 @@ import { GLSL, LIGHTS_BEGIN, TS } from './shaders';
      rock    — Hapke, and the terrain shadow seen from above the ground
      object  — anything man-made: its own PBR, plus the terrain shadow
    `hpk` is a hapkeUniforms() set, for the three regolith kinds.     */
-export function surfacePatch(mat, kind, hpk?, extra?) {
+export type SurfaceKind = 'ground' | 'print' | 'rock' | 'object';
+export function surfacePatch(mat: THREE.MeshStandardMaterial, kind: SurfaceKind, hpk?: HapkeUniforms, extra?: Uniforms) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, TS);
     if (hpk) Object.assign(shader.uniforms, hpk);
@@ -65,7 +68,7 @@ export function surfacePatch(mat, kind, hpk?, extra?) {
   patched.push(mat);
   return mat;
 }
-const patched = [];
+const patched: THREE.MeshStandardMaterial[] = [];
 glslState.listeners.push(() => { for (const m of patched) m.needsUpdate = true; });
 export const LAKE_U = {
   uLake: { value: new THREE.Vector4(0, 0, 128, 128) },
@@ -76,7 +79,7 @@ export const LAKE_U = {
   uLakeIn: { value: new THREE.Vector3() },
   uLakeT: { value: 0 },
   // The mirror image (render/sea.ts): its texture, and world → its texture coords.
-  uLakeMap: { value: null },
+  uLakeMap: new THREE.Uniform<THREE.Texture | null>(null),
   uLakeMat: { value: new THREE.Matrix4() },
   uLakeMirror: { value: 0 },     // 1 while the mirror itself is drawn
   uLakeHave: { value: 0 },
