@@ -312,11 +312,13 @@ Outside Jupiter's radiation belts (≈0.1 mSv/day at the surface, the Moon's ord
 **As built:** kind 12. Sulci in 110 km lanes, groove sets in 22 km patches with their own trend, tilt-block or symmetric profiles plus finer grooves; dark terrain with knobs (half Callisto's density), furrows, and the oldest crater classes (`old` flag, dropped inside sulci, decided at the crater's centre). Site on a groove crest 3 km inside a sulcus margin; Jupiter 7.64° at 34° in the east. 2.9 µs per query. From the ground the grooves are gentle — a few hundred metres over kilometres — and read best from the air or at low sun, as they should.
 
 ### 13d. Triton — geysers and cantaloupe terrain, Neptune overhead
-- [ ] Kernel row (kind 13): R 1353.4 km, g 0.779 m/s². Young (≲ 100 Myr), few craters. **Cantaloupe terrain**: dimples 25–35 km across bounded by ridges, crossed by long double ridges (Croft et al. 1995); site on the south polar cap boundary, smooth frost plains with dark **plume streaks** (100+ km long, all blown the same way by the wind at ~8 km altitude).
-- [ ] Colour: nitrogen frost, albedo ~0.75, faintly pink-cream; dark streaks a colour-only term aligned to one bearing.
-- [ ] Geysers: Hili/Mahilani-style plume columns rising 8 km then bending into a horizontal trail downwind for 100+ km (Soderblom et al. 1990), a sky object like Io's plumes but dark and with a shadow side.
-- [ ] Sky: 14 µbar N₂ with a thin haze (like Pluto's, `world.sky`), sun a point at 30 AU (1.5 W/m², Pluto-scale units), **Neptune 8.0° across**, deep blue, with banding, dark spots and bright methane clouds; it never moves. Neptune texture generator written the pure way (`OFF_THREAD`). Night lit by Neptune.
-- [ ] Physics table row; rover yes.
+- [x] Kernel row (kind 13): R 1353.4 km, g 0.779 m/s². Young (≲ 100 Myr), few craters. **Cantaloupe terrain**: dimples 25–35 km across bounded by ridges, crossed by long double ridges (Croft et al. 1995); site on the south polar cap boundary, smooth frost plains with dark **plume streaks** (100+ km long, all blown the same way by the wind at ~8 km altitude).
+- [x] Colour: nitrogen frost, albedo ~0.75, faintly pink-cream; dark streaks a colour-only term aligned to one bearing.
+- [x] Geysers: Hili/Mahilani-style plume columns rising 8 km then bending into a horizontal trail downwind for 100+ km (Soderblom et al. 1990), a sky object like Io's plumes but dark and with a shadow side.
+- [x] Sky: 14 µbar N₂ with a thin haze (like Pluto's, `world.sky`), sun a point at 30 AU (1.5 W/m², Pluto-scale units), **Neptune 8.0° across**, deep blue, with banding, dark spots and bright methane clouds; it never moves. Neptune texture generator written the pure way (`OFF_THREAD`). Night lit by Neptune.
+- [x] Physics table row; rover yes.
+
+**As built:** kind 13. Site at the cap's northern edge on the cantaloupe terrain (Bubembe Regio, 15°S 60°W) rather than deep on the cap, so both terrains are in reach; two geysers on the cap 58 and 96 km out. Geysers are a new sky object: camera-facing ribbons in true metres, curved and proxied in the vertex shader, absorbing and forward-scattering. Neptune in Irwin et al.'s 2024 true colour. 1.1 µs per query.
 
 ### 13e. Ceres — Occator's bright faculae
 - [ ] Kernel row (kind 14): R 470 km, g 0.28 m/s². Dark (albedo 0.09) carbonaceous regolith; craters with **polygonal outlines** and few large basins (relaxed); Dtr ≈ 7–12 km (Hiesinger et al. 2016).

@@ -672,6 +672,24 @@ var WORLDS = {
     Dtr: 2500, pitD: 30000, knobP: 0.5,
   },
 
+  /* Triton: one of the youngest surfaces in the solar system, tens of
+     millions of years by its craters (Schenk & Zahnle 2007), so they are
+     few and fresh; the largest Voyager saw, Mazomba, is 27 km. See
+     hTriton(). Seed: 25 August 1989, Voyager 2's closest approach, the
+     last new world it showed anyone. */
+  triton: {
+    id: 'triton', kind: 13, seed: 19890825,
+    g: 0.779, R: 1353400,
+    lander: [30.4, -15.2],
+    craters: [
+      { cell: 40000, salt:  7, rMin: 2000, rMax: 13000, count: 1, prob: 0.08, ageK: 0.8 },
+      { cell:  8000, salt: 13, rMin:  300, rMax:  2000, count: 1, prob: 0.15, ageK: 0.9 },
+      { cell:  1000, salt: 29, rMin:   30, rMax:   300, count: 1, prob: 0.08, ageK: 1.1, rocks: 1 },
+    ],
+    craterAmp: 1, depthK: 0.8, rampart: 0, halo: 0.25,
+    Dtr: 8000,
+  },
+
   enceladus: {
     id: 'enceladus', kind: 9, seed: 17890828,
     g: 0.113, R: 252100,
@@ -2493,6 +2511,83 @@ function hGanymede(x0, z0) {
   return h + craterAt(x0, z0);
 }
 
+/* ── Triton ─────────────────────────────────────────────────────
+   Two terrains meet at the site. To the south is the polar cap,
+   Uhlanga Regio: a deposit of nitrogen ice, bright and faintly pink,
+   smooth at every scale the ground below it has relief, streaked dark
+   in fans tens of kilometres long that all point the same way — dust
+   blown downwind from the geysers that erupt where the sun stands high
+   on the cap (Soderblom et al. 1990). To the north is the cantaloupe
+   terrain of Bubembe Regio, the strangest landscape Voyager found:
+   dimples 25–35 km across, each a shallow depression a few hundred
+   metres deep ringed by ridges, packed edge to edge like the rind of
+   the melon, most likely diapirs — blobs of warmer ice that rose
+   through the crust (Schenk & Jackson 1993) — crossed by double
+   ridges like Europa's (Prockter et al. 2005).
+
+   The dimples are cells of a jittered grid, drawn from the two
+   nearest centres (a Voronoi diagram), so they tile the ground along
+   ridged seams. TR_CAP is how much cap there is at the last query
+   point, TR_CV how near a dimple's rim, for the colour pass. */
+var TR_OX = -1250, TR_OZ = 1000, TR_CELL = 30000;
+var TR_CAP = 0, TR_CV = 0;
+// The cap's margin, wandering east–west a few kilometres south of the
+// site, lobed and ragged.
+function trCap(x, z) {
+  return sstep(-1500, 1500, z - 4000 + (fbm(x * 0.00006 + 2.1, z * 0.00006, 3) - 0.5) * 22000 + (valueNoise(x * 0.0005, z * 0.0005 + 7) - 0.5) * 2500);
+}
+function trCantaloupe(x, z) {
+  var cx = Math.floor(x / TR_CELL), cz = Math.floor(z / TR_CELL);
+  var d1 = 1e12, d2 = 1e12, dep = 0;
+  for (var dz = -1; dz <= 1; dz++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      var px = (cx + dx + 0.15 + cellRnd(cx + dx, cz + dz, 79, 0) * 0.7) * TR_CELL;
+      var pz = (cz + dz + 0.15 + cellRnd(cx + dx, cz + dz, 79, 1) * 0.7) * TR_CELL;
+      var ox = x - px, oz = z - pz, d = ox * ox + oz * oz;
+      if (d < d1) { d2 = d1; d1 = d; dep = cellRnd(cx + dx, cz + dz, 79, 2); }
+      else if (d < d2) d2 = d;
+    }
+  }
+  d1 = Math.sqrt(d1); d2 = Math.sqrt(d2);
+  // Distance to the seam between the two nearest cells.
+  var e = (d2 - d1) * 0.5;
+  TR_CV = Math.exp(-e * e / 2.5e6);
+  // A dish, deepest in the middle, and a ridged rim on the seam.
+  var w = e / (TR_CELL * 0.32);
+  return -(180 + 220 * dep) * smoothT(w > 1 ? 1 : w) + 150 * TR_CV + 140 * Math.exp(-e * e / 1.6e5);
+}
+// Double ridges across the cantaloupe terrain: two crests and a trough,
+// a few kilometres across, one at most per 45 km lane.
+var TR_RC = Math.cos(0.8), TR_RS = Math.sin(0.8);
+function trRidge(x, z) {
+  var s = x * TR_RC + z * TR_RS, t = z * TR_RC - x * TR_RS;
+  var li = Math.floor(t / 45000);
+  if (cellRnd(li, 0, 83, 0) > 0.6) return 0;
+  var c = (li + 0.5) * 45000 + (valueNoise(s * 0.00002, li * 1.7) - 0.5) * 20000;
+  var a = (t - c) / (1500 + cellRnd(li, 0, 83, 1) * 1000);
+  if (a < -3 || a > 3) return 0;
+  var H = 150 + cellRnd(li, 0, 83, 2) * 200;
+  return H * (Math.exp(-(a - 0.8) * (a - 0.8) * 2.2) + Math.exp(-(a + 0.8) * (a + 0.8) * 2.2)) * sstep(0.3, 0.45, valueNoise(s * 0.00001 + li, li * 0.3));
+}
+
+function hTriton(x0, z0) {
+  var x = x0 + TR_OX, z = z0 + TR_OZ;
+  var cap = trCap(x, z), cn = 1 - cap;
+  TR_CAP = cap;
+  var h = (fbm(x * 0.00003 + 5, z * 0.00003 - 2, 4) - 0.5) * 500;
+  // The cap stands a little proud of what it lies on, and smooths it.
+  h += cap * 60;
+  if (cn > 0) {
+    h += (trCantaloupe(x, z) + trRidge(x, z)) * cn;
+    h += (fbm(x * 0.0004 - 3, z * 0.0004 + 8, 3) - 0.5) * 70 * cn;     // hummocky rind
+    h += (ridged(x * 0.0011 + 4, z * 0.0011 - 6, 3) - 0.3) * 60 * cn;    // and knobbly on it
+  } else TR_CV = 0;
+  h += (fbm(x * 0.003 + 1, z * 0.003, 2) - 0.5) * (8 - 5 * cap);
+  h += (fbm(x * 0.03, z * 0.03 + 3, 2) - 0.5) * (1.2 - 0.7 * cap);
+  h += (fbm(x * 0.15 - 2, z * 0.15, 2) - 0.5) * (0.2 - 0.12 * cap);
+  return h + craterAt(x0, z0);
+}
+
 /* Surface height in metres at any world position. The single
    source of truth: mesh, physics, rover wheels, rocks, landmark
    and footprints all call this, on whichever world is loaded. */
@@ -2502,7 +2597,8 @@ function terrainHeight(x, z) {
        : WK === 5 ? hPluto(x, z) : WK === 6 ? hCharon(x, z)
        : WK === 7 ? hMercury(x, z) : WK === 8 ? hIo(x, z)
        : WK === 9 ? hEnceladus(x, z) : WK === 10 ? hTitan(x, z)
-       : WK === 11 ? hCallisto(x, z) : WK === 12 ? hGanymede(x, z) : hSmall(x, z);
+       : WK === 11 ? hCallisto(x, z) : WK === 12 ? hGanymede(x, z)
+       : WK === 13 ? hTriton(x, z) : hSmall(x, z);
 }
 
 /* ── Curvature ──────────────────────────────────────────────────
@@ -2821,6 +2917,29 @@ function surfaceTint(x, z, h, slope, fresh, dark, yel, hol, out) {
     fr = fr > 1 ? 1 : fr;
     var fv = 2.1 + (n2 - 0.5) * 0.3;
     out[0] += (fv - out[0]) * fr; out[1] += (fv - out[1]) * fr; out[2] += (fv * 1.03 - out[2]) * fr;
+
+  } else if (WK === 13) {
+    // Triton's cap is nitrogen ice, the brightest ground in the outer
+    // solar system after Enceladus, faintly pink-cream from organics
+    // made in it by sunlight (Thompson & Sagan 1990), streaked with dark
+    // fans laid downwind by the geysers — all pointing north-east, the
+    // way the surface wind blew. The cantaloupe terrain is greyer,
+    // faintly blue-green, its dimple rims a little brighter. Fresh
+    // craters are bright.
+    var x1 = x + TR_OX, z1 = z + TR_OZ;
+    var cap = trCap(x1, z1);
+    var n1 = valueNoise(x * 0.0006 + 2.2, z * 0.0006 - 1.1), n2 = valueNoise(x * 0.05, z * 0.05);
+    // Streaks: noise stretched twenty to one along the wind.
+    var su = x1 * 0.766 - z1 * 0.643, sv = x1 * 0.643 + z1 * 0.766;
+    var stk = sstep(0.55, 0.75, valueNoise(su * 0.00025 + 3.3, sv * 0.0000125)) * sstep(0.25, 0.5, valueNoise(su * 0.00003, sv * 0.00003 + 9));
+    var cl = fresh * WORLD.halo;
+    var cv = 0;
+    if (cap < 1) { trCantaloupe(x1, z1); cv = TR_CV; }
+    var vc = (1.35 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06) * (1 - stk * 0.42);
+    var vt = (1.05 + (n1 - 0.5) * 0.18 + (n2 - 0.5) * 0.08 + cv * 0.12 + slope * 0.2);
+    v = vt + (vc - vt) * cap + cl;
+    var pk = cap * (1 - stk * 0.5);
+    out[0] = v * (0.97 + pk * 0.04); out[1] = v * (0.985 - pk * 0.02); out[2] = v * (1.0 - pk * 0.07);
 
   } else {
     // Both moons are D-type: near-black, and spectrally red. Phobos
@@ -3284,6 +3403,61 @@ const VIEW = {
     look: [-1.64, 0.12],
   },
 
+  /* Triton is 30 AU out: 1.5 W/m², a nine-hundredth of the Moon's
+     sunlight, from a sun 64 arcseconds across — a point, as from Pluto.
+     Light is kept in Pluto's units, a thousand times the Moon's. It
+     falls on nitrogen ice that sends back three-quarters of it, so the
+     eye stops down hard and the shadows fill from the bright ground
+     around them; and still the brighter stars stay out by day, as on
+     Pluto, against a sky that is black but for a faint haze low down.
+
+     Fourteen microbars of nitrogen hold up a thin haze and carry the
+     geysers' dust off downwind. Neptune is 8° across, sixteen full
+     Moons, 29° up in the east from the site (15°S, 60° west of the
+     point beneath it), and never moves: a pale blue-green globe with
+     the Great Dark Spot on it. Triton's orbit is retrograde and tilted
+     23° to Neptune's equator, so the planet's poles are not where its
+     moon's are. */
+  triton: {
+    name: 'TRITON', site: 'Bubembe Regio', gTxt: '0.78 m/s²',
+    title: 'Triton Walk', sub: 'Bubembe Regio · 0.079 g · surface unbounded',
+    fine: 'Nitrogen ice at −235 °C, the coldest surface ever measured. Neptune hangs 8° wide<br>' +
+          'in the east; geysers stand on the polar cap to the south, their dust trailing<br>' +
+          'away west on the wind. <b>Esc</b> picks another world.',
+    air: false, stars: 1,
+    sunColor: 0xfff8f2, sunPower: 4.06, sunSize: 1.9, sunHDR: [60, 57, 52],
+    corona: 2600, coronaColor: [1.6, 1.55, 1.45],
+    hemi: [0x1a1b20, 0x40403e, 30.0], amb: [0x000000, 0],
+    fog: null,
+    // A haze like Pluto's, a shade thinner (Rages & Pollack 1992).
+    sky: { zenith: [0.0001, 0.00018, 0.0003], horizon: [0.0013, 0.0021, 0.0038],
+           aureole: [0.0045, 0.0065, 0.011], k: 14, amt: 0.9, tau: 0.004 },
+    grey: 200, mapTint: [1.0, 0.985, 0.97], pits: 10, grain: 0.5, clods: 0.4, pebbles: 40,
+    // Triton's photometry (Hillier et al. 1994): grains that scatter
+    // almost everything, a narrow surge, little roughness.
+    hapke: { w: 0.96, b: 0.30, c: 0.45, B0: 0.7, h: 0.01, theta: 14, Bc0: 0.4, hc: 0.003 },
+    micro: [0.2, 0.2, 0.3], sparkle: 2.5,
+    levels: L4, fly: 400, rover: true,
+    mu: 0.5,
+    dustColor: 0xd8d4d0, dustDrag: 0, stampColor: 0xc8c2bc, soil: 0xdad6d2,
+    rockTint: [1.0, 0.99, 0.98], rockAlb: [0.55, 0.2], rockN: 0.3,
+    landmark: 'flag', flagColor: 0xc9ccd2,
+    lander: 'generic',
+    exposure: 1.0, eye: [0.36, 0.3, 20], starGain: 0.03, bloom: [0.55, 0.65, 3.0],
+    companions: ['neptune-tri'],
+    // Night: Neptune, 8.0° across at albedo 0.44 — 0.2% of the sun.
+    night: { ratio: 0.0021, radius: 0.0698, color: 0xc8dcff, label: 'NEPTUNELIT', stars: 25 },
+    // Earth is never more than 1.9° from the sun from Neptune.
+    relay: 0.03,
+    // Geysers on the cap: bearing (°) and distance of the vent, column
+    // height, half-width and optical depth, and where the trail goes.
+    geysers: [
+      { brg: 158, dist: 58000, H: 8000, w: 700, tau: 0.9, tail: { brg: 262, len: 150000 } },
+      { brg: 118, dist: 96000, H: 7500, w: 600, tau: 0.8, tail: { brg: 258, len: 120000 } },
+    ],
+    look: [-1.42, 0.25],
+  },
+
   /* Pluto is 33 AU out: 1.26 W/m², a thousandth of the Moon's
      sunlight, from a sun 58 arcseconds across — a point, not a disc,
      though still some two hundred and fifty full moons bright. Noon
@@ -3614,7 +3788,7 @@ const VIEW = {
 // In order out from the sun, which is the order of the keys along the
 // number row (WORLD_KEYS), the buttons on the opening screen and the
 // demo's tour.
-const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'ganymede', 'callisto', 'enceladus', 'titan', 'pluto', 'charon'];
+const WORLD_IDS = ['mercury', 'venus', 'moon', 'mars', 'phobos', 'deimos', 'io', 'europa', 'ganymede', 'callisto', 'enceladus', 'titan', 'triton', 'pluto', 'charon'];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.
 const WORLD_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'Backspace'];
@@ -4113,7 +4287,7 @@ function regolithTextures(d) {
    own worker, which has the kernel (for hash2() and friends) and the
    generators. Results come back as typed arrays, transferred. Without
    workers, the same function runs here. */
-const OFF_THREAD = { regolithData, jupiterPixels, galileanPixels, charonPixels, plutoPixels };
+const OFF_THREAD = { regolithData, jupiterPixels, galileanPixels, charonPixels, plutoPixels, neptunePixels };
 const offURL = URL.createObjectURL(new Blob([TERRAIN_SOURCE, '\n',
   ...Object.values(OFF_THREAD).map((f) => f.toString() + '\n'),
   'const JOBS = { ' + Object.keys(OFF_THREAD).join(', ') + ' };\n',
@@ -7719,6 +7893,73 @@ function plutoMaps(px) {
   return { day: t };
 }
 
+/* ── Neptune ────────────────────────────────────────────────────
+   As Voyager 2 saw it in 1989, in true colour: not the deep azure of
+   the famous contrast-stretched pictures but a pale greenish blue, a
+   shade bluer than Uranus (Irwin et al. 2024) — methane taking the red
+   out of sunlight scattered deep in a clear atmosphere. Faint banding,
+   a darker belt round the south polar region, and the weather: the
+   Great Dark Spot at 20°S, an oval the size of Earth with bright
+   methane cirrus hugging its southern edge; the small bright Scooter
+   further south; the second dark spot, D2, with a bright core; and
+   long streaks of white cirrus stretched along the latitudes by winds
+   that blow at 400 m/s, the fastest in the solar system. */
+function neptunePixels(W, H) {
+  const px = new Uint8ClampedArray(W * H * 4);
+  const pn = (x, y, P) => {
+    const xi = Math.floor(x), yi = Math.floor(y), u = smoothT(x - xi), v = smoothT(y - yi);
+    const x0 = ((xi % P) + P) % P, x1 = (x0 + 1) % P;
+    return (hash2(x0, yi) * (1 - u) + hash2(x1, yi) * u) * (1 - v) + (hash2(x0, yi + 1) * (1 - u) + hash2(x1, yi + 1) * u) * v;
+  };
+  // Ovals: [lon °, lat °, half-length °, half-width °, r, g, b, strength]
+  const SPOTS = [
+    [200, -20, 18, 8, 64, 92, 148, 0.85],     // Great Dark Spot
+    [292, -55, 6, 3.5, 84, 112, 166, 0.7],     // D2
+    [292, -55, 1.6, 1.2, 226, 234, 240, 0.8],  // its bright core
+    [250, -42, 3, 1.4, 236, 240, 244, 0.85],   // the Scooter
+  ];
+  for (let y = 0; y < H; y++) {
+    const v = (y + 0.5) / H, lat0 = 90 - v * 180;
+    for (let x = 0; x < W; x++) {
+      const u = (x + 0.5) / W, lon = u * 360;
+      const lat = lat0 + (pn(u * 16, v * 50, 16) - 0.5) * 2.0;
+      // Base colour, with a gentle band structure and the dark belt at
+      // 60–70°S, and the brighter polar caps of haze.
+      let r = 150, g = 186, b = 222;
+      const band = Math.cos(lat * 0.21) * 0.035 + Math.cos(lat * 0.55 + 1) * 0.02;
+      const belt = Math.exp(-((lat + 63) * (lat + 63)) / 40) * 0.16;
+      const k = 1 + band - belt + (pn(u * 60, v * 160, 60) - 0.5) * 0.03;
+      r *= k; g *= k; b *= k;
+      // Cirrus streaks: thin, bright, long in longitude, at the
+      // latitudes where the jets shear them out.
+      const ci = (Math.exp(-((lat + 27) * (lat + 27)) / 30) + Math.exp(-((lat - 25) * (lat - 25)) / 50) * 0.6 + Math.exp(-((lat + 70) * (lat + 70)) / 12) * 0.4)
+               * Math.pow(Math.max(0, pn(u * 24, v * 220, 24) - 0.62) / 0.38, 1.6);
+      r += (238 - r) * ci; g += (242 - g) * ci; b += (246 - b) * ci;
+      for (const sp of SPOTS) {
+        let dl = lon - sp[0]; dl -= Math.round(dl / 360) * 360;
+        const e = (dl / sp[2]) * (dl / sp[2]) + ((lat0 - sp[1]) / sp[3]) * ((lat0 - sp[1]) / sp[3]);
+        if (e < 1.6) { const a = sp[7] * (1 - smoothT(Math.min(1, Math.max(0, (e - 0.6) / 1.0)))); r += (sp[4] - r) * a; g += (sp[5] - g) * a; b += (sp[6] - b) * a; }
+      }
+      // The Great Dark Spot's companion clouds, along its southern edge.
+      { let dl = lon - 200; dl -= Math.round(dl / 360) * 360;
+        const e = (dl / 16) * (dl / 16) + ((lat0 + 29.5) / 2.2) * ((lat0 + 29.5) / 2.2);
+        if (e < 1) { const a = (1 - e) * 0.9 * Math.max(0, pn(u * 90, v * 200, 90) - 0.25) / 0.75; r += (240 - r) * a; g += (244 - g) * a; b += (248 - b) * a; } }
+      const o = (y * W + x) * 4;
+      px[o] = r; px[o + 1] = g; px[o + 2] = b; px[o + 3] = 255;
+    }
+  }
+  return px;
+}
+function neptuneMaps(px) {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  c.getContext('2d').putImageData(new ImageData(px || neptunePixels(W, H), W, H), 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return { day: t };
+}
+
 /* ── Saturn ─────────────────────────────────────────────────────
    From Enceladus Saturn is 29° across — fifty-eight full Moons — and
    what shows is how quiet it is next to Jupiter: the same kind of
@@ -7881,6 +8122,7 @@ const TEXGEN = {
   saturn: saturnMaps, titan: () => saturnMoonMaps('titan'), tethys: () => saturnMoonMaps('tethys'),
   dione: () => saturnMoonMaps('dione'), rhea: () => saturnMoonMaps('rhea'), mimas: () => saturnMoonMaps('mimas'),
   ganymede: () => galileanMaps('ganymede'), callisto: () => galileanMaps('callisto'), europa: () => galileanMaps('europa'),
+  neptune: neptuneMaps,
 };
 
 /* Where a locked companion hangs, and how it is turned, as seen from
@@ -7946,6 +8188,16 @@ const GAN = (() => {
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 1070400 };
 })();
 
+/* And Neptune from Triton, 15°S, 60° west of the point beneath it,
+   on the cantaloupe terrain at the polar cap's edge: 354,760 km off,
+   8.0° across, 29° up in the east. Triton orbits backwards, 157° to
+   Neptune's equator, so Neptune's north is tilted 23° off the line
+   opposite Triton's own pole. */
+const TRI = (() => {
+  const F = siteFrame(-15, -60), t = 23 * DEG;
+  return { J: F([1, 0, 0]), pole: F([0, Math.sin(t), -Math.cos(t)]) };
+})();
+
 const CAL = (() => {
   const F = siteFrame(15, -75);
   return { J: F([1, 0, 0]), X: F([-1, 0, 0]), Y: F([0, -1, 0]), Z: F([0, 0, 1]), aE: 1882700 };
@@ -7988,6 +8240,7 @@ const TEXGEN_OFF = {
     [k, () => offThread('galileanPixels', k).then((px) => galileanMaps(k, px))])),
   charon: () => offThread('charonPixels').then(charonMaps),
   pluto: () => offThread('plutoPixels').then(plutoMaps),
+  neptune: () => offThread('neptunePixels', 512, 256).then(neptuneMaps),
 };
 function bodyTex(k) {
   let t = texCache.get(k);
@@ -8158,6 +8411,15 @@ const COMPANIONS = {
   'callisto-io': {
     tex: 'callisto', r: 1, gain: 1.0, bright: 0.5,
     kepler: { a: 1882700, R: 2410.3, rate: -0.0187, phase: 4.1, frame: IOJ },
+  },
+
+  /* Neptune from Triton: 8.0° across at true size, slightly flattened
+     (0.983), turning in 16 hours. Brightness the physical one, in
+     Pluto's units: sunlight at 30 AU on clouds of albedo 0.44. */
+  'neptune-tri': {
+    tex: 'neptune', r: COMPANION_DIST * (24764 / 354760), dir: TRI.J, pole: TRI.pole, oblate: 0.983, spin: 0.0074,
+    gain: 1.0, bright: 1.3, limb: 0.9,
+    atmo: [0.45, 0.65, 1.0], atmoK: 0.10, atmoR: 1.006,
   },
 
   /* Jupiter from Ganymede: 7.64° across, at true size. Io and Europa
@@ -8747,6 +9009,132 @@ const plumes = (() => {
         const u = p.mesh.material.uniforms;
         u.uSun.value.copy(SUN_DIR);
         u.uGain.value = p.gain * lit * units;
+      }
+    },
+    get on() { return live.length > 0; },
+  };
+})();
+
+/* ── Geysers ────────────────────────────────────────────────────
+   Triton's: Voyager 2 caught four erupting on the polar cap, each a
+   dark column a kilometre or so across rising straight up 8 km, to
+   where the thin air's wind takes it, then trailing away level for
+   over a hundred kilometres downwind (Soderblom et al. 1990) — the
+   wind aloft blowing west while the streaks on the ground point
+   north-east. Nitrogen gas, warmed under the clear ice by sunlight,
+   carrying dark dust up with it: the solid-state greenhouse.
+
+   Each is a ribbon along that path — column, bend, trail — in true
+   size at its true place, tens of kilometres out past the streamed
+   ground, turned in the vertex shader to face you across its own
+   length (a camera-facing line), dropped by the planet's curve, and
+   pulled in along the line of sight to 80 km so it stays inside the
+   far plane. The dust is dark and small: it absorbs what is behind it
+   (stars, haze, Neptune) and scatters a little sunlight, forward. */
+const geysers = (() => {
+  const PROXY = 80000, N = 72;
+  const group = new THREE.Group();
+  scene.add(group);
+  let live = [];
+  const vs = `
+    attribute vec3 aTan; attribute vec3 aW;   // aW: half-width, side, optical depth
+    uniform float uR;
+    varying float vSide, vTau; varying vec3 vP;
+    void main() {
+      vec3 P = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
+      vec3 V = normalize( P - cameraPosition );
+      vec3 S = normalize( cross( aTan, V ) );
+      P += S * aW.x * aW.y;
+      vec2 d = P.xz - cameraPosition.xz;
+      P.y -= dot( d, d ) / ( 2.0 * uR );
+      vec3 r = P - cameraPosition;
+      float D = length( r );
+      if ( D > ${PROXY.toFixed(1)} ) P = cameraPosition + r * ( ${PROXY.toFixed(1)} / D );
+      vSide = aW.y; vTau = aW.z; vP = P;
+      gl_Position = projectionMatrix * viewMatrix * vec4( P, 1.0 );
+      float far = projectionMatrix[ 3 ][ 2 ] / ( projectionMatrix[ 2 ][ 2 ] + 1.0 );
+      if ( far > 1000.0 ) gl_Position.z = min( gl_Position.z, gl_Position.w * ( 1.0 - 2e-4 ) );
+    }`;
+  const fs = `
+    uniform vec3 uSun, uSunCol;
+    varying float vSide, vTau; varying vec3 vP;
+    void main() {
+      // Across the column the dust is Gaussian; the line of sight crosses
+      // it with optical depth vTau at the middle.
+      float tau = vTau * exp( - vSide * vSide * 2.5 );
+      float a = 1.0 - exp( - tau );
+      // Single scattering off dark grains (albedo 0.3), Henyey–Greenstein
+      // with g = 0.5: radiance = E ϖ P / 4π per unit of (1 − e^−τ).
+      float c = dot( normalize( vP - cameraPosition ), normalize( uSun ) );
+      float hg = 0.75 / pow( 1.25 - c, 1.5 );
+      gl_FragColor = vec4( uSunCol * ( 0.3 * hg / 12.566 ) * a, a );
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+  function build(sp) {
+    const pos = new Float32Array((N + 1) * 2 * 3), tan = new Float32Array((N + 1) * 2 * 3), w = new Float32Array((N + 1) * 2 * 3);
+    const b = sp.brg * DEG, tb = sp.tail.brg * DEG;
+    const vx = Math.sin(b) * sp.dist, vz = -Math.cos(b) * sp.dist;
+    const wx = Math.sin(tb), wz = -Math.cos(tb);
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      // The first fifth climbs the column, then a bend of a few
+      // kilometres into the trail, which sinks a little as it goes.
+      const up = Math.min(1, t / 0.2), q = Math.max(0, (t - 0.2) / 0.8);
+      const along = q * q * 0.04 + q * 0.96;
+      const y = sp.H * (1 - Math.pow(1 - up, 2.2) * 1) * (1 - 0.15 * q);
+      pts.push([vx + wx * along * sp.tail.len, y, vz + wz * along * sp.tail.len, t, q]);
+    }
+    for (let i = 0; i <= N; i++) {
+      const a = pts[Math.max(0, i - 1)], c = pts[Math.min(N, i + 1)];
+      let tx = c[0] - a[0], ty = c[1] - a[1], tz = c[2] - a[2];
+      const l = Math.hypot(tx, ty, tz) || 1; tx /= l; ty /= l; tz /= l;
+      const [x, y, z, t, q] = pts[i];
+      const hw = t < 0.2 ? sp.w * (0.6 + 0.4 * t / 0.2) : sp.w * (1 + q * 4);
+      // The column is dense; the trail thins as it spreads.
+      const tau = (t < 0.2 ? sp.tau : sp.tau * 0.6 / (1 + q * 4)) * (1 - Math.pow(q, 3));
+      for (let k = 0; k < 2; k++) {
+        const o = (i * 2 + k) * 3;
+        pos[o] = x; pos[o + 1] = y; pos[o + 2] = z;
+        tan[o] = tx; tan[o + 1] = ty; tan[o + 2] = tz;
+        w[o] = hw; w[o + 1] = k ? 1 : -1; w[o + 2] = tau;
+      }
+    }
+    const idx = [];
+    for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aTan', new THREE.BufferAttribute(tan, 3));
+    g.setAttribute('aW', new THREE.BufferAttribute(w, 3));
+    g.setIndex(idx);
+    return g;
+  }
+  return {
+    // specs: [{ brg (°), dist (m), H (m), w (column half-width, m), tau, tail: { brg (°), len (m) } }]
+    set(specs) {
+      for (const g of live) { group.remove(g); g.geometry.dispose(); g.material.dispose(); }
+      live = (specs || []).map((sp) => {
+        const m = new THREE.Mesh(build(sp), new THREE.ShaderMaterial({
+          uniforms: { uSun: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Vector3() }, uR: { value: 1e6 } },
+          vertexShader: vs, fragmentShader: fs, side: THREE.DoubleSide,
+          transparent: true, depthWrite: false, fog: false,
+          blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+        }));
+        m.frustumCulled = false;
+        m.renderOrder = -1;
+        group.add(m);
+        return m;
+      });
+    },
+    // groundY: the site's ground, where the vents are taken to stand.
+    update(groundY, lit, units) {
+      group.position.y = groundY;
+      for (const m of live) {
+        const u = m.material.uniforms;
+        u.uSun.value.copy(SUN_DIR);
+        u.uSunCol.value.set(world.sunPower * lit * units, world.sunPower * lit * units, world.sunPower * lit * units);
+        u.uR.value = WORLD.R;
       }
     },
     get on() { return live.length > 0; },
@@ -10829,7 +11217,7 @@ let FLY_CEILING = 400;   // past this the streamed horizon would run out
 
    In the air you are a projectile: nothing you do with your legs
    changes where you land. */
-const G_LIST = { ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
+const G_LIST = { triton: 0.779, ganymede: 1.428, callisto: 1.235, titan: 1.352, mercury: 3.70, io: 1.796, enceladus: 0.113, moon: 1.62, mars: 3.72, phobos: 0.0057, deimos: 0.003, venus: 8.87, europa: 1.315, pluto: 0.620, charon: 0.288 };
 const SUIT = {
   m: 171,            // kg, person and suit
   F0: 36 * 80,       // N, leg-extension force at zero speed
@@ -12435,6 +12823,7 @@ function step(dt, t) {
   // A tall plume's top stays in sunlight well after sunset below it.
   if (plumes.on) plumes.update(_camWorld, SITE_H, THREE.MathUtils.smoothstep(sunElev, -0.25, 0.0), KEY.U);
   curtains.update(KEY.U);
+  if (geysers.on) geysers.update(SITE_H, THREE.MathUtils.smoothstep(sunElev, -0.15, 0.0), KEY.U);
 
   dust.update(dt, player.gravity, world.dustDrag);
   dust.light();
@@ -12673,6 +13062,7 @@ function applyWorldNow(id) {
   updateSkyColors();
   setCompanions(world.companions);
   plumes.set(world.plumes);
+  geysers.set(world.geysers);
   curtains.set(!!world.curtain);
 
   // ── ground
