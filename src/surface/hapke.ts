@@ -43,7 +43,7 @@ export const EYE_TEX = new THREE.Uniform<THREE.Texture | null>(null);
 // g = 30° geometry a patch reflects exactly what a Lambertian one of
 // the same albedo would, so the albedos the kernel writes keep
 // meaning what they say.
-function hapkeJS(mu0: number, mu: number, cosg: number, p: HapkeParams) {
+export function hapkeJS(mu0: number, mu: number, cosg: number, p: HapkeParams) {
   const tt = Math.tan(p.theta * DEG);
   const ci = mu0, ce = mu, si = Math.sqrt(1 - ci * ci), se = Math.sqrt(1 - ce * ce);
   const i = Math.max(Math.acos(ci), 1e-3), e = Math.max(Math.acos(ce), 1e-3);
