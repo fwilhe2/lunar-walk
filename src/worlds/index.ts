@@ -4,8 +4,8 @@
    ground is, view.ts what it looks like (see types.ts). Adding a world
    means adding a folder and a line in each list below; the compiler
    checks that both lists name the same worlds. */
-import type { World, WorldView } from './types';
-import { TERRAINS } from './terrains';
+import type { World, WorldView } from './view-types';
+import { TERRAINS, type WorldId } from './terrains';
 import { view as mercury } from './mercury/view';
 import { view as venus } from './venus/view';
 import { view as moon } from './moon/view';
@@ -30,7 +30,7 @@ import { view as charon } from './charon/view';
 
 const VIEWS: Record<WorldId, WorldView> = { mercury, venus, moon, mars, phobos, deimos, vesta, ceres, io, europa, ganymede, callisto, mimas, enceladus, dione, titan, iapetus, miranda, triton, pluto, charon };
 
-export type WorldId = keyof typeof TERRAINS;
+export type { WorldId };
 export const WORLD_IDS = Object.keys(VIEWS) as WorldId[];
 // 1–9 along the number row, then −, = and Backspace: 0 is the demo.
 // Shift and the same keys reach worlds thirteen onward.

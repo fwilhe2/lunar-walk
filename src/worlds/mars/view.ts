@@ -1,7 +1,7 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
-export const view: WorldView = {
+export const view = {
   site: 'Amazonis Planitia',
   title: 'Mars Walk', sub: 'Amazonis Planitia · 0.379 g · surface unbounded',
   fine: 'Six millibars of CO₂ is enough to hold dust, and dust is what you see.<br>' +
@@ -49,4 +49,4 @@ export const view: WorldView = {
   // saturation AgX gives away in the highlights.
   exposure: 1.0, eye: [0.13, 0.3, 4], tone: 'aces', bloom: [0.42, 0.7, 3.0],
   companions: ['phobos', 'deimos'],
-};
+} satisfies WorldView;

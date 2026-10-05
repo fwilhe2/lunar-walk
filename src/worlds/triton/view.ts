@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Triton is 30 AU out: 1.5 W/m², a nine-hundredth of the Moon's
@@ -16,7 +16,7 @@ import { L4 } from '../levels';
    the Great Dark Spot on it. Triton's orbit is retrograde and tilted
    23° to Neptune's equator, so the planet's poles are not where its
    moon's are. */
-export const view: WorldView = {
+export const view = {
   site: 'Bubembe Regio',
   title: 'Triton Walk', sub: 'Bubembe Regio · 0.079 g · surface unbounded',
   fine: 'Nitrogen ice at −235 °C, the coldest surface ever measured. Neptune hangs 8° wide<br>' +
@@ -54,4 +54,4 @@ export const view: WorldView = {
     { brg: 118, dist: 96000, H: 7500, w: 600, tau: 0.8, tail: { brg: 258, len: 120000 } },
   ],
   look: [-1.42, 0.25],
-};
+} satisfies WorldView;

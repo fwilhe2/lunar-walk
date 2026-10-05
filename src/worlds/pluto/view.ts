@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Pluto is 33 AU out: 1.26 W/m², a thousandth of the Moon's
@@ -26,7 +26,7 @@ import { L4 } from '../levels';
    from Pluto's far side, where the famous heart is, it is never
    seen at all. Its light in a shadow is a tenth of a percent of the
    sun's. */
-export const view: WorldView = {
+export const view = {
   site: 'Charon-facing hemisphere',
   title: 'Pluto Walk', sub: 'Charon-facing hemisphere · 0.063 g · surface unbounded',
   fine: 'Noon here is dusk: the sun is a point a thousandth as bright, and the<br>' +
@@ -62,4 +62,4 @@ export const view: WorldView = {
   night: { ratio: 4.1e-4, radius: 0.0319, color: 0xf2f2f6, label: 'CHARONLIT', stars: 30 },
   // Earth is never more than 1.7° from the sun from out here.
   relay: 0.025,
-};
+} satisfies WorldView;

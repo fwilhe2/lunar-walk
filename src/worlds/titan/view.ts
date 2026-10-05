@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Enceladus is 9.5 AU out: 15 W/m², a ninetieth of the Moon's, from
@@ -35,7 +35,7 @@ import { L4 } from '../levels';
    seas were seen in: the sun stands low, here 16°. You land at the
    head of a bay, with a plateau across it. The liquid level is
    height 0; see hTitan(). */
-export const view: WorldView = {
+export const view = {
   site: 'Ligeia Mare',
   title: 'Titan Walk', sub: 'Ligeia Mare · 0.138 g · surface unbounded',
   fine: 'One and a half bar of nitrogen at −179 °C, under a haze that lets through a thousandth<br>' +
@@ -74,4 +74,4 @@ export const view: WorldView = {
   companions: [],
   sea: 0,
   look: [Math.PI, -0.03],
-};
+} satisfies WorldView;

@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Ceres is 2.77 AU out: 177 W/m², an eighth of the Moon's, from a sun
@@ -9,7 +9,7 @@ import { L4 } from '../levels';
    them. Nothing hangs overhead; the horizon is a kilometre off at eye
    height, and Occator's rim stands round it, forty kilometres away,
    its foot already below the curve. */
-export const view: WorldView = {
+export const view = {
   site: 'Occator',
   title: 'Ceres Walk', sub: 'Occator crater · 0.029 g · surface unbounded',
   fine: 'The floor of Occator, 92 km across. Ahead, in the central pit, the brightest ground<br>' +
@@ -38,4 +38,4 @@ export const view: WorldView = {
   look: [-1.23, -0.2],
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 2.77,
-};
+} satisfies WorldView;

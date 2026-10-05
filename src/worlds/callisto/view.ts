@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Callisto is at Jupiter's distance from the sun, so the light is
@@ -15,7 +15,7 @@ import { L4 } from '../levels';
    (15°N, 75°W, on Valhalla's outer rings), and never moves. Io,
    Europa and Ganymede all orbit inside Callisto, so all three cross
    Jupiter's face from here, and go behind it. */
-export const view: WorldView = {
+export const view = {
   site: 'Valhalla',
   title: 'Callisto Walk', sub: 'Valhalla · 0.126 g · surface unbounded',
   fine: 'The oldest surface in the solar system: craters on craters, worn down by the sun<br>' +
@@ -52,4 +52,4 @@ export const view: WorldView = {
   look: [-1.64, 0.12],
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 5.2,
-};
+} satisfies WorldView;

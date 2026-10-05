@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Europa is five times further from the sun than the Moon: 50 W/m²,
@@ -19,7 +19,7 @@ import { L4 } from '../levels';
    point under Jupiter, which puts Jupiter 15° above the eastern
    horizon. See the jupiter companion for why it looks the way it
    does from here. */
-export const view: WorldView = {
+export const view = {
   site: 'Tara Regio',
   title: 'Europa Walk', sub: 'Tara Regio · 0.134 g · surface unbounded',
   fine: 'Ice at −170 °C, hard as rock, under a sun a twenty-seventh as bright.<br>' +
@@ -76,4 +76,4 @@ export const view: WorldView = {
   dose: 5.4,
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 5.2,
-};
+} satisfies WorldView;

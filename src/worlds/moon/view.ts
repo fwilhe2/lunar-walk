@@ -1,7 +1,7 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
-export const view: WorldView = {
+export const view = {
   site: 'Mare Tranquillitatis',
   title: 'Lunar Walk', sub: 'Mare Tranquillitatis · 0.166 g · surface unbounded',
   fine: 'Sunlight is unfiltered — shadows are black, and the sky stays black at noon.<br>' +
@@ -43,4 +43,4 @@ export const view: WorldView = {
   night: { ratio: 2.5e-4, radius: 0.0166, color: 0xdfe7ff, label: 'EARTHLIT', stars: 120 },
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 1,
-};
+} satisfies WorldView;

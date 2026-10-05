@@ -26,7 +26,9 @@ import { terrain as charon } from './charon/terrain';
 
 export const TERRAINS = { mercury, venus, moon, mars, phobos, deimos, vesta, ceres, io, europa, ganymede, callisto, mimas, enceladus, dione, titan, iapetus, miranda, triton, pluto, charon };
 
-export function setWorld(id: keyof typeof TERRAINS): TerrainDef {
+export type WorldId = keyof typeof TERRAINS;
+
+export function setWorld(id: WorldId): TerrainDef {
   return useTerrain(TERRAINS[id]);
 }
 

@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Io is at Jupiter's distance from the sun, so the light is
@@ -17,7 +17,7 @@ import { L4 } from '../levels';
    most of it below the horizon, glowing where it stands toward the
    sun. And the radiation: Io orbits inside the densest part of
    Jupiter's belts, and the surface dose is about 36 Sv a day. */
-export const view: WorldView = {
+export const view = {
   site: 'near Kanehekili Fluctus',
   title: 'Io Walk', sub: 'Kanehekili Fluctus · 0.183 g · surface unbounded',
   fine: 'Sulphur and frozen SO₂ over a crust four hundred volcanoes remake so fast that not<br>' +
@@ -60,4 +60,4 @@ export const view: WorldView = {
   look: [-1.2, 0.3],
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 5.2,
-};
+} satisfies WorldView;

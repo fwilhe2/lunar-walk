@@ -1,7 +1,7 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L2 } from '../levels';
 
-export const view: WorldView = {
+export const view = {
   site: 'Voltaire rim',
   title: 'Deimos Walk', sub: 'Voltaire rim · 0.0003 g · surface unbounded',
   fine: 'Smoother than Phobos: metres of regolith drape every crater, and there<br>' +
@@ -28,4 +28,4 @@ export const view: WorldView = {
   jets: true,
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 1.524,
-};
+} satisfies WorldView;

@@ -357,6 +357,8 @@ const COMPANIONS = {
     tex: 'venus', r: 10, dir: [0.62, 0.40, -0.20], gain: 1.0, bright: 0.31,
   },
 };
+/** A body that can hang in some world's sky: a key of the table above. */
+export type CompanionId = keyof typeof COMPANIONS;
 
 function makeCompanion(spec) {
   const T = bodyTex(spec.tex);
@@ -740,7 +742,7 @@ export function relayAim(out) {
 // has played out. Not paced by frames: those can be slow to come.
 // ready: what to wait for before drawing on the main thread (the
 // picker's zoom), so the page stays smooth while it plays.
-export async function companionsAsync(ids, ready = () => Promise.resolve()) {
+export async function companionsAsync(ids: readonly CompanionId[], ready = () => Promise.resolve()) {
   const missing = ids.filter((id) => !companionCache.has(id));
   if (!missing.length) return;
   // The workers can start at once, in parallel; only what runs here waits.
@@ -758,7 +760,7 @@ export async function companionsAsync(ids, ready = () => Promise.resolve()) {
   }
 }
 
-export function setCompanions(ids) {
+export function setCompanions(ids: readonly CompanionId[]) {
   for (const g of liveCompanions) scene.remove(g);
   liveCompanions = ids.map((id) => {
     let g = companionCache.get(id);

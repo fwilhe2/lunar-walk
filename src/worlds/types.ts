@@ -1,12 +1,15 @@
 /* What a world is, as data. Each world is a folder, src/worlds/<id>/,
-   with two definitions:
+   with two definitions (this file has the first, view-types.ts the
+   second):
 
    - terrain.ts (TerrainDef): what the ground is — gravity, radius, its
      crater population, and its height and colour functions. Pure: no
      three, no DOM, because the mesh workers import it too.
    - view.ts (WorldView): what it looks like from inside a helmet — the
      light, the sky, the regolith texture, the streamer's reach, what
-     hangs overhead, and the walker's and rover's numbers.
+     hangs overhead, and the walker's and rover's numbers. Not pure:
+     its types name the engine's companions and landers, so it lives
+     apart from the terrain types the kernel's compiler check sees.
 
    The registry (src/worlds/index.ts) puts them together in order out
    from the sun and derives what follows from them (name, gravity text).
@@ -74,65 +77,4 @@ export interface TerrainDef {
   knobMask?(px: number, pz: number): number;
   /** Clears the world's own caches when the kernel switches to it. */
   reset?(): void;
-}
-
-/* ── View ────────────────────────────────────────────────────── */
-
-export type RGB = [number, number, number];
-
-export interface StreamLevel { size: number; ext: number; step?: number }
-
-export interface WorldView {
-  site: string;
-  title: string; sub: string; fine: string;        // the opening screen
-  air: boolean;
-  stars: number;
-  sunColor: number; sunPower: number; sunSize: number; sunHDR: RGB;
-  noSun?: boolean;                                  // Venus, Titan: no disc
-  corona: number; coronaColor: RGB;
-  hemi: [number, number, number]; amb: [number, number];
-  fog: { density: number } | null;
-  sky: { zenith: RGB; horizon: RGB; aureole: RGB; k: number; amt?: number; tau?: number } | null;
-  skyLit?: boolean;
-  zodiacal?: number;                                // AU from the sun, if the zodiacal light shows
-  // regolith texture
-  grey: number; mapTint: RGB; pits: number; grain: number; pebbles: number;
-  clods?: number; plate?: number; ripple?: number;
-  hapke: { w: number; b: number; c: number; B0: number; h: number; theta: number; Bc0: number; hc: number };
-  micro: number[]; sparkle: number;
-  // streaming and moving
-  levels: () => StreamLevel[];
-  fly: number; rover: boolean; roverTop?: number; roverDrag?: number;
-  mu: number; drag?: number; buoy?: number; jets?: boolean;
-  medium?: { air: number; lp: number; wind: number; windLP: number };
-  dose?: number;                                    // Sv/day on the readout
-  // dust, prints, rocks
-  dustColor: number; dustDrag: number; dustLife?: number;
-  stampColor: number; soil: number;
-  rockTint: RGB; rockAlb: [number, number]; rockN: number;
-  rockFlat?: number; rockRound?: boolean; rockMax?: number;
-  rilleTalus?: number; talus?: number; blocks?: number;
-  cobbles?: { patches: number; per: number; r: number; size: [number, number] };
-  // landmarks
-  landmark: string; flagColor: number;
-  lander?: string;                                  // lander kind (props/lander.ts KINDS)
-  look?: [number, number];
-  relay?: number;
-  // exposure and grading
-  exposure: number; eye: [number, number, number]; starGain?: number;
-  bloom: [number, number, number]; tone?: string;
-  shadows?: boolean;                                // false turns terrain shadows off (Venus)
-  // the sky's company and its effects
-  companions: string[];
-  night?: { ratio: number; radius: number; color: number; label: string; stars: number };
-  plumes?: object[]; geysers?: object[]; devils?: number; curtain?: number;
-  sea?: number;                                     // liquid level, m (Titan)
-}
-
-/** A view as the registry hands it out: the row plus what is derived. */
-export interface World extends WorldView {
-  id: string;
-  name: string;          // 'MOON'
-  g: number;             // from the terrain
-  gTxt: string;          // '1.62 m/s²'
 }

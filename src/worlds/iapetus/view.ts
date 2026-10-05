@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Iapetus is 9.5 AU out with Saturn: 15 W/m², a ninetieth of the
@@ -13,7 +13,7 @@ import { L4 } from '../levels';
    well out of Saturn's equator — 15° — so from here, unlike from
    every other moon, the rings are seen open. Titan wanders past as a
    small orange disc. */
-export const view: WorldView = {
+export const view = {
   site: 'Cassini Regio',
   title: 'Iapetus Walk', sub: 'Cassini Regio · 0.023 g · surface unbounded',
   fine: 'Half of Iapetus is black and half is white, sorted by the sun. To the south a wall of<br>' +
@@ -41,4 +41,4 @@ export const view: WorldView = {
   night: { ratio: 2.0e-4, radius: 0.017, color: 0xfff0d8, label: 'SATURNLIT', stars: 40 },
   relay: 0.1,
   look: [-1.9, 0.38],
-};
+} satisfies WorldView;

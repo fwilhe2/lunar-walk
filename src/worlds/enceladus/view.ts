@@ -1,7 +1,7 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { LE } from '../levels';
 
-export const view: WorldView = {
+export const view = {
   site: 'Baghdad Sulcus',
   title: 'Enceladus Walk', sub: 'Baghdad Sulcus · 0.012 g · surface unbounded',
   fine: 'The brightest ground in the solar system: snow fallen back from jets of an ocean<br>' +
@@ -33,4 +33,4 @@ export const view: WorldView = {
   relay: 0.1,
   curtain: 0.07,
   look: [-0.885, 0.28],
-};
+} satisfies WorldView;

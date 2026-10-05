@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Ganymede has Europa's sun in Europa's units, on ground between
@@ -12,7 +12,7 @@ import { L4 } from '../levels';
    the field shelters its low latitudes: the commonly quoted surface
    dose, 0.08 Sv a day, is for the poles, where Jupiter's particles
    come down the open field lines; here it is an upper bound. */
-export const view: WorldView = {
+export const view = {
   site: 'Nicholson Regio',
   title: 'Ganymede Walk', sub: 'Nicholson Regio · 0.146 g · surface unbounded',
   fine: 'The largest moon in the solar system: old dark crust, torn open in bands of bright<br>' +
@@ -43,4 +43,4 @@ export const view: WorldView = {
   look: [-1.392, 0.3],
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 5.2,
-};
+} satisfies WorldView;

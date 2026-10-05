@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Miranda is 19.2 AU out: 3.7 W/m², from a sun 1.7 arcminutes across.
@@ -12,7 +12,7 @@ import { L4 } from '../levels';
    thread nearly edge-on. Ariel, Umbriel, Titania and Oberon go round
    outside, Ariel as much as a degree across. At 0.008 g walking is
    out of the question, so the suit has jets and the beacon. */
-export const view: WorldView = {
+export const view = {
   site: 'Inverness Corona',
   title: 'Miranda Walk', sub: 'Inverness Corona · 0.008 g · surface unbounded',
   fine: 'A moon broken and put back together badly: banded coronae against old cratered ground,<br>' +
@@ -40,4 +40,4 @@ export const view: WorldView = {
   night: { ratio: 0.0183, radius: 0.199, color: 0xe2f4f6, label: 'URANUSLIT', stars: 10 },
   relay: 0.05,
   look: [-0.97, 0.42],
-};
+} satisfies WorldView;

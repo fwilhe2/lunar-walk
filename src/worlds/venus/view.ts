@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L3 } from '../levels';
 
 /* Venus is the only body in the set where the sky is the light
@@ -19,7 +19,7 @@ import { L3 } from '../levels';
    zenith is the bright part, because that is the short way out,
    and the horizon is dark, because that way the column never
    ends. On Mars and Earth it is the other way round.            */
-export const view: WorldView = {
+export const view = {
   site: 'Ovda Regio',
   title: 'Venus Walk', sub: 'Ovda Regio · 0.904 g · surface unbounded',
   fine: 'Ninety-two bar of CO₂ at 464 °C, which is a fluid, not air: you wade.<br>' +
@@ -60,4 +60,4 @@ export const view: WorldView = {
   lander: 'venera',
   exposure: 1.0, eye: [0.16, 0.3, 6], tone: 'aces', bloom: [0.2, 0.75, 3.0],
   companions: [],
-};
+} satisfies WorldView;

@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Charon is at Pluto's distance from the sun, so the light is
@@ -18,7 +18,7 @@ import { L4 } from '../levels';
    fourteen full Moons side by side — and never moves: from here the
    sun sets behind you while Pluto waits. The site is 15°S, 45° west
    of the point beneath it, on the western part of Vulcan Planitia. */
-export const view: WorldView = {
+export const view = {
   site: 'Vulcan Planitia',
   title: 'Charon Walk', sub: 'Vulcan Planitia · 0.029 g · surface unbounded',
   fine: 'Water ice at −220 °C under Pluto\'s dusk-dim sun. Pluto hangs 7° wide in<br>' +
@@ -52,4 +52,4 @@ export const view: WorldView = {
   // Arrive facing Pluto and the massif under it, head raised enough
   // to hold both — yaw and pitch, in radians.
   look: [-1.32, 0.3],
-};
+} satisfies WorldView;

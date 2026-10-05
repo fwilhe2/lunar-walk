@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Dione has Enceladus's sun, in the same units, on a trailing face
@@ -9,7 +9,7 @@ import { L4 } from '../levels';
    not far from it, so it shows a thick crescent with its rings a
    line across it. Mimas, Enceladus and Tethys pass in front of it; Rhea
    and Titan go round outside. */
-export const view: WorldView = {
+export const view = {
   site: 'Padua Chasmata',
   title: 'Dione Walk', sub: 'Padua Chasmata · 0.024 g · surface unbounded',
   fine: 'The wisps Voyager saw on Dione\'s trailing face are cliffs: fresh ice walls hundreds<br>' +
@@ -37,4 +37,4 @@ export const view: WorldView = {
   night: { ratio: 0.012, radius: 0.161, color: 0xfff0d8, label: 'SATURNLIT', stars: 12 },
   relay: 0.1,
   look: [2.142, 0.3],
-};
+} satisfies WorldView;

@@ -5,6 +5,7 @@ import { scene } from '../render/renderer';
 import { surfacePatch } from '../surface/patch';
 import { dropAt } from '../terrain/anchor';
 import { world } from '../worlds/index';
+import type { LanderKind } from '../worlds/view-types';
 
 /* ═════════════════════════════════════════════════════════════
    THE LANDER — the lunar module you came down in, where the
@@ -28,6 +29,12 @@ import { world } from '../worlds/index';
    drawn mesh from any distance, and it keeps walkers and the rover
    out of its body and off its pads.
    ═════════════════════════════════════════════════════════════ */
+/** A lander kind: pad count, pad circle and pad radius, the body to collide with, and its builder. */
+interface LanderSpec {
+  n: number; footR: number; bodyR: number; top: number; padR: number;
+  build: (pads: number[][]) => THREE.Group;
+}
+
 export const lander = (() => {
   const group = new THREE.Group();
   scene.add(group);
@@ -335,7 +342,7 @@ export const lander = (() => {
     viking: { n: 3, footR: 1.15, bodyR: 0.85, top: 1.8, padR: 0.16, build: buildViking },
     venera: { n: 6, footR: 1.0, bodyR: 1.15, top: 2.4, padR: 0, build: buildVenera },
     generic: { n: 4, footR: 3.9, bodyR: 2.1, top: 6.3, padR: 0.45, build: buildGeneric },
-  };
+  } satisfies Record<LanderKind, LanderSpec>;
   const padAngle = (k) => (K.n === 3 ? k * 2 * Math.PI / 3 + Math.PI / 3 : k * 2 * Math.PI / K.n);
 
   function mergeByMaterial(g) {

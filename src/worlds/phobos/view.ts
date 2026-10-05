@@ -1,7 +1,7 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L2 } from '../levels';
 
-export const view: WorldView = {
+export const view = {
   site: 'near Stickney',
   title: 'Phobos Walk', sub: 'near Stickney · 0.00058 g · surface unbounded',
   fine: 'Gravity is six thousandths of Earth\'s: a full push would be a launch,<br>' +
@@ -32,4 +32,4 @@ export const view: WorldView = {
   jets: true,
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 1.524,
-};
+} satisfies WorldView;

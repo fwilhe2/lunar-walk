@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Mercury is 0.39 AU from the sun, where the disc is 1.4° across —
@@ -14,7 +14,7 @@ import { L4 } from '../levels';
    black but a shade less so. What hangs in the sky are two stars:
    Venus near opposition, the brightest thing in it after the sun, and
    Earth, with the Moon beside it if you look closely. */
-export const view: WorldView = {
+export const view = {
   site: 'below Discovery Rupes',
   title: 'Mercury Walk', sub: 'Discovery Rupes · 0.377 g · surface unbounded',
   fine: 'The sun is two and a half times as wide as from the Moon and seven times as bright;<br>' +
@@ -43,4 +43,4 @@ export const view: WorldView = {
   companions: ['earth-star', 'venus-star'],
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 0.387,
-};
+} satisfies WorldView;

@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { LE } from '../levels';
 
 /* Mimas has Enceladus's sun in Enceladus's units, on ice nearly as
@@ -10,7 +10,7 @@ import { LE } from '../levels';
    them, the Cassini Division, by resonance. Night under Saturn is 5%
    of the sun, the brightest planetshine anywhere here. The gravity is
    a hundred-and-fiftieth of Earth's: jets and the beacon. */
-export const view: WorldView = {
+export const view = {
   site: 'Saturn-facing hemisphere',
   title: 'Mimas Walk', sub: 'Saturn-facing hemisphere · 0.007 g · surface unbounded',
   fine: 'Craters on craters on a moon barely big enough to be round. Saturn fills 38° of the<br>' +
@@ -38,4 +38,4 @@ export const view: WorldView = {
   night: { ratio: 0.050, radius: 0.331, color: 0xfff0d8, label: 'SATURNLIT', stars: 8 },
   relay: 0.1,
   look: [-1.674, 0.66],
-};
+} satisfies WorldView;

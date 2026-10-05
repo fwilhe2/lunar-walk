@@ -1,4 +1,4 @@
-import type { WorldView } from '../types';
+import type { WorldView } from '../view-types';
 import { L4 } from '../levels';
 
 /* Vesta is 2.36 AU out: 244 W/m², under a fifth of the Moon's, from a
@@ -7,7 +7,7 @@ import { L4 } from '../levels';
    close to the Moon's. Black sky, nothing overhead. The horizon is
    under a kilometre off at eye height, which is why the trough in
    front of you, five kilometres deep, opens right at your feet. */
-export const view: WorldView = {
+export const view = {
   site: 'Divalia Fossa',
   title: 'Vesta Walk', sub: 'Divalia Fossa · 0.025 g · surface unbounded',
   fine: 'The edge of a trough 20 km wide and 5 km deep, one of the set that rings Vesta\'s<br>' +
@@ -35,4 +35,4 @@ export const view: WorldView = {
   look: [Math.PI, -0.18],
   // Distance from the sun, AU: sets the zodiacal light (sky/stars.ts).
   zodiacal: 2.36,
-};
+} satisfies WorldView;
