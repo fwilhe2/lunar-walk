@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import { terrainHeight } from '../kernel/terrain';
-import { rockSystem } from '../props/rocks';
+import { rockSystem, type Solid } from '../props/rocks';
 
 /* Rocks underfoot. A stone you can lift a boot onto is ground — the
    suit's knees allow about 0.3 m of step, the height of the rocks the
@@ -8,9 +8,6 @@ import { rockSystem } from '../props/rocks';
    the contour where it rises past that. On top of a block, its crown
    is ground like any other; walking off one, you step down. */
 export const STEP_UP = 0.3;
-/** A solid rock as props/rocks.ts bins it: a dome of reach R about
-    (x, z), crown `top` and base `g`, raw physics heights. */
-export interface Solid { x: number; z: number; R: number; top: number; g: number }
 export const _solids: Solid[] = [];
 export function rockHeight(r: Solid, x: number, z: number) {
   const q = 1 - ((x - r.x) ** 2 + (z - r.z) ** 2) / (r.R * r.R);

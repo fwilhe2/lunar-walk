@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { dust } from '../effects/dust';
 import { terrainHeight } from '../kernel/terrain';
-import { STEP_UP, rockHeight, type Solid } from '../player/collision';
+import { STEP_UP, rockHeight } from '../player/collision';
 import { player } from '../player/player';
-import { rockSystem } from '../props/rocks';
+import { rockSystem, type Solid } from '../props/rocks';
 import { scene } from '../render/renderer';
 import { COMPANION_AIM } from '../sky/frames';
 import { surfacePatch } from '../surface/patch';
@@ -333,7 +333,7 @@ export const rover = (() => {
      across the contact patch, each asking how high the tyre's bottom
      must be to clear it, and the highest wins. */
   const GC = 512;                           // lattice corners, direct-mapped on integer keys
-  const gcI = new Int32Array(GC), gcJ = new Int32Array(GC), gcS = new Int8Array(GC), gcY = new Float64Array(GC);
+  const gcI = new Int32Array(GC), gcJ = new Int32Array(GC), gcS = new Int32Array(GC), gcY = new Float64Array(GC);
   // Raw heights, without the curvature drop: the rover lives in raw
   // heights like everything physical, and near you the drop is
   // micrometres. So nothing cached here goes stale — until the world
