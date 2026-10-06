@@ -509,9 +509,15 @@ export function marsPixels(W: number, H: number) {
     r += (100 - r) * d; g += (92 - g) * d; b += (88 - b) * d;
     const m = 1 + alb[i]! + n2 * 0.06 + st * 0.08 * (1 - d);
     r *= m; g *= m; b *= m;
+    // Where the dust lies thickest — the high plateaus round Tharsis,
+    // Lunae Planum, Arabia — its streaks glow a bright golden orange:
+    // fine, fresh, unmixed dust, the brightest ground on the planet.
+    const hz = Math.min(0.45, HAZE[i]! + oro[i]!);
+    const thick = sst(0.5, 6, elev[i]!);
+    const glow = sst(0.0, 0.3, SAT[i]! * 0.9 + st * 0.45 + thick * 0.25 - 0.06) * (1 - d) * (1 - d) * (1 - hz * 1.6);
+    if (glow > 0) { r += (248 - r) * glow * 0.75; g += (184 - g) * glow * 0.75; b += (112 - b) * glow * 0.75; }
     // Haze: veils it toward a pale blue-grey and takes the contrast
     // out of what is under it.
-    const hz = Math.min(0.45, HAZE[i]! + oro[i]!);
     r += (200 - r) * hz; g += (192 - g) * hz; b += (190 - b) * hz;
     // Caps and frost: a near-white with a little dust in it.
     const c = ice[i]!;
