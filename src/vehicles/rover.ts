@@ -4,6 +4,7 @@ import { terrainHeight } from '../kernel/terrain';
 import { STEP_UP, rockHeight } from '../player/collision';
 import { player } from '../player/player';
 import { rockSystem, type Solid } from '../props/rocks';
+import { coverageGLSL, wireCylinder, wireGeometry, wireMaterial, withCoverage } from '../render/aa';
 import { scene } from '../render/renderer';
 import { COMPANION_AIM } from '../sky/frames';
 import { surfacePatch } from '../surface/patch';
@@ -47,8 +48,9 @@ export const rover = (() => {
   const WHEEL_CTR = WHEEL_R - 0.035;   // centre height: the tyre sinks a touch into regolith
 
   const obj = (o: THREE.MeshStandardMaterialParameters) => surfacePatch(new THREE.MeshStandardMaterial(o), 'object');
-  // A see-through weave, drawn once: the pattern goes in alphaMap and
-  // alphaTest cuts the holes, so light and shadow both pass through.
+  // A see-through weave, drawn once: the pattern goes in alphaMap, and
+  // its alpha is coverage (render/aa.ts), so light passes through; the
+  // shadow maps cut it with alphaTest.
   function weave(w: number, h: number, draw: (x: CanvasRenderingContext2D, w: number, h: number) => void) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const x = c.getContext('2d')!;   // a fresh canvas always has one
@@ -114,24 +116,38 @@ export const rover = (() => {
      a pixel and a half, and the tyre is the painted fabric again. The
      sun's shadow maps do not see the holes. */
   const tyre    = obj({ map: tyreTex, roughness: 0.7, metalness: 0.35, side: THREE.DoubleSide });
-  {
-    const base = tyre.onBeforeCompile;
-    tyre.onBeforeCompile = (shader, r) => {
-      base(shader, r);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-        {
-          vec2 tx = vMapUv * vec2( 1024.0, 192.0 );          // tyreTex texels
-          float fp = max( length( dFdx( tx ) ), length( dFdy( tx ) ) );
-          float cut = 0.14 * ( 1.0 - smoothstep( 0.6, 1.4, fp ) );
-          if ( dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) < cut ) discard;
-        }`);
-    };
-    tyre.customProgramCacheKey = () => 'surface-object-weave';
-  }
+  withCoverage(tyre, 'weave', (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', `
+      {
+        vec2 tx = vMapUv * vec2( 1024.0, 192.0 );          // tyreTex texels
+        float fp = max( length( dFdx( tx ) ), length( dFdy( tx ) ) );
+        float cut = 0.14 * ( 1.0 - smoothstep( 0.6, 1.4, fp ) );
+        float lum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+        ${coverageGLSL('( lum - cut ) / 0.14', '1.0', 'fp')}
+      }`);
+  });
   // Only its outward faces go into the shadow maps: with both, the
   // shallow dish shadows itself in a sawtooth wherever the sun grazes it.
   const hubAlu  = obj({ color: 0xc3c5c9, roughness: 0.35, metalness: 0.8, side: THREE.DoubleSide, shadowSide: THREE.FrontSide });
   const gmesh   = obj({ color: 0xd9b56a, roughness: 0.45, metalness: 0.8, alphaMap: dishWeave, alphaTest: 0.5, side: THREE.DoubleSide });
+  // Close up the wires are cut out with an edge a pixel wide; further
+  // off the mip-mapped weave is the share of each pixel they cover.
+  withCoverage(gmesh, 'weave', (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', `
+      {
+        vec2 tx = vAlphaMapUv * 128.0;                      // dishWeave texels
+        float fp = max( length( dFdx( tx ) ), length( dFdy( tx ) ) );
+        float a = diffuseColor.a;
+        ${coverageGLSL('a - 0.5', 'a', 'fp')}
+      }`);
+  });
+  // Tubes are wires (render/aa.ts): each material gets a twin for them.
+  const wires = new Map<THREE.MeshStandardMaterial, THREE.MeshStandardMaterial>();
+  const wireOf = (m: THREE.MeshStandardMaterial) => {
+    let w = wires.get(m);
+    if (!w) wires.set(m, w = wireMaterial(obj({ color: m.color, roughness: m.roughness, metalness: m.metalness })));
+    return w;
+  };
 
   const group = new THREE.Group();
   group.visible = false;
@@ -147,10 +163,10 @@ export const rover = (() => {
   };
   // A tube between two points.
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
-  const tube = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r: number, mat: THREE.Material = alu, parent: THREE.Object3D = group) => {
+  const tube = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r: number, mat: THREE.MeshStandardMaterial = alu, parent: THREE.Object3D = group) => {
     _a.set(x0, y0, z0); _b.set(x1, y1, z1);
     const len = _a.distanceTo(_b);
-    const m = add(new THREE.CylinderGeometry(r, r, len, 8), mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, parent);
+    const m = add(wireCylinder(r, len), wireOf(mat), (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, parent);
     m.quaternion.setFromUnitVectors(_up, _b.sub(_a).normalize());
     return m;
   };
@@ -196,7 +212,14 @@ export const rover = (() => {
   {
     const pts = [];
     for (let i = 0; i <= 120; i++) { const a = i / 120 * 6.2832 * 7; pts.push(new THREE.Vector3(Math.cos(a) * 0.035, i / 120 * 0.55, Math.sin(a) * 0.035)); }
-    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 240, 0.004, 5), alu, -0.42, 1.05, -1.35);
+    const helix = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 240, 0.004, 5);
+    // TubeGeometry has normals, outward from its curve, and a ring of
+    // radial + 1 vertices per tangent along it.
+    const hn = helix.attributes.normal!;
+    add(wireGeometry(helix, 0.004, (_x, _y, _z, i) => {
+      const t = helix.tangents[Math.floor(i / 6)]!;   // 5 radial segments: in range by construction
+      return [hn.getX(i), hn.getY(i), hn.getZ(i), t.x, t.y, t.z];
+    }), wireOf(alu), -0.42, 1.05, -1.35);
   }
   // High-gain antenna: a gold wire-mesh umbrella on a mast, right
   // front, kept pointed at the relay (Earth, from the Moon).
@@ -435,6 +458,8 @@ export const rover = (() => {
       m.updateMatrix();
       const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
       g.applyMatrix4(m.matrix);
+      g.attributes.wireDir?.transformDirection(m.matrix);
+      g.attributes.wireAxis?.transformDirection(m.matrix);
       if (!byMat.has(m.material)) byMat.set(m.material, []);
       byMat.get(m.material)!.push(g);   // set just above
       parent.remove(m);
@@ -445,11 +470,18 @@ export const rover = (() => {
     for (const [mat, list] of byMat) {
       const n = list.reduce((a, g) => a + g.attributes.position!.count, 0);
       const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      // Wires' attributes: a wire material is only ever given wires.
+      const wire = list[0]!.attributes.wireDir ? { d: new Float32Array(n * 3), a: new Float32Array(n * 3), r: new Float32Array(n) } : null;
       let o = 0;
       for (const g of list) {
         pos.set(g.attributes.position!.array, o * 3);
         nrm.set(g.attributes.normal!.array, o * 3);
         if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+        if (wire) {
+          wire.d.set(g.attributes.wireDir!.array, o * 3);
+          wire.a.set(g.attributes.wireAxis!.array, o * 3);
+          wire.r.set(g.attributes.wireR!.array, o);
+        }
         o += g.attributes.position!.count;
         g.dispose();
       }
@@ -457,6 +489,11 @@ export const rover = (() => {
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
       geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      if (wire) {
+        geo.setAttribute('wireDir', new THREE.BufferAttribute(wire.d, 3));
+        geo.setAttribute('wireAxis', new THREE.BufferAttribute(wire.a, 3));
+        geo.setAttribute('wireR', new THREE.BufferAttribute(wire.r, 1));
+      }
       geo.computeBoundingSphere();
       const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = mesh.receiveShadow = true;

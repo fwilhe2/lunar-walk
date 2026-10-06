@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrSqueeze } from '../render/hdr';
 import { SUN_DIR } from '../render/lights';
 import { scene } from '../render/renderer';
 import { charonMaps } from './bodies/charon';
@@ -623,6 +624,7 @@ function makeCompanion(spec: CompanionSpec) {
         }`,
     })
   );
+  hdrSqueeze(globe.material);    // opaque: it hides the stars
   if (spec.oblate) globe.scale.y = spec.oblate;
   // After the stars, in the transparent queue: sky depth (sky/sun.ts) puts it
   // behind them, so it covers them by order. Still opaque in effect.
@@ -649,7 +651,7 @@ function makeCompanion(spec: CompanionSpec) {
        inside the ring plane, as from Enceladus, all of that is a line. */
     const rg = new THREE.RingGeometry(ringR[0], ringR[1], 360, 1);
     rg.rotateX(-Math.PI / 2);
-    const ring = new THREE.Mesh(rg, new THREE.ShaderMaterial({
+    const ring = new THREE.Mesh(rg, hdrSqueeze(new THREE.ShaderMaterial({
       uniforms: { ringMap: uni.ringMap!, sunDir: uni.sunDir, uBright: uni.uBright, ...skyDome.uniforms },
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -685,7 +687,7 @@ function makeCompanion(spec: CompanionSpec) {
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
-    }));
+    }), true));   // premultiplied, over the squeezed globe (render/hdr.ts)
     ring.renderOrder = -1.4;
     group.add(ring);
   }
@@ -695,7 +697,7 @@ function makeCompanion(spec: CompanionSpec) {
     // Earth, and on Mars a thin pink one — the same dust again.
     const atmo = new THREE.Mesh(
       new THREE.SphereGeometry(spec.r * (spec.atmoR || 1.035), 64, 40),
-      new THREE.ShaderMaterial({
+      hdrSqueeze(new THREE.ShaderMaterial({
         uniforms: { sunDir: uni.sunDir, uBright: uni.uBright, ...skyDome.uniforms },
         transparent: true, blending: THREE.AdditiveBlending,
         side: THREE.BackSide, depthWrite: false,
@@ -722,7 +724,7 @@ function makeCompanion(spec: CompanionSpec) {
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }`,
-      })
+      }))   // squeezed, as the globe it is added to is
     );
     if (spec.oblate) atmo.scale.y = spec.oblate;
     atmo.renderOrder = -1.45;

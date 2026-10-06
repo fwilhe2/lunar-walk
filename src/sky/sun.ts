@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp01, smoothT } from '../kernel/noise';
+import { hdrSqueezeBuiltin } from '../render/hdr';
 import { scene } from '../render/renderer';
 import { EYE_TEX } from '../surface/hapke';
 
@@ -39,6 +40,11 @@ sunDisc.material.onBeforeCompile = (shader) => {
   shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
     '#include <project_vertex>' + skyDepth('length( mvPosition.xyz )'));
 };
+// Not squeezed (render/hdr.ts), alone of the opaque things: a disc a
+// few pixels across is nearly all edge, and averaged squeezed, a pixel
+// half covered by it comes out a hundred times too dark — the eye meters
+// the sun as all but gone and opens by half. Unsqueezed it reads as
+// bright as ever, which over black sky is all it has to be.
 scene.add(sunDisc);
 
 export const corona = (() => {
@@ -85,7 +91,7 @@ export const corona = (() => {
       .replace('#include <tonemapping_fragment>',
                'gl_FragColor.rgb *= exp2( -texture2D( tEye, vec2( 0.5 ) ).r );\n#include <tonemapping_fragment>');
   };
-  const spr = new THREE.Sprite(mat);
+  const spr = new THREE.Sprite(hdrSqueezeBuiltin(mat));   // added to the squeezed frame
   spr.scale.set(3400, 3400, 1);
   scene.add(spr);
   return spr;

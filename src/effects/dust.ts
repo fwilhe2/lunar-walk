@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hdrSqueeze } from '../render/hdr';
 import { SUN_DIR, ambLight, hemiLight, sun, sunFar } from '../render/lights';
 import { camera, renderer, scene } from '../render/renderer';
 import { uSunView } from '../surface/ground';
@@ -156,6 +157,10 @@ export const dust = (() => {
       }`,
     transparent: true, depthWrite: false,
   });
+  // Squeezed like the ground under it (render/hdr.ts): a grain lit
+  // from behind exposes to several units, and drawn over squeezed
+  // ground unsqueezed it would be blown up when the frame is undone.
+  hdrSqueeze(dustMat);
   const pts = new THREE.Points(g, dustMat);
   pts.frustumCulled = false;
   scene.add(pts);

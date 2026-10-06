@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { hash2 } from '../kernel/noise';
 import { terrainHeight } from '../kernel/terrain';
 import { CURVE_R } from '../kernel/world';
+import { hdrSqueeze } from '../render/hdr';
 import { DEPTH_SPLIT, scene } from '../render/renderer';
 import { skyDome } from '../sky/dome';
 import { DV, DV_MAX, GLSL } from '../surface/shaders';
@@ -204,7 +205,7 @@ export const devils = (() => {
       live = [];
       DV.dvN.value = 0;
       for (let k = 0; k < (n || 0); k++) {
-        const mat = new TypedShaderMaterial<DevilUniforms>({
+        const mat = hdrSqueeze(new TypedShaderMaterial<DevilUniforms>({
           uniforms: {
             // The dome's uniform objects, shared, not copied.
             ...skyDome.uniforms, uPale: { value: new THREE.Color(1.5, 1.68, 1.8) },
@@ -218,7 +219,7 @@ export const devils = (() => {
           fragmentShader: '#include <fog_pars_fragment>\n' + skyDome.glsl + fs.replace('#include <fog_fragment>', THREE.ShaderChunk.fog_fragment.replace('fogColor,', 'fogColor * gl_FragColor.a,')),
           side: THREE.DoubleSide, transparent: true, depthWrite: false, fog: true,
           blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-        });
+        }), true);   // over squeezed ground and sky (render/hdr.ts)
         const mesh = new THREE.Mesh(geo, mat);
         mesh.frustumCulled = false;
         group.add(mesh);

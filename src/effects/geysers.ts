@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WORLD } from '../kernel/world';
+import { hdrSqueeze } from '../render/hdr';
 import { SUN_DIR } from '../render/lights';
 import { scene } from '../render/renderer';
 import { DEG } from '../surface/hapke';
@@ -112,12 +113,12 @@ export const geysers = (() => {
     set(specs: GeyserSpec[] | undefined) {
       for (const g of live) { group.remove(g); g.geometry.dispose(); g.material.dispose(); }
       live = (specs || []).map((sp) => {
-        const m = new THREE.Mesh(build(sp), new TypedShaderMaterial<GeyserUniforms>({
+        const m = new THREE.Mesh(build(sp), hdrSqueeze(new TypedShaderMaterial<GeyserUniforms>({
           uniforms: { uSun: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Vector3() }, uR: { value: 1e6 } },
           vertexShader: vs, fragmentShader: fs, side: THREE.DoubleSide,
           transparent: true, depthWrite: false, fog: false,
           blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
-        }));
+        }), true));   // premultiplied, over squeezed sky and ground (render/hdr.ts)
         m.frustumCulled = false;
         m.renderOrder = -1;
         group.add(m);

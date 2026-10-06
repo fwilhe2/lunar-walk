@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WORLD } from '../kernel/world';
+import { hdrSqueeze } from '../render/hdr';
 import { SUN_DIR } from '../render/lights';
 import { scene } from '../render/renderer';
 import { DEG } from '../surface/hapke';
@@ -96,7 +97,7 @@ export const plumes = (() => {
       for (const p of live) { group.remove(p.mesh); p.mesh.material.dispose(); }
       live = (specs || []).map((sp, i) => {
         const b = sp.brg * DEG;
-        const mat = new TypedShaderMaterial<PlumeUniforms>({
+        const mat = hdrSqueeze(new TypedShaderMaterial<PlumeUniforms>({
           uniforms: {
             uSun: { value: new THREE.Vector3() }, uCol: { value: new THREE.Vector3(...sp.col) },
             uGain: { value: sp.gain }, uShell: { value: sp.shell }, uColumn: { value: sp.column },
@@ -104,7 +105,7 @@ export const plumes = (() => {
           },
           vertexShader: vs, fragmentShader: fs,
           transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-        });
+        }));   // squeezed, as what it is added to is (render/hdr.ts)
         const mesh = new THREE.Mesh(geo, mat);
         mesh.frustumCulled = false;
         mesh.renderOrder = -1;

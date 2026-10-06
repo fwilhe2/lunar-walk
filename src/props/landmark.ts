@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { terrainHeight } from '../kernel/terrain';
+import { wireCylinder, wireMaterial } from '../render/aa';
 import { scene } from '../render/renderer';
 import { surfacePatch } from '../surface/patch';
 import { dropAt } from '../terrain/anchor';
@@ -38,9 +39,11 @@ export const landmark = (() => {
     clear();
     const fx = 8, fz = -11, base = terrainHeight(fx, fz) - dropAt(fx, fz);
 
+    // Pole and guys are wires (render/aa.ts): a few pixels wide, a plain
+    // cylinder's edge facets light up and go dark from frame to frame.
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.032, 0.032, 2.6, 8),
-      surfacePatch(new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.52, metalness: 0.3 }), 'object')
+      wireCylinder(0.032, 2.6),
+      wireMaterial(surfacePatch(new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.52, metalness: 0.3 }), 'object'))
     );
     pole.position.set(fx, base + 1.3, fz);
     pole.castShadow = true;
@@ -64,10 +67,10 @@ export const landmark = (() => {
     } else {
       // Three guy anchors driven into the regolith, and a corner-cube
       // retroreflector on top — the only landmark worth the mass.
-      const anchorMat = surfacePatch(new THREE.MeshStandardMaterial({ color: 0x8d9096, roughness: 0.6, metalness: 0.4 }), 'object');
+      const anchorMat = wireMaterial(surfacePatch(new THREE.MeshStandardMaterial({ color: 0x8d9096, roughness: 0.6, metalness: 0.4 }), 'object'));
       for (let i = 0; i < 3; i++) {
         const a = i * 2.0944;
-        const guy = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.9, 5), anchorMat);
+        const guy = new THREE.Mesh(wireCylinder(0.012, 1.9, 5), anchorMat);
         guy.position.set(fx + Math.cos(a) * 0.42, base + 0.72, fz + Math.sin(a) * 0.42);
         guy.rotation.set(Math.sin(a) * 0.48, 0, -Math.cos(a) * 0.48);
         guy.castShadow = true;
