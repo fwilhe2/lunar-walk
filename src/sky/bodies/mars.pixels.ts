@@ -57,6 +57,17 @@ function fbm3(x: number, y: number, z: number, f: number, oct: number, off = 0):
   }
   return sum / norm - 0.5;
 }
+// Ridged multifractal on the sphere: sharp crests, broad valleys —
+// massifs and ridges rather than rolling hills. 0 … ~1.
+function ridged3(x: number, y: number, z: number, f: number, oct: number, off: number, gain = 0.5): number {
+  let sum = 0, amp = 0.5, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    const n = 1 - Math.abs(vn3(x * f + off + i * 11.1, y * f - off, z * f + off * 0.3) * 2 - 1);
+    sum += amp * n * n;
+    norm += amp; amp *= gain; f *= 2.11;
+  }
+  return sum / norm;
+}
 const sst = (a: number, b: number, t: number) => { const v = Math.min(1, Math.max(0, (t - a) / (b - a))); return v * v * (3 - 2 * v); };
 const wrap = (d: number) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
 
@@ -119,6 +130,12 @@ const VM: [lon: number, lat: number, w: number, d: number][][] = [
   [[-62, -1.5, 0.8, 3.5]],                                                   // Hebes
   [[-61.5, -4, 0.7, 3.5], [-62, -2, 0.6, 3]],                                // Juventae
 ];
+// The canyons' and channels' depths are the real ones; they are drawn
+// at this fraction of them, for the reason the craters are held
+// shallow (the crater loop): a wall a texel or two wide under the
+// shader's exaggeration read as a black cleft, not a canyon seen from
+// six thousand kilometres.
+const VM_K = 0.4;
 // Outflow channels into Chryse: [lon, lat, half-width°, depth km].
 const OUT: [lon: number, lat: number, w: number, d: number][][] = [
   [[-78, 3, 1.0, 1.5], [-75, 15, 1.5, 2.0], [-70, 22, 1.8, 2.0], [-60, 24, 1.6, 1.8], [-52, 25, 1.3, 1.2]],  // Kasei
@@ -222,6 +239,10 @@ export function marsPixels(W: number, H: number) {
   const WB = coarse(W, H, 4, (X, Y, Z) => fbm3(X, Y, Z, 3, 4, 5.7) * 7 + fbm3(X, Y, Z, 11, 3, 1.9) * 2);
   const BIG = coarse(W, H, 4, (X, Y, Z) => fbm3(X, Y, Z, 4, 4, 2.2) * 14);
   const REL = coarse(W, H, 4, (X, Y, Z) => fbm3(X, Y, Z, 2, 3, 6.6) * 2.5);
+  // Mountains: ridged massifs, and where on the old crust they are
+  // rugged — a coarse province noise, not everywhere.
+  const RIDGE = coarse(W, H, 2, (X, Y, Z) => ridged3(X, Y, Z, 20, 3, 41.3, 0.65));
+  const PROV = coarse(W, H, 4, (X, Y, Z) => sst(-0.05, 0.25, fbm3(X, Y, Z, 3, 3, 52.8)));
   const ROUGH = coarse(W, H, 2, (X, Y, Z) => fbm3(X, Y, Z, 6, 4, 4.4));
   const CAPN = coarse(W, H, 2, (X, Y, Z) => (Y > 0.85 ? fbm3(X, Y, Z, 14, 3, 5.5) * 9 : 0));
   const CAPS = coarse(W, H, 2, (X, Y, Z) => (Y < -0.9 ? fbm3(X, Y, Z, 14, 3, 1.5) * 6 : 0));
@@ -317,6 +338,7 @@ export function marsPixels(W: number, H: number) {
         }
       }
       // Basins, after the plateau: floors sunk, rims raised.
+      let mtn = 0;
       for (let j = 0; j < BASINS.length; j++) {
         const bs = BASINS[j]!;                               // j < length
         const bl = bs[0], bb = bs[1], br = bs[2], bd = bs[3], rim = bs[4];
@@ -324,7 +346,18 @@ export function marsPixels(W: number, H: number) {
         const dx = wrap(lon - bl) * cl, dy = lat - bb, q = Math.sqrt(dx * dx + dy * dy) / br;
         if (q > 2) continue;
         h -= bd * sst(1.0, 0.55, q) - rim * Math.exp(-((q - 1.0) ** 2) / 0.03);
+        // The big basins are ringed by mountains thrown up by the
+        // impact: Hellas's rim massifs, Argyre's Charitum and Nereidum.
+        if (rim > 1.5) mtn = Math.max(mtn, Math.exp(-((q - 1.05) ** 2) / 0.05));
       }
+      // Mountains on the old southern crust: rugged provinces of
+      // massifs and ridges, the basin rings above, and the Thaumasia
+      // highlands curving round Solis Planum. From orbit, near the
+      // terminator, these are most of the roughness — more than craters.
+      const tdx = wrap(lon0 + 88) * c0, tdy = lat0 + 26;
+      const thaum = sst(6, 2, Math.abs(Math.sqrt(tdx * tdx + tdy * tdy) - 19)) * sst(-12, -20, lat0);
+      mtn = Math.max(mtn, thaum, south * PROV[i]! * 0.75);
+      h += (RIDGE[i]! - 0.3) * 4.5 * mtn;
       // Valles Marineris and the outflow channels, steep-walled.
       let vm = 0;
       for (let j = 0; j < VM.length; j++) {
@@ -338,7 +371,7 @@ export function marsPixels(W: number, H: number) {
         const q = dd / (w * (1 + fbm3(X, Y, Z, 40, 3, 9.1) * 0.7 + fbm3(X, Y, Z, 110, 2, 3.3) * 0.5));
         // The walls take a third of the half-width or more: tens of
         // kilometres of spurs and landslides, not a cliff.
-        if (q < 1.6) { const c = sst(1.4, 0.55, q); vm = Math.max(vm, c); h -= dep * c * (0.8 + fbm3(X, Y, Z, 30, 3) * 0.5); }
+        if (q < 1.6) { const c = sst(1.4, 0.55, q); vm = Math.max(vm, c); h -= dep * VM_K * c * (0.8 + fbm3(X, Y, Z, 30, 3) * 0.5); }
       }
       for (let j = 0; j < OUT.length; j++) {
         const s = OUT[j]!;                                   // j < length
@@ -346,7 +379,7 @@ export function marsPixels(W: number, H: number) {
         strokeDist(lon0 + wl * 0.15, lat0 + wb * 0.15, c0, s);
         const dd = SD[0]!, w = SD[1]!, dep = SD[2]!;
         const q = dd / w;
-        if (q < 1.5) h -= dep * sst(1.1, 0.5, q);
+        if (q < 1.5) h -= dep * VM_K * sst(1.1, 0.5, q);
       }
       // Noctis Labyrinthus: a maze of troughs at Tharsis's crest.
       const nx = wrap(lon0 + 102), ny = lat0 + 7;
@@ -356,7 +389,7 @@ export function marsPixels(W: number, H: number) {
         const g1 = Math.abs(Math.sin((nx * 0.9 + ny * 0.4) * 1.3 + fbm3(X, Y, Z, 30, 3) * 9));
         const g2 = Math.abs(Math.sin((nx * 0.3 - ny * 1.0) * 1.5 + fbm3(X, Y, Z, 30, 3, 4) * 9));
         const t = sst(0.22, 0.05, Math.min(g1, g2)) * m * sst(5, 3, Math.abs(ny)) * sst(-0.1, 0.1, fbm3(X, Y, Z, 25, 2, 6));
-        h -= t * 3.5; vm = Math.max(vm, t * 0.7);
+        h -= t * 3.5 * VM_K; vm = Math.max(vm, t * 0.7);
       }
       // The polar layered deposits: domes of ice 2–3 km high, cut by
       // spiral troughs and, in the north, Chasma Boreale.
@@ -397,9 +430,9 @@ export function marsPixels(W: number, H: number) {
       D = Math.max(D, vm * (0.25 + clump * 0.3));
       // The volcanoes: dust-mantled flanks; the calderas' floors and
       // walls are what shows dark from orbit.
-      D = D * (1 - shield * 0.8) + flank * 0.32 + cald * 0.65;
+      D = D * (1 - shield * 0.8) + flank * 0.12 + cald * 0.3;
       dk[i] = Math.min(1, Math.max(0, D));
-      alb[i] = foot * 0.035 + scarp * 0.04;
+      alb[i] = foot * 0.02 + scarp * 0.04;
 
       // Polar caps (seasonal: a late northern-spring Mars, so the
       // north cap is large and the south one shrunk to its residual).
@@ -440,14 +473,19 @@ export function marsPixels(W: number, H: number) {
     // crater on Mars is far from fresh: Noachian ones are filled with
     // lava, sediment and dust to a fraction of their depth, the big
     // ones most of all (Huygens, 460 km across, is ~1.5 km deep).
-    const depth = 0.36 * Math.pow(Math.min(Dkm, 100), 0.49) * (0.12 + 0.6 * fresh) * Math.min(1, Math.sqrt(100 / Dkm));
-    const rim = depth * (0.1 + 0.25 * fresh);
+    // Even so, these are shallower than the real ones, the fresh ones
+    // most: a bowl a few texels across has all its depth in one or two
+    // steep steps, and under the shader's exaggeration it read far
+    // deeper than any crater does in pictures from orbit. Held to
+    // where the deepest look as the real ones do.
+    const depth = 0.36 * Math.pow(Math.min(Dkm, 100), 0.49) * (0.06 + 0.12 * fresh) * Math.min(1, Math.sqrt(100 / Dkm));
+    const rim = depth * (0.1 + 0.15 * fresh);
     const peak = Dkm > 30 ? depth * 0.35 * fresh : 0;
     const flat = Dkm > 10 ? Math.min(0.55, 0.2 + Dkm / 300) : 0;
-    // Dark sand on the floors of southern craters; a streak of dust or
+    // Dark sand on the floors of craters in dark ground; a streak of dust or
     // of scoured ground downwind of the fresher ones, turned by the
     // season's winds (northerlies in the tropics, westerlies further out).
-    const dune = rnd() < 0.15 + dk[iy * W + ix]! * 0.7 ? 0.2 + rnd() * 0.35 : 0;
+    const dune = rnd() < dk[iy * W + ix]! * 0.6 ? 0.15 + rnd() * 0.25 : 0;
     const streak = Math.abs(lat) < 45 && rnd() < 0.35 * (0.4 + fresh) ? (rnd() < 0.55 ? 1 : -1) : 0;
     const wAz = (Math.abs(lat) < 25 ? 200 : lat < 0 ? 110 : 250) + (rnd() - 0.5) * 50;
     const wx = Math.sin(wAz * DEG), wy = Math.cos(wAz * DEG);   // east, north
@@ -476,9 +514,10 @@ export function marsPixels(W: number, H: number) {
             const o = Math.hypot(ex - wx * 0.25, ey - wy * 0.25);
             dk[i] = Math.max(dk[i]!, dune * sst(0.5, 0.2, o));
           }
-          // Fresh rims and ejecta are a little brighter, fresh bowls a
-          // little darker; old craters only show by their shading.
-          alb[i] = alb[i]! + fresh * (q < 0.9 ? -0.04 : 0.04 * sst(2.2, 1.0, q));
+          // Fresh ejecta are a little brighter; the bowls keep the
+          // ground's colour, so craters show by their shading, as from
+          // orbit they do — hardly at all under a high sun.
+          alb[i] = alb[i]! + fresh * (q < 0.9 ? -0.01 : 0.03 * sst(2.2, 1.0, q));
         }
         if (streak) {
           const along = ex * wx + ey * wy, across = ex * wy - ey * wx;
