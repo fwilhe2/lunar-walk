@@ -7,7 +7,7 @@ import { earthMaps } from './bodies/earth';
 import { galileanMaps } from './bodies/galilean';
 import type { GalileanMoon } from './bodies/galilean.pixels';
 import { jupiterMaps } from './bodies/jupiter';
-import { marsMaps } from './bodies/mars';
+import { MARS_H, MARS_W, marsMaps } from './bodies/mars';
 import { moonletMaps } from './bodies/moonlets';
 import { neptuneMaps } from './bodies/neptune';
 import { plutoMaps } from './bodies/pluto';
@@ -42,6 +42,7 @@ const texCache = new Map<TexKey, BodyMaps>();
 // the companion that needs them (companionsAsync), then cached here.
 const TEXGEN_OFF: Partial<Record<TexKey, () => Promise<BodyMaps>>> = {
   jupiter: () => offThread('jupiterPixels', 1024, 512).then(jupiterMaps),
+  mars: () => offThread('marsPixels', MARS_W, MARS_H).then(marsMaps),
   ...Object.fromEntries((['io', 'europa', 'ganymede', 'callisto'] satisfies GalileanMoon[]).map((k) =>
     [k, () => offThread('galileanPixels', k).then((px) => galileanMaps(k, px))])),
   charon: () => offThread('charonPixels').then(charonMaps),
@@ -65,6 +66,10 @@ interface CompanionBase {
   dir?: Vec3; tilt?: Vec3; pole?: Vec3; face?: Vec3;
   oblate?: number; spin?: number; limb?: number;
   clouds?: true; night?: true; ocean?: true;
+  // relief: vertical exaggeration of the elevation map, which holds
+  // heights in equatorial texel widths (bodies/mars.ts), so 1 is true
+  // slope. detail: albedo mottling finer than the map; detailBump: how
+  // much the same noise bends the normal.
   relief?: number; detail?: number; detailScale?: number; detailBump?: number;
   rings?: [number, number];
   // Swings dir about axis (Phobos and Deimos from Mars).
@@ -79,6 +84,16 @@ interface Kepler { a: number; R: number; rate: number; phase: number; frame?: Or
 type Atmo = { atmo: RGB; atmoK: number; atmoR?: number } | { atmo?: never; atmoK?: never; atmoR?: never };
 type Haze = { haze: RGB; hazeK: number; hazeTau?: number } | { haze?: never; hazeK?: never; hazeTau?: never };
 type CompanionSpec = CompanionBase & Atmo & Haze;
+
+/* Mars's pole from Phobos and Deimos. Both orbit within a degree or
+   three of its equator, so from either the planet is seen equator-on:
+   the pole lies square to the line of sight. Which way round it leans
+   depends on where on the moon you stand; here north is up, as near
+   the zenith as square to the sight line allows. */
+const equatorOn = (d: Vec3): Vec3 => {
+  const n = Math.hypot(d[0], d[1], d[2]), u = d[1] / n;
+  return [-d[0] / n * u, 1 - u * u, -d[2] / n * u];
+};
 
 const COMPANIONS = {
   /* Earth from the Moon is 1.9° across, and drawn so: four Moons'
@@ -102,19 +117,19 @@ const COMPANIONS = {
      sitting on the sun's side of the sky shows you its night, and
      42° of unlit Mars is 42° of nothing. From here it is gibbous. */
   'mars-big': {
-    tex: 'mars', r: 2405, dir: [0.62, 0.70, 0.35], tilt: [0, 0.9, 0.44],
+    tex: 'mars', r: 2405, dir: [0.62, 0.70, 0.35], pole: equatorOn([0.62, 0.70, 0.35]),
     spin: 0.0062, gain: 1.25,
-    relief: 0.55, detail: 0.22, detailScale: 1.4, detailBump: 4.0,
+    relief: 1.6, detail: 0.14, detailScale: 1.4, detailBump: 0.18,
     atmo: [0.95, 0.62, 0.44], atmoK: 0.30, atmoR: 1.012,
-    haze: [0.50, 0.30, 0.20], hazeK: 0.30,
+    haze: [0.40, 0.42, 0.50], hazeK: 0.34,
   },
   // The same from Deimos, four times further out: 16.6°.
   'mars-mid': {
-    tex: 'mars', r: 904, dir: [0.66, 0.55, 0.51], tilt: [0, 2.4, 0.44],
+    tex: 'mars', r: 904, dir: [0.66, 0.55, 0.51], pole: equatorOn([0.66, 0.55, 0.51]),
     spin: 0.0062, gain: 1.25,
-    relief: 0.55, detail: 0.20, detailScale: 1.4, detailBump: 4.0,
+    relief: 1.6, detail: 0.12, detailScale: 1.4, detailBump: 0.18,
     atmo: [0.95, 0.62, 0.44], atmoK: 0.30, atmoR: 1.012,
-    haze: [0.50, 0.30, 0.20], hazeK: 0.30,
+    haze: [0.40, 0.42, 0.50], hazeK: 0.34,
   },
 
   /* Phobos from Mars is 0.20° at the zenith — a third the width of
@@ -434,6 +449,9 @@ function makeCompanion(spec: CompanionSpec) {
   if (spec.ocean) { uni.specMap = { value: T.spec }; decl += 'uniform sampler2D specMap;\n'; }
   if (spec.clouds) { uni.cloudMap = { value: T.clouds }; decl += 'uniform sampler2D cloudMap;\n'; }
   if (spec.relief) { uni.elevMap = { value: T.elev }; decl += 'uniform sampler2D elevMap;\n'; }
+  // The elevation map's texel, for its finite differences. A data
+  // texture's image is {data, width, height}.
+  const eSize: [number, number] = spec.relief && T.elev ? [T.elev.image.width, T.elev.image.height] : [1024, 512];
   // Rings, in the globe's equatorial plane, radii in scene units.
   const ringR: [number, number] | null = spec.rings ? [spec.r * spec.rings[0], spec.r * spec.rings[1]] : null;
   if (spec.rings) {
@@ -509,19 +527,20 @@ function makeCompanion(spec: CompanionSpec) {
           ` +
           (spec.relief ? `
           // Tilt the normal by the elevation gradient, along the
-          // surface frame the vertex stage handed over. A step in u
-          // spans less ground near the poles, so the same height
-          // difference is a steeper slope there — hence the
-          // 1/cos(latitude) term, capped so the poles stay sane.
+          // surface frame the vertex stage handed over. Heights are in
+          // texel widths, so half the central difference is the slope;
+          // a step in u spans less ground near the poles, so the same
+          // difference is steeper there — hence the 1/cos(latitude)
+          // term, capped so the poles stay sane.
           vec3 No = normalize( vNo );
           vec3 E = normalize( vEast ), Nn = normalize( vNorth );
           float clat = max( sqrt( max( 1.0 - No.y * No.y, 0.0 ) ), 0.22 );
-          vec2 d = vec2( 1.0 / 1024.0, 1.0 / 512.0 );
+          vec2 d = vec2( ${(1 / eSize[0]).toExponential(6)}, ${(1 / eSize[1]).toExponential(6)} );
           float eL = texture2D( elevMap, vUv - vec2( d.x, 0.0 ) ).r;
           float eR = texture2D( elevMap, vUv + vec2( d.x, 0.0 ) ).r;
           float eD = texture2D( elevMap, vUv - vec2( 0.0, d.y ) ).r;
           float eU = texture2D( elevMap, vUv + vec2( 0.0, d.y ) ).r;
-          float sx = ( eR - eL ) / clat, sy = eU - eD;
+          float sx = ( eR - eL ) * 0.5 / clat, sy = ( eU - eD ) * 0.5;
 
           // Fine relief the map cannot hold, from the same noise that
           // breaks up the albedo. Sampled in object space, applied

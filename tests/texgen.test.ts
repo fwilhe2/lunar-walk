@@ -18,6 +18,7 @@ const rego = (id: keyof typeof VIEW) => {
 const ARGS: { [K in JobName]: JobArgs<K> } = {
   regolithData: [rego('mars'), 0.6, -0.8],
   jupiterPixels: [256, 128],
+  marsPixels: [256, 128],
   galileanPixels: ['io'],
   charonPixels: [],
   plutoPixels: [],
