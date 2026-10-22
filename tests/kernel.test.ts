@@ -71,7 +71,7 @@ describe.each(IDS)('%s', (id) => {
 
 /* Every world's surface, frozen, in tests/fingerprints.json. A change to
    the kernel or to a world's terrain moves its sums: if you meant it,
-   record them again (UPDATE_FINGERPRINTS=1 bun run test) and say so in
+   record them again (UPDATE_FINGERPRINTS=1 npm run test) and say so in
    the commit. They are compared to a part in 10¹⁰ of each channel's
    magnitude, which still catches a millimetre of height at one point in
    the three thousand, and is far above the last-bit rounding by which

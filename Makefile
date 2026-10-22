@@ -1,31 +1,31 @@
 .PHONY: install dev test check start build build-linux build-mac build-windows clean
 
 install:
-	bun install
+	npm install
 
 dev:
-	bun run dev
+	npm run dev
 
 test:
-	bun run test
+	npm run test
 
 check:
-	bun run check
+	npm run check
 
 start:
-	bun run start
+	npm run start
 
 build:
-	bun run dist
+	npm run dist
 
 build-linux:
-	bun run dist:linux
+	npm run dist:linux
 
 build-mac:
-	bun run dist:mac
+	npm run dist:mac
 
 build-windows:
-	bun run dist:win
+	npm run dist:win
 
 clean:
 	rm -rf dist release
